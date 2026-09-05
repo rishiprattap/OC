@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Participation Certificate | Offstage Creators</title>
+<link rel="stylesheet" href="./style.css">
+<style>
+.cert-page{width:min(1050px,calc(100% - 30px));margin:auto;padding:75px 0}
+.cert-head{text-align:center;margin-bottom:40px}.cert-head h1{font-family:"Cormorant Garamond",serif;font-size:clamp(50px,7vw,88px);line-height:.9;margin:0}.cert-head p{color:#a8a096;max-width:600px;margin:20px auto}
+.verify-box{max-width:610px;margin:auto;padding:28px;background:rgba(20,18,15,.92);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.verify-note{background:#1c1916;border-radius:10px;padding:16px;color:#b9afa3;font-size:12px;line-height:1.6;margin-bottom:24px}
+label{display:block;font-size:10px;font-weight:800;letter-spacing:.14em;margin:18px 0 8px;color:#d5cabb}
+input{width:100%;background:#0c0b0a;border:1px solid #514a42;border-radius:8px;color:#eee7dd;padding:14px;font:inherit}input:focus{outline:1px solid #cda45b}
+.verify-btn{width:100%;border:0;cursor:pointer;margin-top:22px}
+#status{font-size:13px;line-height:1.6;margin:15px 0 0}.success{color:#83cf92}.error{color:#e99583}
+.preview{display:none;margin-top:55px}.preview.show{display:block}.preview canvas{width:100%;height:auto;display:block;border:1px solid #6c5c43;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.downloads{display:none;justify-content:center;gap:12px;flex-wrap:wrap;margin-top:20px}.downloads.show{display:flex}
+.back{display:inline-block;margin-bottom:30px;color:#a69d92;font-size:11px;letter-spacing:.14em}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<header class="nav">
+<a class="logo-lockup" href="./index.html"><img src="./assets/logo.png" alt="Offstage Creators"><span>OFFSTAGE<br><b>CREATORS</b></span></a>
+<nav><a href="./index.html">Home</a><a href="./index.html#events">Events</a><a class="active" href="./certificate.html">Certificate</a></nav>
+<div class="nav-social"><a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">◎</a></div>
+</header>
+
+<main class="cert-page">
+<a class="back" href="./index.html">← BACK TO OFFSTAGE CREATORS</a>
+<div class="cert-head">
+<p class="kicker orange">ONLINE OPEN MIC 2026</p>
+<h1>Participation<br><em>Certificate</em></h1>
+<p>Certificates are available only for registered participants. Enter the same name and WhatsApp number used during registration.</p>
+</div>
+
+<section class="verify-box">
+<div class="verify-note">🔒 <b>Participant verification</b><br>
+Your details are checked against the registered participant list. Phone numbers are not displayed on this page.</div>
+<form id="form">
+<label for="name">FULL NAME (AS REGISTERED)</label>
+<input id="name" autocomplete="name" placeholder="Enter your full name" required>
+<label for="phone">WHATSAPP / PHONE NUMBER</label>
+<input id="phone" inputmode="numeric" autocomplete="tel" placeholder="Enter your registered number" required>
+<button class="cta verify-btn" type="submit">✓ &nbsp; VERIFY &amp; DOWNLOAD CERTIFICATE</button>
+<div id="status"></div>
+</form>
+</section>
+
+<section class="preview" id="preview">
+<p class="kicker">CERTIFICATE PREVIEW</p>
+<canvas id="canvas" width="1600" height="1131"></canvas>
+<div class="downloads" id="downloads">
+<button class="cta" id="pngBtn" type="button">DOWNLOAD PNG</button>
+<button class="cta" id="pdfBtn" type="button">DOWNLOAD PDF</button>
+</div>
+</section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const ALLOWED = ["be73c2bc683d4be53e8f203d2faedb34a7aa3794526efd77022eae855e63d442","8969db9beafcdab746cd4cd80a7b787e83e68faac0ddc7f2b793077e7476147b","aef922c04477c5ed6fe6bad9f37127b7075ea04ae668730dfcd3ae63aec7fe8b","b0a7bf9c51973d618fe73e86d1c9afa605751becb5e025f76b4bf26894d9d09a","338857dac57c022abc03946607a6b5e404cb98894c7b7ea340aa3ee3d08c4259","7a5f0f2fdb7214a779721aaf9fa23a118dbdd1fe6afa6f6b114bca034e8bb55e","ecfd819bbff1d0ceb7ecb9f17a7af7f554a25175c898008eb8ffcb82b766fe31","c54fc5cfa6699328f70d661ff9d67d4edd2207edaee97f1b6235b82f304e9413","16d3315151d5eb3a028e2315321244fe433224e0be2d3a3ab46f218e019e5119","74e0c4bc687027924b29d5c6cbe6157de16b1cc7253fc2bead217ca53ad6293a"];
+const form = document.getElementById('form');
+const statusEl = document.getElementById('status');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const preview = document.getElementById('preview');
+const downloads = document.getElementById('downloads');
+let verifiedName = '';
+
+function normalizeName(v){return v.trim().toLowerCase().replace(/\s+/g,' ');}
+function normalizePhone(v){return v.replace(/\D/g,'');}
+async function sha256(text){
+  const bytes = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function drawCertificate(name){
+  verifiedName = name;
+  const W=canvas.width,H=canvas.height;
+  ctx.fillStyle='#efe4cf';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#b58c4a';ctx.lineWidth=8;ctx.strokeRect(34,34,W-68,H-68);
+  ctx.strokeStyle='#4b4032';ctx.lineWidth=2;ctx.strokeRect(54,54,W-108,H-108);
+
+  const logo=new Image();
+  logo.onload=()=>{
+    // Clean circular logo badge in the top-left corner — NOT as a background watermark.
+    ctx.save();
+    const cx=145, cy=145, r=72;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.clip();
+    ctx.fillStyle='#f7edd9'; ctx.fillRect(cx-r,cy-r,r*2,r*2);
+    const scale=Math.min((r*2)/logo.width,(r*2)/logo.height);
+    const lw=logo.width*scale, lh=logo.height*scale;
+    ctx.drawImage(logo,cx-lw/2,cy-lh/2,lw,lh);
+    ctx.restore();
+
+    // Circular border and small accent ring.
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    ctx.strokeStyle='#9b712f'; ctx.lineWidth=5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,r-9,0,Math.PI*2);
+    ctx.strokeStyle='#c7a86d'; ctx.lineWidth=1.5; ctx.stroke();
+
+    renderText();
+  };
+  logo.onerror=renderText;
+  logo.src='./assets/logo.png';
+
+  function renderText(){
+    ctx.textAlign='center';
+    ctx.fillStyle='#282018';ctx.font='800 26px "DM Sans",Arial';ctx.fillText('OFFSTAGE CREATORS',W/2,170);
+    ctx.fillStyle='#8c672f';ctx.font='600 21px "DM Sans",Arial';ctx.fillText('WORDS  |  PEOPLE  |  PLATFORMS',W/2,210);
+    ctx.fillStyle='#9b712f';ctx.font='600 62px "Cormorant Garamond",Georgia';ctx.fillText('CERTIFICATE',W/2,365);
+    ctx.fillStyle='#4d4336';ctx.font='600 24px "DM Sans",Arial';ctx.fillText('OF PARTICIPATION',W/2,410);
+    ctx.fillStyle='#35281b';ctx.font='italic 66px "Cormorant Garamond",Georgia';ctx.fillText(name,W/2,535);
+    ctx.strokeStyle='#9f875f';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(440,565);ctx.lineTo(1160,565);ctx.stroke();
+    ctx.fillStyle='#4e453b';ctx.font='22px "DM Sans",Arial';ctx.fillText('This is to certify that',W/2,630);
+    ctx.fillStyle='#292018';ctx.font='800 34px "DM Sans",Arial';ctx.fillText('has successfully participated in the',W/2,690);
+    ctx.fillStyle='#9b712f';ctx.font='800 36px "DM Sans",Arial';ctx.fillText('ONLINE OPEN MIC 2026',W/2,748);
+    ctx.fillStyle='#4e453b';ctx.font='21px "DM Sans",Arial';ctx.fillText('organized by Offstage Creators.',W/2,793);
+    ctx.fillStyle='#675d51';ctx.font='19px "DM Sans",Arial';ctx.fillText('We appreciate your courage, creativity and the uniqueness',W/2,850);
+    ctx.fillText('you brought to the stage. Keep expressing, keep creating!',W/2,880);
+
+    ctx.fillStyle='#35281b';ctx.font='italic 36px "Cormorant Garamond",Georgia';ctx.fillText('Muskaan',400,990);
+    ctx.fillText('Shlok',1200,990);
+    ctx.strokeStyle='#3b3229';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(300,1008);ctx.lineTo(500,1008);ctx.moveTo(1100,1008);ctx.lineTo(1300,1008);ctx.stroke();
+    ctx.fillStyle='#62594e';ctx.font='700 15px "DM Sans",Arial';ctx.fillText('MUSKAAN  •  CO-FOUNDER',400,1040);
+    ctx.fillText('SHLOK  •  CO-FOUNDER',1200,1040);
+    ctx.fillStyle='#9b712f';ctx.font='800 17px "DM Sans",Arial';ctx.fillText('DIFFERENT VOICES, SAME STAGE.',W/2,1070);
+  }
+}
+
+form.addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  statusEl.className='';statusEl.textContent='Verifying…';
+  const name=document.getElementById('name').value.trim();
+  const phone=normalizePhone(document.getElementById('phone').value);
+  if(name.length<2 || phone.length<8){statusEl.className='error';statusEl.textContent='Please enter the registered name and a valid phone number.';return;}
+  try{
+    const hash=await sha256(normalizeName(name)+'|'+phone);
+    if(ALLOWED.includes(hash)){
+      statusEl.className='success';statusEl.textContent='✓ Participant verified. Your certificate is ready.';
+      drawCertificate(name);preview.classList.add('show');downloads.classList.add('show');
+      preview.scrollIntoView({behavior:'smooth',block:'start'});
+    }else{
+      statusEl.className='error';statusEl.textContent='✕ We could not find a matching registration. Please use the exact name and WhatsApp number used during registration.';
+      preview.classList.remove('show');downloads.classList.remove('show');
+    }
+  }catch(err){
+    statusEl.className='error';statusEl.textContent='Verification could not run in this browser. Please try again.';
+  }
+});
+
+document.getElementById('pngBtn').addEventListener('click',()=>{
+ const a=document.createElement('a');a.download='Offstage-Creators-Certificate-'+verifiedName.replace(/[^a-z0-9]+/gi,'-')+'.png';a.href=canvas.toDataURL('image/png');a.click();
+});
+document.getElementById('pdfBtn').addEventListener('click',()=>{
+ if(!window.jspdf){alert('PDF generation needs an internet connection. You can still download the PNG.');return;}
+ const {jsPDF}=window.jspdf;
+ const pdf=new jsPDF({orientation:'landscape',unit:'px',format:[1600,1131]});
+ pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,1600,1131);
+ pdf.save('Offstage-Creators-Certificate-'+verifiedName.replace(/[^a-z0-9]+/gi,'-')+'.pdf');
+});
+</script>
+</body>
+</html>
