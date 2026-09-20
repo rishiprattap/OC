@@ -48,6 +48,34 @@
           <div><i>⌖</i><span><b>The Comedy Theatre</b><small>Hauz Khas, New Delhi</small></span></div>
         </div>
 
+        <div class="countdown-wrap">
+          <div class="countdown-heading">
+            <span class="live-dot"></span>
+            <span class="countdown-title">Countdown to Delhi Show</span>
+          </div>
+          <div class="countdown-grid" id="delhiCountdown">
+            <div class="time-block">
+              <span class="time-val" id="cdDays">00</span>
+              <span class="time-lbl">DAYS</span>
+            </div>
+            <div class="time-sep">:</div>
+            <div class="time-block">
+              <span class="time-val" id="cdHours">00</span>
+              <span class="time-lbl">HOURS</span>
+            </div>
+            <div class="time-sep">:</div>
+            <div class="time-block">
+              <span class="time-val" id="cdMins">00</span>
+              <span class="time-lbl">MINS</span>
+            </div>
+            <div class="time-sep">:</div>
+            <div class="time-block">
+              <span class="time-val" id="cdSecs">00</span>
+              <span class="time-lbl">SECS</span>
+            </div>
+          </div>
+        </div>
+
         <a class="cta" href="https://in.bookmyshow.com/events/adhure-musafir/ET00515735" target="_blank" rel="noopener">
           <span>Book Tickets on</span> book<span class="bms-red">my</span>show <b>→</b>
         </a>
@@ -55,19 +83,38 @@
       </div>
     </section>
 
-    <section id="events" class="completed">
-      <div class="completed-photo">
-        <img src="./assets/event-poster.png" alt="Online Open Mic 2026">
+    <section id="events" class="upcoming-mic">
+      <div class="upcoming-poster-wrap">
+        <div class="poster-badge">UPCOMING EDITION</div>
+        <img src="./assets/event-poster.png" alt="Offstage Creators Next Open Mic">
       </div>
-      <div class="paper-card">
-        <p class="kicker">ONLINE OPEN MIC 2026</p>
-        <h2>Event<br><em>Completed!</em> <span class="check">✓</span></h2>
-        <p>A big thank you to all the amazing performers and listeners who made the Online Open Mic 2026 so special.</p>
-        <p>Your words, stories and presence mean the world to us.</p>
-        <div class="paper-script">See you at the next one! ♡</div>
-        <a class="text-link" href="./certificate.html">Get your participation certificate →</a>
+      <div class="paper-card upcoming-card">
+        <div class="coming-soon-pill">✨ NEXT OPEN MIC</div>
+        <p class="kicker orange">DIFFERENT VOICES, SAME STAGE</p>
+        <h2>Next Open Mic<br><em>Coming Soon!</em></h2>
+        <p class="upcoming-desc">The spotlight is getting ready for you. Whether you write poetry, share heartfelt stories, deliver punchlines, or sing your soul out — our stage is welcoming you next.</p>
+        
+        <div class="feature-pills">
+          <span>🎙️ Poetry &amp; Storytelling</span>
+          <span>✨ Stand-Up Comedy</span>
+          <span>🎵 Music &amp; Vocals</span>
+          <span>♡ Safe &amp; Supportive Space</span>
+        </div>
+
+        <div class="upcoming-actions">
+          <a class="cta community-btn" href="https://www.instagram.com/channel/AbYo-rnNYvLIuucS/" target="_blank" rel="noopener noreferrer">
+            <span>Join Broadcast for Performer Slots</span> <b>→</b>
+          </a>
+        </div>
+
+        <div class="paper-script">Slots opening soon, keep your words ready! ♡</div>
+
+        <div class="cert-footnote">
+          <span>Attended our previous Online Open Mic?</span>
+          <a class="text-link" href="./certificate.html">Get your participation certificate →</a>
+        </div>
       </div>
-      <div class="side-script">Different<br>Voices<br>Same<br>Stage<br>Always<br>Offstage ♡</div>
+      <div class="side-script">Your<br>Voice<br>Your<br>Story<br>Your<br>Stage ♡</div>
     </section>
 
     <section id="community" class="values">
@@ -106,5 +153,42 @@
     <span>Built with ♡ for the creative community.  ~rishiprattap</span>
     <span>Muskaan&nbsp;&nbsp; &amp;&nbsp;&nbsp; Shlok</span>
   </footer>
+
+  <script>
+    (function () {
+      function updateDelhiCountdown() {
+        // Delhi Show: 4 October 2026, 15:30:00 IST (UTC+05:30)
+        var target = new Date("2026-10-04T15:30:00+05:30").getTime();
+        var now = new Date().getTime();
+        var diff = target - now;
+
+        var daysEl = document.getElementById("cdDays");
+        var hoursEl = document.getElementById("cdHours");
+        var minsEl = document.getElementById("cdMins");
+        var secsEl = document.getElementById("cdSecs");
+        var countdownGrid = document.getElementById("delhiCountdown");
+
+        if (!countdownGrid) return;
+
+        if (diff <= 0) {
+          countdownGrid.innerHTML = '<div class="time-live-banner">✦ SHOW IS LIVE / DOORS OPEN ✦</div>';
+          return;
+        }
+
+        var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        var secs = Math.floor((diff % (1000 * 60)) / 1000);
+
+        if (daysEl) daysEl.textContent = String(days).padStart(2, "0");
+        if (hoursEl) hoursEl.textContent = String(hours).padStart(2, "0");
+        if (minsEl) minsEl.textContent = String(mins).padStart(2, "0");
+        if (secsEl) secsEl.textContent = String(secs).padStart(2, "0");
+      }
+
+      updateDelhiCountdown();
+      setInterval(updateDelhiCountdown, 1000);
+    })();
+  </script>
 </body>
 </html>
