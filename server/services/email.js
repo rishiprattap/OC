@@ -14,8 +14,12 @@ function createTransporter() {
 
   if (!user || !password) {
     console.warn('[Email] SMTP credentials not configured — emails will not be sent.');
+    console.warn('[Email] MAIL_USER:', user ? 'SET' : 'MISSING');
+    console.warn('[Email] MAIL_PASSWORD:', password ? 'SET' : 'MISSING');
     return null;
   }
+
+  console.log(`[Email] Creating SMTP transporter — host:${host} port:${port} user:${user}`);
 
   const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
 
@@ -23,9 +27,9 @@ function createTransporter() {
     return nodemailer.createTransport({
       service: 'gmail',
       auth: { user, pass: password },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000
     });
   }
 
@@ -35,9 +39,9 @@ function createTransporter() {
     secure: port === 465 || secure,
     auth: { user, pass: password },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000
   });
 }
 
