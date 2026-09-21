@@ -19,7 +19,7 @@ module.exports = {
     port: parseInt(process.env.MAIL_PORT, 10) || 587,
     secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER || 'offstagecreators77@gmail.com',
-    password: (process.env.MAIL_PASSWORD || 'upfinmpchbkuducw').replace(/\s+/g, ''), // clean any space formatting in App Password
+    password: (process.env.MAIL_PASSWORD || '').replace(/\s+/g, ''), // Loaded strictly from environment variables
     from: process.env.MAIL_FROM || 'offstagecreators77@gmail.com',
     fromName: process.env.MAIL_FROM_NAME || 'Offstage Creators',
     testEmailTo: process.env.TEST_EMAIL_TO || 'offstagecreators77@gmail.com'

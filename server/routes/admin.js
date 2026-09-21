@@ -249,18 +249,65 @@ router.post('/email/health-check', async (req, res) => {
     const health = await emailService.verifySmtpHealth();
 
     let testDelivery = null;
-    if (health.success && sendTestMessage) {
+    if (health.success && sendTestMessage && recipient) {
       testDelivery = await emailService.sendTestEmail(recipient);
     }
 
     return res.json({
-      success: health.success,
-      smtp: health,
+      success: Boolean(health.success),
+      smtp: {
+        host: config.EMAIL.host,
+        port: config.EMAIL.port,
+        user: config.EMAIL.user,
+        mode: config.EMAIL.mode,
+        secure: config.EMAIL.secure,
+        from: config.EMAIL.from,
+        fromName: config.EMAIL.fromName
+      },
+      error: health.error || null,
       testDelivery
     });
   } catch (err) {
     console.error('Error in /api/admin/email/health-check:', err);
     return res.status(500).json({ success: false, error: err.message || 'SMTP health check failed.' });
+  }
+});
+
+// POST /api/admin/email/send-test
+router.post('/email/send-test', async (req, res) => {
+  try {
+    const { recipient } = req.body;
+    if (!recipient || typeof recipient !== 'string' || !recipient.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid recipient email address is required for test email delivery.'
+      });
+    }
+
+    const cleanRecipient = recipient.trim();
+    const emailService = require('../services/email');
+    const result = await emailService.sendTestEmail(cleanRecipient);
+
+    if (result && result.success) {
+      return res.json({
+        success: true,
+        messageId: result.messageId,
+        recipient: cleanRecipient,
+        message: `Real test email successfully dispatched to ${cleanRecipient} (Message ID: ${result.messageId})`
+      });
+    } else {
+      return res.status(502).json({
+        success: false,
+        error: result?.error || 'SMTP delivery failed',
+        code: result?.code
+      });
+    }
+  } catch (err) {
+    console.error('Error in /api/admin/email/send-test:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'SMTP delivery failed'
+    });
   }
 });
 
@@ -459,21 +506,51 @@ router.get('/export-csv', async (req, res) => {
   }
 });
 
-// GET /api/admin/email-logs
-router.get('/email-logs', async (req, res) => {
+// GET /api/admin/email-logs & GET /api/admin/email/logs
+const handleGetEmailLogs = async (req, res) => {
   try {
     const logs = await all(
       `SELECT * FROM email_logs ORDER BY id DESC LIMIT 100`
     );
+
+    const totalSentRow = await get(`SELECT COUNT(*) as count FROM email_logs WHERE status = 'SENT'`);
+    const totalFailedRow = await get(`SELECT COUNT(*) as count FROM email_logs WHERE status = 'FAILED'`);
+    const lastSuccessRow = await get(`SELECT * FROM email_logs WHERE status = 'SENT' ORDER BY id DESC LIMIT 1`);
+    const lastFailedRow = await get(`SELECT * FROM email_logs WHERE status = 'FAILED' ORDER BY id DESC LIMIT 1`);
+
     return res.json({
       success: true,
       count: logs.length,
+      stats: {
+        totalSent: totalSentRow ? totalSentRow.count : 0,
+        totalFailed: totalFailedRow ? totalFailedRow.count : 0,
+        lastSuccess: lastSuccessRow ? {
+          recipient: lastSuccessRow.recipient,
+          type: lastSuccessRow.email_type,
+          timestamp: lastSuccessRow.created_at,
+          messageId: lastSuccessRow.provider_message_id
+        } : null,
+        lastFailed: lastFailedRow ? {
+          recipient: lastFailedRow.recipient,
+          type: lastFailedRow.email_type,
+          timestamp: lastFailedRow.created_at,
+          error: lastFailedRow.error_message
+        } : null,
+        lastError: lastFailedRow ? lastFailedRow.error_message : null,
+        smtpMode: config.EMAIL.mode,
+        configuredSender: config.EMAIL.from || config.EMAIL.user,
+        host: config.EMAIL.host,
+        port: config.EMAIL.port
+      },
       logs
     });
   } catch (err) {
-    console.error('Error in /api/admin/email-logs:', err);
+    console.error('Error in email-logs endpoint:', err);
     return res.status(500).json({ success: false, error: 'Failed to retrieve email logs.' });
   }
-});
+};
+
+router.get('/email-logs', handleGetEmailLogs);
+router.get('/email/logs', handleGetEmailLogs);
 
 module.exports = router;

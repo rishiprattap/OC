@@ -160,7 +160,7 @@ async function runLiveAudit() {
     test('UPI ID is preetiyadav15071985@okaxis', configRes.json && configRes.json.upi && configRes.json.upi.upiId === 'preetiyadav15071985@okaxis');
     test('Payment QR asset is configured', configRes.json && configRes.json.upi && configRes.json.upi.qrAssetPath === '/assets/payment-qr.jpeg');
     test('Config API NEVER leaks ADMIN_SECRET', !configRes.body.includes(ADMIN_KEY) && !configRes.body.includes('ADMIN_SECRET'));
-    test('Config API NEVER leaks mail credentials', !configRes.body.includes('MAIL_PASSWORD') && !configRes.body.includes('hbku'));
+    test('Config API NEVER leaks mail credentials', !configRes.body.includes('MAIL_PASSWORD') && !configRes.body.includes('password'));
 
     // -------------------------------------------------------------
     // SECTION 5: LIVE REGISTRATION, LOOKUP & ADMIN PORTAL AUTH

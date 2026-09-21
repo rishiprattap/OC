@@ -591,20 +591,28 @@
 
           <div style="font-size: 13px; line-height: 2; color: #d5cbbd; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Sender Email:</span>
-              <b>offstagecreators77@gmail.com</b>
+              <span style="color: #8e8477;">SMTP Status:</span>
+              <span id="smtpStatusVal" style="font-weight: 700; color: #ffd685;">Ready to Test</span>
             </div>
             <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">SMTP Host:</span>
-              <span>smtp.gmail.com:587</span>
+              <span style="color: #8e8477;">Email Mode:</span>
+              <span id="smtpModeVal" class="table-status-badge status-paid">LIVE</span>
             </div>
             <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Mode:</span>
-              <span class="table-status-badge status-paid">LIVE</span>
+              <span style="color: #8e8477;">Configured Sender:</span>
+              <b id="smtpSenderVal">offstagecreators77@gmail.com</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
+              <span style="color: #8e8477;">Delivery Stats:</span>
+              <span><b id="smtpTotalSent" style="color: #6edb8c;">0</b> sent • <b id="smtpTotalFailed" style="color: #ff8566;">0</b> failed</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
+              <span style="color: #8e8477;">Last Successful Email:</span>
+              <span id="smtpLastSuccessVal" style="font-size: 11px; color: #9d9488;">None</span>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 6px 0;">
-              <span style="color: #8e8477;">Authentication:</span>
-              <span style="color: #6edb8c; font-weight: 700;">Configured via .env ✓</span>
+              <span style="color: #8e8477;">Last Error / Failed:</span>
+              <span id="smtpLastFailedVal" style="font-size: 11px; color: #ff8566;">None</span>
             </div>
           </div>
 

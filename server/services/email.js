@@ -5,6 +5,10 @@ const { run } = require('../db');
 
 // Create Nodemailer Transporter
 function createTransporter() {
+  if (!config.EMAIL.user || !config.EMAIL.password) {
+    return null;
+  }
+
   const isGmail = config.EMAIL.host === 'smtp.gmail.com' || (config.EMAIL.user || '').endsWith('@gmail.com');
 
   if (isGmail) {
@@ -328,6 +332,37 @@ async function sendEmail({ to, subject, html, text, emailType, registrationId })
 
   const now = new Date().toISOString();
 
+  // Fail closed if email credentials are missing from environment
+  if (!config.EMAIL.user || !config.EMAIL.password || !transporter) {
+    const configError = 'EMAIL_CONFIGURATION_ERROR: MAIL_USER or MAIL_PASSWORD is not configured in environment.';
+    console.error(`[EMAIL_DISPATCH] type=${emailType || 'GENERAL'} recipient=${targetRecipient} status=FAILED error=${configError}`);
+
+    // Audit log failure
+    await run(
+      `INSERT INTO email_logs (
+        registration_id, recipient, email_type, subject, status, error_message, created_at
+      ) VALUES (?, ?, ?, ?, 'FAILED', ?, ?)`,
+      [registrationId || null, to, emailType || 'GENERAL', subject, configError, now]
+    );
+
+    if (registrationId) {
+      await run(
+        `UPDATE registrations SET
+          last_email_type = ?,
+          email_status = 'FAILED',
+          email_error = ?
+        WHERE registration_id = ?`,
+        [emailType || 'UNKNOWN', configError, registrationId]
+      );
+    }
+
+    return {
+      success: false,
+      error: configError,
+      code: 'EMAIL_CONFIGURATION_ERROR'
+    };
+  }
+
   let info = null;
   let attempts = 0;
   const maxAttempts = 3;
@@ -349,7 +384,7 @@ async function sendEmail({ to, subject, html, text, emailType, registrationId })
         }
       }
     }
-    console.log(`✓ Email sent successfully [${emailType || 'GENERAL'}] to ${targetRecipient} (Msg ID: ${info?.messageId})`);
+    console.log(`[EMAIL_DISPATCH] type=${emailType || 'GENERAL'} recipient=${targetRecipient} status=SENT messageId=${info?.messageId}`);
 
     // Audit log entry
     await run(
@@ -405,7 +440,7 @@ async function sendEmail({ to, subject, html, text, emailType, registrationId })
 
   } catch (err) {
     const safeErrorMsg = err.message || 'SMTP delivery failure';
-    console.error(`✗ Email delivery failed [${emailType || 'GENERAL'}] to ${targetRecipient}:`, safeErrorMsg);
+    console.error(`[EMAIL_DISPATCH] type=${emailType || 'GENERAL'} recipient=${targetRecipient} status=FAILED error=${safeErrorMsg}`);
 
     // Audit log failure
     await run(
@@ -981,19 +1016,59 @@ async function sendAdminNotificationEmail({ registration }) {
 
 // SMTP Health Check Diagnostic
 async function verifySmtpHealth() {
+  if (!config.EMAIL.user || !config.EMAIL.password) {
+    return {
+      success: false,
+      error: 'EMAIL_CONFIGURATION_ERROR: MAIL_USER or MAIL_PASSWORD is not configured in environment.',
+      code: 'EMAIL_CONFIGURATION_ERROR',
+      smtp: {
+        host: config.EMAIL.host,
+        port: config.EMAIL.port,
+        user: config.EMAIL.user || 'NOT_CONFIGURED',
+        mode: config.EMAIL.mode
+      }
+    };
+  }
+
   try {
+    if (!transporter) {
+      transporter = createTransporter();
+    }
+    if (!transporter) {
+      return {
+        success: false,
+        error: 'EMAIL_CONFIGURATION_ERROR: Transporter could not be initialized.',
+        code: 'EMAIL_CONFIGURATION_ERROR',
+        smtp: {
+          host: config.EMAIL.host,
+          port: config.EMAIL.port,
+          user: config.EMAIL.user,
+          mode: config.EMAIL.mode
+        }
+      };
+    }
+
     await transporter.verify();
     return {
       success: true,
       message: 'SMTP Connected & Authenticated ✓',
-      host: config.EMAIL.host,
-      port: config.EMAIL.port,
-      user: config.EMAIL.user
+      smtp: {
+        host: config.EMAIL.host,
+        port: config.EMAIL.port,
+        user: config.EMAIL.user,
+        mode: config.EMAIL.mode
+      }
     };
   } catch (err) {
     return {
       success: false,
-      error: err.message || 'SMTP verification failed'
+      error: err.message || 'SMTP verification failed',
+      smtp: {
+        host: config.EMAIL.host,
+        port: config.EMAIL.port,
+        user: config.EMAIL.user,
+        mode: config.EMAIL.mode
+      }
     };
   }
 }

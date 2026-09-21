@@ -168,29 +168,66 @@ router.post('/resend-otp', async (req, res) => {
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
     const sentAt = now.toISOString();
 
+    // Store new OTP hash and reset attempts
     await run(
       `UPDATE registrations SET
         email_otp_hash = ?,
         email_otp_salt = ?,
         email_otp_expires_at = ?,
         email_verification_attempts = 0,
-        email_last_sent_at = ?,
         updated_at = ?
       WHERE registration_id = ?`,
-      [newHash, newSalt, expiresAt, sentAt, sentAt, cleanRegId]
+      [newHash, newSalt, expiresAt, sentAt, cleanRegId]
     );
 
     // Send email with new OTP
-    await sendEmailVerificationEmail({
-      to: reg.email,
-      name: reg.full_name,
-      otp: newOtp,
-      registrationId: cleanRegId
-    });
+    let emailResult = null;
+    try {
+      emailResult = await sendEmailVerificationEmail({
+        to: reg.email,
+        name: reg.full_name,
+        otp: newOtp,
+        registrationId: cleanRegId
+      });
+    } catch (sendErr) {
+      console.error('Failed to send verification email on resend:', sendErr);
+      emailResult = { success: false, error: sendErr.message || 'SMTP delivery failure' };
+    }
+
+    if (!emailResult || !emailResult.success) {
+      // Record failure without starting 60s cooldown so user can retry
+      await run(
+        `UPDATE registrations SET
+          email_last_sent_at = NULL,
+          email_status = 'FAILED',
+          email_error = ?,
+          last_email_type = 'EMAIL_VERIFICATION'
+        WHERE registration_id = ?`,
+        [emailResult?.error || 'Failed to dispatch verification email via SMTP.', cleanRegId]
+      );
+
+      return res.status(502).json({
+        success: false,
+        emailSent: false,
+        error: "We couldn't send the verification email. Please try again."
+      });
+    }
+
+    // If send succeeds, start 60s cooldown and mark SENT
+    await run(
+      `UPDATE registrations SET
+        email_last_sent_at = ?,
+        email_status = 'SENT',
+        email_error = NULL,
+        last_email_type = 'EMAIL_VERIFICATION'
+      WHERE registration_id = ?`,
+      [sentAt, cleanRegId]
+    );
 
     return res.json({
       success: true,
-      message: `A new 6-digit verification code has been sent to ${reg.email}.`
+      emailSent: true,
+      message: `Verification code sent to ${reg.email}. Please check your inbox and spam folder.`
     });
 
   } catch (err) {

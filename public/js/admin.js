@@ -352,11 +352,20 @@
     }
   }
 
-  // Load Email Audit Logs
+  // Email Diagnostics Elements
+  const smtpStatusVal = document.getElementById('smtpStatusVal');
+  const smtpModeVal = document.getElementById('smtpModeVal');
+  const smtpSenderVal = document.getElementById('smtpSenderVal');
+  const smtpTotalSent = document.getElementById('smtpTotalSent');
+  const smtpTotalFailed = document.getElementById('smtpTotalFailed');
+  const smtpLastSuccessVal = document.getElementById('smtpLastSuccessVal');
+  const smtpLastFailedVal = document.getElementById('smtpLastFailedVal');
+
+  // Load Email Audit Logs & Diagnostics
   async function loadEmailLogs() {
     if (!emailLogsTableBody) return;
     try {
-      const res = await fetch('/api/admin/email-logs', {
+      const res = await fetch('/api/admin/email/logs', {
         headers: { 'x-admin-secret': adminSecret }
       });
       const data = await res.json();
@@ -366,7 +375,39 @@
         return;
       }
 
-      if (data.logs.length === 0) {
+      // Update Diagnostic Info Cards
+      if (data.stats) {
+        const s = data.stats;
+        if (smtpTotalSent) smtpTotalSent.textContent = s.totalSent || 0;
+        if (smtpTotalFailed) smtpTotalFailed.textContent = s.totalFailed || 0;
+        if (smtpModeVal) {
+          smtpModeVal.textContent = s.smtpMode || 'LIVE';
+          smtpModeVal.className = (s.smtpMode === 'LIVE') ? 'table-status-badge status-paid' : 'table-status-badge status-pending';
+        }
+        if (smtpSenderVal) smtpSenderVal.textContent = s.configuredSender || 'offstagecreators77@gmail.com';
+
+        if (smtpLastSuccessVal) {
+          if (s.lastSuccess) {
+            const successTime = new Date(s.lastSuccess.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            smtpLastSuccessVal.textContent = `${s.lastSuccess.recipient} (${successTime})`;
+            smtpLastSuccessVal.title = `Message ID: ${s.lastSuccess.messageId || 'N/A'}`;
+          } else {
+            smtpLastSuccessVal.textContent = 'None yet';
+          }
+        }
+
+        if (smtpLastFailedVal) {
+          if (s.lastFailed) {
+            const failTime = new Date(s.lastFailed.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            smtpLastFailedVal.textContent = `${s.lastFailed.recipient} (${failTime})`;
+            smtpLastFailedVal.title = s.lastFailed.error || '';
+          } else {
+            smtpLastFailedVal.textContent = 'None';
+          }
+        }
+      }
+
+      if (!data.logs || data.logs.length === 0) {
         emailLogsTableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;color:#8e8477;">No email records logged yet.</td></tr>`;
         return;
       }
@@ -396,7 +437,7 @@
     }
   }
 
-  // SMTP Health Check Test
+  // SMTP Health Check Test (transporter.verify)
   if (smtpTestBtn) {
     smtpTestBtn.addEventListener('click', async () => {
       smtpTestBtn.disabled = true;
@@ -404,7 +445,7 @@
       if (smtpDiagOutput) {
         smtpDiagOutput.style.display = 'block';
         smtpDiagOutput.style.color = '#e4ad57';
-        smtpDiagOutput.textContent = 'Connecting to smtp.gmail.com:587…\nAuthenticating offstagecreators77@gmail.com…';
+        smtpDiagOutput.textContent = 'Connecting to SMTP server & verifying credentials…';
       }
 
       try {
@@ -422,56 +463,70 @@
         smtpTestBtn.textContent = '⚡ TEST SMTP CONNECTION';
 
         if (res.ok && data.success) {
+          if (smtpStatusVal) {
+            smtpStatusVal.textContent = 'Connected ✓';
+            smtpStatusVal.style.color = '#6edb8c';
+          }
           smtpDiagOutput.style.color = '#6edb8c';
-          smtpDiagOutput.textContent = `✓ SMTP CONNECTED & AUTHENTICATED!\nHost: ${data.smtp.host}:${data.smtp.port}\nAccount: ${data.smtp.user}\nStatus: Ready for live dispatch.`;
+          smtpDiagOutput.textContent = `✓ SMTP CONNECTED & AUTHENTICATED!\nHost: ${data.smtp.host}:${data.smtp.port}\nAccount: ${data.smtp.user}\nMode: ${data.smtp.mode}\nStatus: Verified via real SMTP transporter.verify(). Ready for live dispatch.`;
         } else {
+          if (smtpStatusVal) {
+            smtpStatusVal.textContent = 'Failed ✕';
+            smtpStatusVal.style.color = '#ff8566';
+          }
           smtpDiagOutput.style.color = '#ff8566';
-          smtpDiagOutput.textContent = `✕ SMTP CONNECTION FAILED:\n${data.error || data.smtp?.error || 'Authentication error'}`;
+          smtpDiagOutput.textContent = `✕ SMTP CONNECTION FAILED:\n${data.error || 'Authentication error. Please verify MAIL_USER and MAIL_PASSWORD in production environment.'}`;
         }
       } catch (err) {
         smtpTestBtn.disabled = false;
         smtpTestBtn.textContent = '⚡ TEST SMTP CONNECTION';
+        if (smtpStatusVal) {
+          smtpStatusVal.textContent = 'Error ✕';
+          smtpStatusVal.style.color = '#ff8566';
+        }
         smtpDiagOutput.style.color = '#ff8566';
         smtpDiagOutput.textContent = `✕ Network failure during test: ${err.message}`;
       }
     });
   }
 
-  // Send Diagnostic Test Email
+  // Real Email Delivery Test (Admin Send Test Email)
   if (sendDiagEmailBtn) {
     sendDiagEmailBtn.addEventListener('click', async () => {
-      const recipient = prompt('Enter recipient address for diagnostic test email:', 'offstagecreators77@gmail.com');
-      if (!recipient) return;
+      const recipient = prompt('Enter recipient email address for real test email delivery:', 'rishiarc01@gmail.com');
+      if (!recipient || !recipient.trim()) return;
 
+      const cleanRecipient = recipient.trim();
       sendDiagEmailBtn.disabled = true;
       sendDiagEmailBtn.textContent = 'Sending test email…';
       if (smtpDiagOutput) {
         smtpDiagOutput.style.display = 'block';
         smtpDiagOutput.style.color = '#e4ad57';
-        smtpDiagOutput.textContent = `Dispatching diagnostic email to ${recipient}…`;
+        smtpDiagOutput.textContent = `Dispatching real test email to ${cleanRecipient} via SMTP…`;
       }
 
       try {
-        const res = await fetch('/api/admin/email/health-check', {
+        const res = await fetch('/api/admin/email/send-test', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'x-admin-secret': adminSecret
           },
-          body: JSON.stringify({ sendTestMessage: true, recipient })
+          body: JSON.stringify({ recipient: cleanRecipient })
         });
 
         const data = await res.json();
         sendDiagEmailBtn.disabled = false;
         sendDiagEmailBtn.textContent = '✉ SEND TEST EMAIL';
 
-        if (res.ok && data.success && data.testDelivery?.success) {
+        if (res.ok && data.success) {
           smtpDiagOutput.style.color = '#6edb8c';
-          smtpDiagOutput.textContent = `✓ DIAGNOSTIC EMAIL SENT SUCCESSFULLY!\nRecipient: ${recipient}\nMessage ID: ${data.testDelivery.messageId}\nCheck your inbox.`;
-          loadEmailLogs();
+          smtpDiagOutput.textContent = `✓ REAL TEST EMAIL DISPATCHED SUCCESSFULLY!\nRecipient: ${cleanRecipient}\nMessage ID: ${data.messageId}\n\nSMTP successfully accepted the message. Check recipient inbox/spam.`;
+          await loadEmailLogs();
         } else {
           smtpDiagOutput.style.color = '#ff8566';
-          smtpDiagOutput.textContent = `✕ FAILED TO DELIVER TEST MESSAGE:\n${data.testDelivery?.error || data.error || 'Check mail configuration'}`;
+          smtpDiagOutput.textContent = `✕ FAILED TO DELIVER TEST MESSAGE:\n${data.error || 'Check mail configuration'}`;
+          await loadEmailLogs();
         }
       } catch (err) {
         sendDiagEmailBtn.disabled = false;

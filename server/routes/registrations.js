@@ -114,7 +114,8 @@ router.post('/', async (req, res) => {
           email_otp_salt = ?,
           email_otp_expires_at = ?,
           email_verification_attempts = 0,
-          email_last_sent_at = ?,
+          email_last_sent_at = NULL,
+          email_status = 'PENDING',
           updated_at = ?
         WHERE id = ?`,
         [
@@ -128,7 +129,6 @@ router.post('/', async (req, res) => {
           otpHash,
           salt,
           expiresAt,
-          now,
           now,
           pendingExisting.id
         ]
@@ -155,11 +155,12 @@ router.post('/', async (req, res) => {
           email_otp_expires_at,
           email_verification_attempts,
           email_last_sent_at,
+          email_status,
           checked_in,
           certificate_eligible,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 'PENDING', 0, ?, ?, ?, 0, ?, 0, 0, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 'PENDING', 0, ?, ?, ?, 0, NULL, 'PENDING', 0, 0, ?, ?)`,
         [
           regId,
           eventId,
@@ -175,15 +176,15 @@ router.post('/', async (req, res) => {
           salt,
           expiresAt,
           now,
-          now,
           now
         ]
       );
     }
 
     // Send verification email
+    let emailResult = null;
     try {
-      await sendEmailVerificationEmail({
+      emailResult = await sendEmailVerificationEmail({
         to: cleanEmail,
         name: cleanFullName,
         otp: otp,
@@ -191,11 +192,40 @@ router.post('/', async (req, res) => {
       });
     } catch (err) {
       console.error('Failed to send verification email:', err);
+      emailResult = { success: false, error: err.message || 'SMTP delivery failure' };
+    }
+
+    const emailSent = Boolean(emailResult && emailResult.success);
+
+    if (emailSent) {
+      await run(
+        `UPDATE registrations SET
+          email_last_sent_at = ?,
+          email_status = 'SENT',
+          email_error = NULL,
+          last_email_type = 'EMAIL_VERIFICATION'
+        WHERE registration_id = ?`,
+        [now, regId]
+      );
+    } else {
+      await run(
+        `UPDATE registrations SET
+          email_last_sent_at = NULL,
+          email_status = 'FAILED',
+          email_error = ?,
+          last_email_type = 'EMAIL_VERIFICATION'
+        WHERE registration_id = ?`,
+        [emailResult?.error || 'Failed to dispatch verification email via SMTP.', regId]
+      );
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Registration created! A 6-digit verification code has been sent to your email.',
+      emailSent: emailSent,
+      emailError: emailSent ? null : (emailResult?.error || 'Failed to dispatch verification email via SMTP.'),
+      message: emailSent
+        ? 'Verification code sent. Please check your inbox and spam folder.'
+        : "Registration was created, but we couldn't send the verification email. Please try again.",
       registrationId: regId,
       email: cleanEmail,
       needsVerification: true,

@@ -203,7 +203,11 @@
         }
         // Advance to Step 2: Email OTP Verification
         goToStep(2);
-        showSuccess(`A 6-digit verification code has been dispatched to ${activeEmail}. Please check your inbox.`);
+        if (data.emailSent) {
+          showSuccess('Verification code sent. Please check your inbox and spam folder.');
+        } else {
+          showError("We couldn't send the verification email. Please try again.");
+        }
       }
 
     } catch (err) {
@@ -290,14 +294,14 @@
 
         const data = await res.json();
 
-        if (!res.ok || !data.success) {
-          showError(data.error || 'Failed to resend code.');
+        if (!res.ok || !data.success || !data.emailSent) {
+          showError(data.error || "We couldn't send the verification email. Please try again.");
           resendOtpBtn.disabled = false;
           resendOtpBtn.textContent = '⟳ Resend Code';
           return;
         }
 
-        showSuccess(data.message || 'A new code has been sent to your email.');
+        showSuccess(data.message || 'Verification code sent. Please check your inbox and spam folder.');
 
         // Start 60s cooldown
         let countdown = 60;
