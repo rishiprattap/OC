@@ -30,8 +30,8 @@ const db = new sqlite3.Database(dbPath, (err) => {
   }
 });
 
-// Promise wrappers for async/await
-const run = (sql, params = []) => {
+// Raw execution without schema hook (used internally by initSchema)
+const rawRun = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) reject(err);
@@ -40,7 +40,22 @@ const run = (sql, params = []) => {
   });
 };
 
-const get = (sql, params = []) => {
+let schemaInitPromise = null;
+function ensureSchema() {
+  if (!schemaInitPromise) {
+    schemaInitPromise = initSchema();
+  }
+  return schemaInitPromise;
+}
+
+// Promise wrappers for async/await with schema readiness guarantee
+const run = async (sql, params = []) => {
+  await ensureSchema();
+  return rawRun(sql, params);
+};
+
+const get = async (sql, params = []) => {
+  await ensureSchema();
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
       if (err) reject(err);
@@ -49,7 +64,8 @@ const get = (sql, params = []) => {
   });
 };
 
-const all = (sql, params = []) => {
+const all = async (sql, params = []) => {
+  await ensureSchema();
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
       if (err) reject(err);
@@ -61,7 +77,7 @@ const all = (sql, params = []) => {
 // Safe helper to add column if it doesn't already exist
 async function addColumnIfNotExists(table, columnDef) {
   try {
-    await run(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+    await rawRun(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
   } catch (err) {
     // Error is expected if column already exists
   }
@@ -70,7 +86,7 @@ async function addColumnIfNotExists(table, columnDef) {
 // Initialize schema and migrations
 const initSchema = async () => {
   try {
-    await run(`
+    await rawRun(`
       CREATE TABLE IF NOT EXISTS registrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         registration_id TEXT UNIQUE NOT NULL,
@@ -128,14 +144,14 @@ const initSchema = async () => {
     await addColumnIfNotExists('registrations', 'email_status TEXT DEFAULT "PENDING"');
 
     // Indexes for fast lookup
-    await run(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_phone ON registrations(phone)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_trans_id ON registrations(transaction_id)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_status ON registrations(payment_status)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_email_verified ON registrations(email_verified)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_phone ON registrations(phone)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_trans_id ON registrations(transaction_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_status ON registrations(payment_status)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_verified ON registrations(email_verified)`);
 
     // Audit log table for all sent & attempted emails
-    await run(`
+    await rawRun(`
       CREATE TABLE IF NOT EXISTS email_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         registration_id TEXT,
@@ -148,11 +164,11 @@ const initSchema = async () => {
         created_at TEXT NOT NULL
       )
     `);
-    await run(`CREATE INDEX IF NOT EXISTS idx_email_logs_reg ON email_logs(registration_id)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_reg ON email_logs(registration_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status)`);
 
     // Google Meet Sessions and Email Delivery Audit Tables
-    await run(`
+    await rawRun(`
       CREATE TABLE IF NOT EXISTS meet_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT NOT NULL,
@@ -169,9 +185,9 @@ const initSchema = async () => {
         updated_at TEXT NOT NULL
       )
     `);
-    await run(`CREATE INDEX IF NOT EXISTS idx_meet_sessions_event ON meet_sessions(event_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_sessions_event ON meet_sessions(event_id)`);
 
-    await run(`
+    await rawRun(`
       CREATE TABLE IF NOT EXISTS meet_email_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         meet_session_id INTEGER NOT NULL,
@@ -185,12 +201,12 @@ const initSchema = async () => {
         FOREIGN KEY (meet_session_id) REFERENCES meet_sessions(id)
       )
     `);
-    await run(`CREATE INDEX IF NOT EXISTS idx_meet_logs_session ON meet_email_logs(meet_session_id)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_meet_logs_reg ON meet_email_logs(registration_id)`);
-    await run(`CREATE INDEX IF NOT EXISTS idx_meet_logs_status ON meet_email_logs(status)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_session ON meet_email_logs(meet_session_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_reg ON meet_email_logs(registration_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_status ON meet_email_logs(status)`);
 
     // Legacy certificates table to retain previous participants from certificate.html
-    await run(`
+    await rawRun(`
       CREATE TABLE IF NOT EXISTS legacy_certificates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         hash TEXT UNIQUE NOT NULL,
@@ -214,7 +230,7 @@ const initSchema = async () => {
     ];
 
     for (const h of legacyHashes) {
-      await run(`
+      await rawRun(`
         INSERT OR IGNORE INTO legacy_certificates (hash, event_name, created_at)
         VALUES (?, 'ONLINE OPEN MIC 2026 (Edition 1)', datetime('now'))
       `, [h]);
