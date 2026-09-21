@@ -304,9 +304,15 @@ async function sendEmail({ to, subject, html, text, emailType, registrationId })
   const mailOptions = {
     from: `"${config.EMAIL.fromName || 'Offstage Creators'}" <${config.EMAIL.from || config.EMAIL.user}>`,
     to: targetRecipient,
+    replyTo: config.EMAIL.user || 'offstagecreators77@gmail.com',
     subject: finalSubject,
     html: html,
-    text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    headers: {
+      'X-Priority': '1 (Highest)',
+      'X-MSMail-Priority': 'High',
+      'Importance': 'High'
+    }
   };
 
   const now = new Date().toISOString();
@@ -419,7 +425,7 @@ async function sendEmail({ to, subject, html, text, emailType, registrationId })
 
 // 1. Email Verification OTP Email
 async function sendEmailVerificationEmail({ to, name, otp, registrationId }) {
-  const subject = 'Verify your email — Offstage Creators';
+  const subject = `${otp} is your verification code — Offstage Creators`;
   const headline = `Verify Your <em>Email Address</em>`;
 
   const bodyContent = `
@@ -427,7 +433,7 @@ async function sendEmailVerificationEmail({ to, name, otp, registrationId }) {
       Hello <b>${escapeHtml(name)}</b>,
     </p>
     <p class="content-text">
-      Thank you for initiating your performer registration for the upcoming <b>Online Open Mic</b>. Please verify your email address to continue to the ₹79 UPI payment step.
+      Thank you for registering for the upcoming <b>Online Open Mic</b> with Offstage Creators. Please confirm your email address using the 6-digit code below:
     </p>
 
     <div class="otp-box">
@@ -441,7 +447,7 @@ async function sendEmailVerificationEmail({ to, name, otp, registrationId }) {
     </div>
 
     <p class="content-text" style="font-size: 13px; color: #9d9488;">
-      Enter this code on the registration screen to confirm your identity. Do not share this OTP with anyone. If you did not initiate this registration, you can safely ignore this email.
+      Enter this code on the registration screen to confirm your spot. If you did not initiate this registration, you can safely ignore this message.
     </p>
   `;
 
@@ -453,10 +459,13 @@ async function sendEmailVerificationEmail({ to, name, otp, registrationId }) {
     badgeText: 'STEP 2: EMAIL VERIFICATION'
   });
 
+  const plainText = `Hello ${name},\n\nYour 6-digit verification code for Offstage Creators Online Open Mic is: ${otp}\n\nThis code is valid for 10 minutes.\n\nEnter this code on the registration page to confirm your email.\n\n— Offstage Creators Team\nhttps://offstage-creators.vercel.app`;
+
   return sendEmail({
     to,
     subject,
     html,
+    text: plainText,
     emailType: 'EMAIL_VERIFICATION',
     registrationId
   });
