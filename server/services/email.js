@@ -5,6 +5,21 @@ const { run } = require('../db');
 
 // Create Nodemailer Transporter
 function createTransporter() {
+  const isGmail = config.EMAIL.host === 'smtp.gmail.com' || (config.EMAIL.user || '').endsWith('@gmail.com');
+
+  if (isGmail) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: config.EMAIL.user,
+        pass: config.EMAIL.password
+      },
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000
+    });
+  }
+
   const isSecure = config.EMAIL.port === 465 || config.EMAIL.secure;
 
   return nodemailer.createTransport({
@@ -234,10 +249,6 @@ function renderEmailWrapper({ title, preheader, headline, bodyContent, ctaUrl, c
   </style>
 </head>
 <body>
-  <div style="display: none; font-size: 1px; color: #0d0c0a; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
-    ${preheader || title || ''}
-  </div>
-
   <center class="wrapper">
     <table class="main-table" width="100%">
       <!-- Header -->
