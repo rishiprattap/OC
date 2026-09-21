@@ -206,8 +206,8 @@
               <span class="queue-utr-code">${escapeHtml(item.transaction_id || 'NOT_ENTERED')}</span>
             </div>
 
-            <div class="queue-screenshot-wrap" onclick="openScreenshotModal('${screenshotUrl}')">
-              <img src="${screenshotUrl}" class="queue-screenshot-img" alt="Screenshot Proof">
+            <div class="queue-screenshot-wrap" data-screenshot-url="${encodeURIComponent(screenshotUrl)}">
+              <img src="${screenshotUrl}" class="queue-screenshot-img" alt="Screenshot Proof" onerror="this.src='/assets/logo.png'">
               <div class="queue-screenshot-overlay">
                 🔍 Click to Zoom Receipt
               </div>
@@ -302,7 +302,7 @@
 
         let proofCell = '—';
         if (r.payment_screenshot_url) {
-          proofCell = `<button type="button" class="table-btn" onclick="openScreenshotModal('${r.payment_screenshot_url}')">📷 View</button>`;
+          proofCell = `<button type="button" class="table-btn" data-screenshot-url="${encodeURIComponent(r.payment_screenshot_url)}">📷 View</button>`;
         }
 
         let quickActions = '';
@@ -700,7 +700,15 @@
     });
   }
 
-  // Lightbox Modal
+  // Lightbox Modal — use data-screenshot-url attribute to avoid injecting large base64 URIs into onclick
+  document.addEventListener('click', function (e) {
+    const el = e.target.closest('[data-screenshot-url]');
+    if (el) {
+      const url = decodeURIComponent(el.getAttribute('data-screenshot-url') || '');
+      if (url) openScreenshotModal(url);
+    }
+  });
+
   window.openScreenshotModal = function (url) {
     if (modalImg) modalImg.src = url;
     if (modalImgDownload) modalImgDownload.href = url;

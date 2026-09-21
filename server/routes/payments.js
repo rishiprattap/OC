@@ -6,38 +6,55 @@ const multer = require('multer');
 const { run, get } = require('../db');
 const config = require('../config');
 
-// Ensure upload directory exists
-const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'screenshots');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+// On Vercel (read-only filesystem), store screenshots as base64 data URIs in the DB.
+// Locally, save to disk and store a URL path.
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
+
+let upload;
+
+if (isVercel) {
+  // Vercel: buffer in memory, convert to base64 data URI
+  upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (req, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      if (allowed.includes(file.mimetype.toLowerCase())) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPG, PNG, and WebP images are allowed.'));
+      }
+    }
+  });
+} else {
+  // Local: save to disk
+  const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'screenshots');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+      const regId = (req.body.registrationId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
+      const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `proof-${regId}-${Date.now()}${ext}`);
+    }
+  });
+
+  upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+      if (allowed.includes(file.mimetype.toLowerCase())) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPG, PNG, and WebP images are allowed.'));
+      }
+    }
+  });
 }
-
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const regId = (req.body.registrationId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    cb(null, `proof-${regId}-${Date.now()}${ext}`);
-  }
-});
-
-const fileFilter = (req, file, cb) => {
-  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-  if (allowed.includes(file.mimetype.toLowerCase())) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only JPG, PNG, and WebP images are allowed.'));
-  }
-};
-
-const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
-  fileFilter: fileFilter
-});
 
 // GET /api/payments/info
 router.get('/info', (req, res) => {
@@ -108,10 +125,21 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
       });
     }
 
-    const screenshotUrl = `/uploads/screenshots/${req.file.filename}`;
+    // 3. Determine screenshot storage
+    let screenshotUrl;
+    if (isVercel) {
+      // Store as base64 data URI directly in DB (Vercel has no persistent writable filesystem)
+      const mimeType = req.file.mimetype || 'image/jpeg';
+      const b64 = req.file.buffer.toString('base64');
+      screenshotUrl = `data:${mimeType};base64,${b64}`;
+    } else {
+      // Disk storage — file is already written, build URL path
+      screenshotUrl = `/uploads/screenshots/${req.file.filename}`;
+    }
+
     const now = new Date().toISOString();
 
-    // 3. Update registration record
+    // 4. Update registration record
     await run(
       `UPDATE registrations SET
         payment_status = 'PENDING_VERIFICATION',
@@ -154,7 +182,6 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
       message: 'Payment proof submitted successfully. Your payment is now under manual verification.',
       registrationId: cleanRegId,
       transactionId: cleanUtr,
-      screenshotUrl: screenshotUrl,
       paymentStatus: 'PENDING_VERIFICATION',
       submittedAt: now
     });
@@ -166,6 +193,17 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
       error: err.message || 'Server error processing payment proof.'
     });
   }
+});
+
+// Multer error handler (file type / size violations)
+router.use((err, req, res, next) => {
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ success: false, error: 'Screenshot too large. Maximum file size is 5 MB.' });
+  }
+  if (err) {
+    return res.status(400).json({ success: false, error: err.message || 'File upload error.' });
+  }
+  next();
 });
 
 module.exports = router;
