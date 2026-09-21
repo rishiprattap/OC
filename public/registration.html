@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registration Pass | Offstage Creators</title>
+  <meta name="description" content="Your Offstage Creators registration pass and event entry QR code.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+  <script src="/js/analytics.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      .ticket-pass, .ticket-pass * { visibility: visible; }
+      .ticket-pass { position: absolute; left: 0; top: 0; width: 100%; }
+      .no-print { display: none !important; }
+    }
+
+    .status-badge-PENDING_VERIFICATION { background: rgba(142,132,119,0.15); border: 1px solid #4a4238; color: #9d9488; }
+    .status-badge-VERIFIED { background: rgba(228,173,87,0.12); border: 1px solid rgba(228,173,87,0.4); color: #e4ad57; }
+    .status-badge-APPROVED { background: rgba(110,219,140,0.12); border: 1px solid rgba(110,219,140,0.4); color: #88f0a4; }
+    .status-badge-REJECTED { background: rgba(226,105,71,0.12); border: 1px solid rgba(226,105,71,0.4); color: #ff9e85; }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e1a16;
+      padding: 10px 0;
+      font-size: 13px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { color: #8e8477; }
+    .info-value { color: #f7eee1; font-weight: 600; text-align: right; max-width: 60%; }
+
+    .loading-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: #8e8477;
+    }
+    .loading-spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #2a231c;
+      border-top-color: #e4ad57;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .qr-frame {
+      display: inline-block;
+      background: #fff;
+      padding: 14px;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    }
+
+    .pass-status-note {
+      background: rgba(228, 173, 87, 0.08);
+      border: 1px solid rgba(228, 173, 87, 0.25);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 13px;
+      color: #d5cbbd;
+      margin: 20px 0;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <header class="nav-header no-print">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/register">Register</a>
+        <a href="/certificate">Certificate</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <a class="back-link no-print" href="/">← Offstage Creators</a>
+
+    <!-- Loading State -->
+    <div class="loading-state" id="loadingState">
+      <div class="loading-spinner"></div>
+      <p>Loading your registration…</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" style="display:none; text-align:center; padding:60px 20px;">
+      <div style="font-size:48px; margin-bottom:16px;">✕</div>
+      <span class="badge" style="background:rgba(226,105,71,0.15); border:1px solid #e26947; color:#ff8566; margin-bottom:16px; display:inline-block;">NOT FOUND</span>
+      <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:clamp(28px,4vw,48px); margin-bottom:12px;">Registration Not Found</h1>
+      <p id="errorMessage" style="color:#d5cbbd; max-width:480px; margin:0 auto 24px;">This registration could not be found. Please check the URL or contact the organizers.</p>
+      <a href="/register" class="cta">REGISTER NOW →</a>
+    </div>
+
+    <!-- Registration Content -->
+    <div id="registrationContent" style="display:none;">
+
+      <!-- Status header -->
+      <div class="page-head" style="margin-bottom:32px;">
+        <div id="statusBadgeContainer" style="margin-bottom:16px;"></div>
+        <h1 id="regHeading" style="font-family:'Cormorant Garamond',Georgia,serif; font-size:clamp(32px,5vw,56px); margin-bottom:8px;">
+          Registration Pass
+        </h1>
+        <p id="regSubheading" style="color:#d5cbbd; font-size:15px;"></p>
+      </div>
+
+      <!-- Registration Details Card -->
+      <div style="background:#141210; border:1px solid #2a231c; border-radius:14px; max-width:580px; margin:0 auto 32px; overflow:hidden;">
+        <div style="background:#181410; border-bottom:1px solid #2a231c; padding:20px 24px; display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-size:11px; font-weight:800; letter-spacing:0.18em; color:#e4ad57; margin-bottom:4px;">OFFSTAGE CREATORS</div>
+            <div style="font-size:18px; font-weight:700; color:#f7eee1;">Online Open Mic 2026</div>
+          </div>
+          <div id="passBadge"></div>
+        </div>
+
+        <div style="padding:24px;">
+          <div class="info-row">
+            <span class="info-label">Participant</span>
+            <span class="info-value" id="passName">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Registration ID</span>
+            <span class="info-value" style="font-family:monospace; color:#e4ad57; font-size:15px;" id="passRegId">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Category</span>
+            <span class="info-value" id="passCategory">—</span>
+          </div>
+          <div class="info-row" id="passTitleRow" style="display:none;">
+            <span class="info-label">Performance Title</span>
+            <span class="info-value" id="passTitle">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">City</span>
+            <span class="info-value" id="passCity">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Date &amp; Time</span>
+            <span class="info-value" id="passDateTime">—</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Slot Duration</span>
+            <span class="info-value">5 – 7 Minutes</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Status</span>
+            <span class="info-value" id="passStatusLabel">—</span>
+          </div>
+        </div>
+
+        <!-- QR Code section -->
+        <div style="border-top:1px solid #2a231c; padding:24px; text-align:center;">
+          <div style="font-size:11px; font-weight:800; letter-spacing:0.15em; color:#8e8477; text-transform:uppercase; margin-bottom:14px;">Registration QR Code</div>
+          <div class="qr-frame">
+            <div id="qrContainer" style="width:160px; height:160px; display:flex; align-items:center; justify-content:center;"></div>
+          </div>
+          <div style="font-family:monospace; font-size:11px; font-weight:700; color:#8e8477; margin-top:10px;" id="qrCaption">—</div>
+        </div>
+      </div>
+
+      <!-- Status-specific messages -->
+      <div id="pendingVerifNotice" style="display:none; max-width:580px; margin:0 auto 24px;">
+        <div class="pass-status-note">
+          ⚠️ <strong>Email not yet verified.</strong> Please check your inbox for the OTP verification email and complete verification.
+          <br><a href="/register" style="color:#e4ad57; text-decoration:none; font-weight:700; margin-top:8px; display:inline-block;">→ Return to registration to verify</a>
+        </div>
+      </div>
+
+      <div id="verifiedNotice" style="display:none; max-width:580px; margin:0 auto 24px;">
+        <div class="pass-status-note">
+          ✓ <strong>Email verified!</strong> Your registration is now pending approval from the Offstage Creators organizers.
+          You will receive an approval email once your registration is confirmed.
+        </div>
+      </div>
+
+      <div id="approvedNotice" style="display:none; max-width:580px; margin:0 auto 24px;">
+        <div style="background:rgba(110,219,140,0.08); border:1px solid rgba(110,219,140,0.3); border-radius:8px; padding:16px 20px; font-size:13px; color:#88f0a4; line-height:1.6;">
+          🎉 <strong>You're approved!</strong> Your registration has been confirmed by the organizers.
+          The event link will be shared before showtime. See you on stage!
+        </div>
+      </div>
+
+      <div id="rejectedNotice" style="display:none; max-width:580px; margin:0 auto 24px;">
+        <div style="background:rgba(226,105,71,0.08); border:1px solid rgba(226,105,71,0.3); border-radius:8px; padding:16px 20px; font-size:13px; color:#ff9e85; line-height:1.6;">
+          ✕ <strong>Registration not approved.</strong>
+          <span id="rejectedReasonText"></span>
+          <br><a href="/register" style="color:#e26947; font-weight:700; margin-top:8px; display:inline-block;">→ Re-register</a>
+        </div>
+      </div>
+
+      <!-- Performer Guidelines (shown when approved) -->
+      <div id="performerGuidelines" style="display:none; max-width:580px; margin:0 auto 32px;">
+        <div style="background:#141210; border:1px solid #2a231c; border-radius:12px; padding:20px 24px;">
+          <div style="font-size:12px; font-weight:800; letter-spacing:0.12em; color:#8e8477; text-transform:uppercase; margin-bottom:12px;">Performer Guidelines</div>
+          <p style="font-size:13px; color:#d5cbbd; line-height:1.7; margin:0;">
+            • Join the online room <strong>10 minutes before</strong> show time (7:20 PM IST) for audio/video check.<br>
+            • Have your camera, microphone, and a quiet space ready.<br>
+            • Performance slot: <strong>5–7 minutes</strong>.<br>
+            • The Google Meet link will be shared before showtime.<br>
+            • Participation certificates are issued after attendance check-in.
+          </p>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="no-print" style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; max-width:580px; margin:0 auto 40px;">
+        <button type="button" class="cta" onclick="window.print()">🖨️ PRINT / SAVE PASS</button>
+        <a href="/certificate" class="cta cta-secondary">CERTIFICATE PORTAL →</a>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="site-footer no-print">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/register">Register</a>
+      <a href="/certificate">Certificate</a>
+      <a href="/scanner">Scanner</a>
+    </div>
+  </footer>
+
+  <script src="/js/registration.js"></script>
+</body>
+</html>

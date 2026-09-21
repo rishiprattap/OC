@@ -1,66 +1,55 @@
-// Offstage Creators — Streamlined Performer Registration & Direct Payment Pass Flow
+/**
+ * Offstage Creators — Registration Flow
+ * Step 1: Form submission → creates registration + sends OTP
+ * Step 2: OTP verification (6-digit input with resend cooldown)
+ * Step 3: Confirmed — links to /registration/:id
+ */
 (function () {
   'use strict';
 
-  // Step Indicators
-  const stepIndicator1 = document.getElementById('stepIndicator1');
-  const stepIndicator2 = document.getElementById('stepIndicator2');
-
-  // Step Cards
+  // ── DOM Elements ─────────────────────────────────────────────────────────────
   const step1Card = document.getElementById('step1Card');
   const step2Card = document.getElementById('step2Card');
+  const step3Card = document.getElementById('step3Card');
+
+  const stepPill1 = document.getElementById('stepPill1');
+  const stepPill2 = document.getElementById('stepPill2');
+  const stepPill3 = document.getElementById('stepPill3');
 
   const pageHeading = document.getElementById('pageHeading');
   const pageSubheading = document.getElementById('pageSubheading');
 
-  // Step 1 Elements
   const regForm = document.getElementById('regForm');
-  const submitDetailsBtn = document.getElementById('submitDetailsBtn');
-  const btnText = document.getElementById('btnText');
+  const submitBtn = document.getElementById('submitBtn');
+  const submitBtnText = document.getElementById('submitBtnText');
 
-  // Step 2 Pass Preview Elements
-  const passParticipantName = document.getElementById('passParticipantName');
-  const passRegId = document.getElementById('passRegId');
-  const passQrcode = document.getElementById('passQrcode');
-  const passQrCaption = document.getElementById('passQrCaption');
+  const otpEmailDisplay = document.getElementById('otpEmailDisplay');
+  const otpDigits = [1, 2, 3, 4, 5, 6].map(i => document.getElementById('otp' + i));
 
-  // Step 2 UPI Payment Elements
-  const copyUpiBtn = document.getElementById('copyUpiBtn');
-  const upiIdText = document.getElementById('upiIdText');
-  const proofForm = document.getElementById('proofForm');
-  const transactionId = document.getElementById('transactionId');
-  const screenshotInput = document.getElementById('screenshotInput');
-  const screenshotPreview = document.getElementById('screenshotPreview');
-  const dropzone = document.getElementById('dropzone');
-  const submitProofBtn = document.getElementById('submitProofBtn');
-  const proofBtnText = document.getElementById('proofBtnText');
-  const editDetailsBtn = document.getElementById('editDetailsBtn');
+  const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+  const verifyBtnText = document.getElementById('verifyBtnText');
+  const resendOtpBtn = document.getElementById('resendOtpBtn');
+  const resendTimerEl = document.getElementById('resendTimer');
+  const otpCountdownEl = document.getElementById('otpCountdown');
+  const otpTimerDiv = document.getElementById('otpTimerDiv');
+  const backToFormBtn = document.getElementById('backToFormBtn');
 
-  // Alerts
+  const confirmedRegId = document.getElementById('confirmedRegId');
+  const confirmedName = document.getElementById('confirmedName');
+  const viewPassLink = document.getElementById('viewPassLink');
+
   const errorAlert = document.getElementById('errorAlert');
   const successAlert = document.getElementById('successAlert');
 
-  // State
+  // ── State ─────────────────────────────────────────────────────────────────────
   let activeRegistrationId = null;
-  let activeFullName = '';
-  let formStartedTracked = false;
+  let activeEmail = null;
+  let activeName = null;
+  let otpExpiresAt = null;
+  let otpExpiryTimer = null;
+  let resendCooldownTimer = null;
 
-  // Track initial registration view
-  if (typeof window.trackEvent === 'function') {
-    window.trackEvent('registration_started');
-  }
-
-  if (regForm) {
-    regForm.addEventListener('focusin', () => {
-      if (!formStartedTracked) {
-        formStartedTracked = true;
-        if (typeof window.trackEvent === 'function') {
-          window.trackEvent('registration_form_started');
-        }
-      }
-    }, { once: true });
-  }
-
+  // ── Alert Helpers ─────────────────────────────────────────────────────────────
   function showError(msg) {
     if (!errorAlert) return;
     errorAlert.textContent = msg;
@@ -81,260 +70,334 @@
     if (successAlert) successAlert.classList.remove('show');
   }
 
-  // Generate QR code using ONLY plain registration_id (no PII, no UTR)
-  function renderPassQR(registrationId) {
-    if (!passQrcode) return;
-    passQrcode.innerHTML = '';
-
-    const qrText = String(registrationId).trim().toUpperCase();
-
-    if (window.QRCode) {
-      new window.QRCode(passQrcode, {
-        text: qrText,
-        width: 130,
-        height: 130,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: window.QRCode.CorrectLevel.H
-      });
-    } else {
-      const img = document.createElement('img');
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(qrText)}`;
-      img.alt = `Registration Pass QR ${qrText}`;
-      img.style.width = '130px';
-      img.style.height = '130px';
-      passQrcode.appendChild(img);
-    }
-  }
-
+  // ── Step Navigation ───────────────────────────────────────────────────────────
   function goToStep(step) {
     clearAlerts();
 
-    if (stepIndicator1) {
-      stepIndicator1.className = 'step-indicator' + (step === 1 ? ' active' : ' completed');
-    }
-    if (stepIndicator2) {
-      stepIndicator2.className = 'step-indicator' + (step === 2 ? ' active' : '');
-    }
+    [step1Card, step2Card, step3Card].forEach(el => { if (el) el.style.display = 'none'; });
+
+    const pills = [stepPill1, stepPill2, stepPill3];
+    pills.forEach((pill, idx) => {
+      if (!pill) return;
+      pill.className = 'step-pill';
+      if (idx + 1 < step) pill.classList.add('done');
+      else if (idx + 1 === step) pill.classList.add('active');
+    });
 
     if (step === 1) {
       if (step1Card) step1Card.style.display = 'block';
-      if (step2Card) step2Card.style.display = 'none';
       if (pageHeading) pageHeading.innerHTML = 'Performer<br><em>Registration</em>';
-      if (pageSubheading) pageSubheading.textContent = 'Reserve your performance slot for the upcoming edition. Each registered creator receives a 5-7 minute stage slot and a verified certificate.';
+      if (pageSubheading) pageSubheading.textContent = 'Reserve your 5–7 minute performance slot. Each registered creator receives a verified participation certificate.';
     } else if (step === 2) {
-      if (step1Card) step1Card.style.display = 'none';
       if (step2Card) step2Card.style.display = 'block';
-      if (pageHeading) pageHeading.innerHTML = 'Registration Pass &amp;<br><em>₹79 UPI Payment</em>';
-      if (pageSubheading) pageSubheading.textContent = 'Your unique registration ID and pass are ready below. Pay ₹79 via UPI and submit your payment receipt.';
+      if (pageHeading) pageHeading.innerHTML = 'Verify Your<br><em>Email</em>';
+      if (pageSubheading) pageSubheading.textContent = 'Enter the 6-digit code sent to your email to complete your registration.';
+      if (otpDigits[0]) otpDigits[0].focus();
+      startOTPCountdown();
+      startResendCooldown(60);
+    } else if (step === 3) {
+      if (step3Card) step3Card.style.display = 'block';
+      if (pageHeading) pageHeading.innerHTML = 'You\'re<br><em>Registered!</em>';
+      if (pageSubheading) pageSubheading.textContent = 'Your email is verified and registration is confirmed.';
+      clearTimers();
     }
 
     window.scrollTo({ top: 100, behavior: 'smooth' });
   }
 
-  // 1. Submit Registration Form -> Creates Registration & Shows Pass + UPI Section
+  // ── OTP Countdown ─────────────────────────────────────────────────────────────
+  function startOTPCountdown() {
+    if (otpExpiryTimer) clearInterval(otpExpiryTimer);
+    if (!otpExpiresAt || !otpCountdownEl) return;
+
+    function tick() {
+      const ms = new Date(otpExpiresAt).getTime() - Date.now();
+      if (ms <= 0) {
+        otpCountdownEl.textContent = '0:00';
+        otpCountdownEl.style.color = '#e26947';
+        if (otpTimerDiv) otpTimerDiv.style.color = '#e26947';
+        clearInterval(otpExpiryTimer);
+        return;
+      }
+      const minutes = Math.floor(ms / 60000);
+      const seconds = Math.floor((ms % 60000) / 1000);
+      otpCountdownEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    tick();
+    otpExpiryTimer = setInterval(tick, 1000);
+  }
+
+  // ── Resend Cooldown ───────────────────────────────────────────────────────────
+  function startResendCooldown(seconds) {
+    if (resendCooldownTimer) clearInterval(resendCooldownTimer);
+    if (!resendOtpBtn) return;
+
+    let remaining = seconds;
+    resendOtpBtn.disabled = true;
+
+    function tick() {
+      if (remaining <= 0) {
+        clearInterval(resendCooldownTimer);
+        resendOtpBtn.disabled = false;
+        if (resendTimerEl) resendTimerEl.textContent = '';
+        return;
+      }
+      if (resendTimerEl) resendTimerEl.textContent = `(${remaining}s)`;
+      remaining--;
+    }
+
+    tick();
+    resendCooldownTimer = setInterval(tick, 1000);
+  }
+
+  function clearTimers() {
+    if (otpExpiryTimer) clearInterval(otpExpiryTimer);
+    if (resendCooldownTimer) clearInterval(resendCooldownTimer);
+  }
+
+  // ── OTP Input Magic ───────────────────────────────────────────────────────────
+  otpDigits.forEach((input, idx) => {
+    if (!input) return;
+
+    input.addEventListener('input', (e) => {
+      const val = e.target.value.replace(/\D/g, '');
+      e.target.value = val ? val[0] : '';
+      if (val && idx < otpDigits.length - 1) otpDigits[idx + 1].focus();
+      e.target.classList.toggle('filled', Boolean(val));
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+        otpDigits[idx - 1].focus();
+        otpDigits[idx - 1].value = '';
+        otpDigits[idx - 1].classList.remove('filled');
+      }
+      if (e.key === 'ArrowLeft' && idx > 0) otpDigits[idx - 1].focus();
+      if (e.key === 'ArrowRight' && idx < otpDigits.length - 1) otpDigits[idx + 1].focus();
+      // Auto submit on last digit
+      if (e.key >= '0' && e.key <= '9' && idx === otpDigits.length - 1 && e.target.value) {
+        setTimeout(() => verifyOTP(), 100);
+      }
+    });
+
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+      otpDigits.forEach((d, i) => {
+        d.value = pasted[i] || '';
+        d.classList.toggle('filled', Boolean(pasted[i]));
+      });
+      const lastFilled = Math.min(pasted.length, otpDigits.length) - 1;
+      if (lastFilled >= 0) otpDigits[lastFilled].focus();
+      if (pasted.length >= 6) setTimeout(() => verifyOTP(), 100);
+    });
+  });
+
+  function getOTPValue() {
+    return otpDigits.map(d => (d ? d.value : '')).join('');
+  }
+
+  function setOTPError() {
+    otpDigits.forEach(d => { if (d) { d.classList.add('error'); d.classList.remove('success', 'filled'); } });
+  }
+
+  function setOTPSuccess() {
+    otpDigits.forEach(d => { if (d) { d.classList.add('success'); d.classList.remove('error'); } });
+  }
+
+  function clearOTPState() {
+    otpDigits.forEach(d => { if (d) { d.value = ''; d.className = 'otp-digit'; } });
+  }
+
+  // ── Step 1: Submit Registration Form ─────────────────────────────────────────
   if (regForm) {
     regForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearAlerts();
 
-      const phoneInput = document.getElementById('phone');
-      const cleanPhone = phoneInput ? phoneInput.value.replace(/\D/g, '') : '';
-      if (cleanPhone.length < 10) {
-        showError('Please enter a valid 10-digit WhatsApp/mobile number.');
-        if (phoneInput) phoneInput.focus();
-        return;
-      }
+      const fullName = document.getElementById('fullName')?.value.trim() || '';
+      const phone = (document.getElementById('phone')?.value || '').replace(/\D/g, '');
+      const email = document.getElementById('email')?.value.trim() || '';
+      const city = document.getElementById('city')?.value.trim() || '';
+      const category = document.getElementById('category')?.value || '';
+      const instagram = document.getElementById('instagram')?.value.trim() || '';
+      const performanceTitle = document.getElementById('performanceTitle')?.value.trim() || '';
+      const performanceDescription = document.getElementById('performanceDescription')?.value.trim() || '';
+      const terms = document.getElementById('terms')?.checked || false;
 
-      const emailInput = document.getElementById('email');
-      const emailVal = emailInput ? emailInput.value.trim() : '';
-      if (!emailVal || !emailVal.includes('@')) {
-        showError('Please enter a valid email address.');
-        if (emailInput) emailInput.focus();
-        return;
-      }
+      if (fullName.length < 2) return showError('Please enter your full name (minimum 2 characters).');
+      if (phone.length < 10) return showError('Please enter a valid 10-digit WhatsApp/mobile number.');
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('Please enter a valid email address.');
+      if (city.length < 2) return showError('Please enter your city.');
+      if (!category) return showError('Please select a performance category.');
+      if (performanceTitle.length < 2) return showError('Please enter a title for your performance.');
+      if (!terms) return showError('Please accept the performance guidelines to continue.');
 
-      const termsCheckbox = document.getElementById('terms');
-      if (termsCheckbox && !termsCheckbox.checked) {
-        showError('Please accept the performance guidelines and terms to continue.');
-        return;
-      }
-
-      submitDetailsBtn.disabled = true;
-      btnText.textContent = 'CREATING REGISTRATION…';
-
-      const payload = {
-        fullName: document.getElementById('fullName').value.trim(),
-        phone: cleanPhone,
-        email: emailVal,
-        city: document.getElementById('city').value.trim(),
-        category: document.getElementById('category').value,
-        instagram: (document.getElementById('instagram')?.value || '').trim(),
-        performanceTitle: document.getElementById('performanceTitle').value.trim(),
-        performanceDescription: (document.getElementById('performanceDescription')?.value || '').trim(),
-        terms: true
-      };
+      submitBtn.disabled = true;
+      submitBtnText.textContent = 'CREATING REGISTRATION…';
 
       try {
         const res = await fetch('/api/registrations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ fullName, phone, email, city, category, instagram, performanceTitle, performanceDescription, terms })
         });
 
         const data = await res.json();
 
         if (!res.ok || !data.success) {
-          showError(data.error || 'Failed to create registration. Please check your information.');
-          submitDetailsBtn.disabled = false;
-          btnText.textContent = 'CONTINUE TO PASS & PAYMENT';
+          if (data.status === 'VERIFIED' || data.status === 'APPROVED') {
+            showError(`A verified registration already exists for ${email}. Registration ID: ${data.registrationId}`);
+          } else {
+            showError(data.error || 'Failed to create registration. Please check your information.');
+          }
+          submitBtn.disabled = false;
+          submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
           return;
         }
 
         activeRegistrationId = data.registrationId;
-        activeFullName = data.fullName || payload.fullName;
+        activeEmail = email;
+        activeName = fullName;
+        otpExpiresAt = data.expiresAt || new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-        // Populate pass preview
-        if (passParticipantName) passParticipantName.textContent = activeFullName;
-        if (passRegId) passRegId.textContent = activeRegistrationId;
-        if (passQrCaption) passQrCaption.textContent = activeRegistrationId;
+        if (otpEmailDisplay) otpEmailDisplay.textContent = email;
 
-        // Render QR Pass with strictly registration_id
-        renderPassQR(activeRegistrationId);
-
-        // Pre-fill / reset buttons
-        submitDetailsBtn.disabled = false;
-        btnText.textContent = 'CONTINUE TO PASS & PAYMENT';
-
-        // Track custom analytics (no PII)
-        if (typeof window.trackEvent === 'function') {
-          window.trackEvent('registration_created');
-          window.trackEvent('payment_page_viewed');
+        if (data.otpEmailFailed) {
+          showError('Registration created but we could not send the verification email. Click "Resend Code" below.');
         }
 
-        // Advance to Step 2 immediately (NO OTP, NO WAIT)
+        submitBtn.disabled = false;
+        submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
         goToStep(2);
-        showSuccess(`Registration ${activeRegistrationId} created! Please complete your ₹79 UPI payment below.`);
 
       } catch (err) {
-        console.error('Registration submission error:', err);
-        showError('Network error connecting to registration server. Please try again.');
-        submitDetailsBtn.disabled = false;
-        btnText.textContent = 'CONTINUE TO PASS & PAYMENT';
+        console.error('[Register] Network error:', err);
+        showError('Network error. Please check your connection and try again.');
+        submitBtn.disabled = false;
+        submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
       }
     });
   }
 
-  // 2. Return to Edit Details
-  if (editDetailsBtn) {
-    editDetailsBtn.addEventListener('click', () => {
-      goToStep(1);
-    });
-  }
+  // ── Step 2: Verify OTP ────────────────────────────────────────────────────────
+  async function verifyOTP() {
+    clearAlerts();
+    const otp = getOTPValue();
 
-  // 3. Copy UPI ID Button
-  if (copyUpiBtn && upiIdText) {
-    copyUpiBtn.addEventListener('click', () => {
-      const upiId = upiIdText.textContent.trim();
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(upiId).then(() => {
-          copyUpiBtn.textContent = 'Copied!';
-          setTimeout(() => { copyUpiBtn.textContent = 'Copy'; }, 2000);
-        }).catch(() => {
-          copyUpiBtn.textContent = 'Copied!';
-        });
-      } else {
-        copyUpiBtn.textContent = 'Copied!';
-      }
-    });
-  }
+    if (otp.length !== 6) {
+      showError('Please enter the complete 6-digit code.');
+      return;
+    }
 
-  // 4. File Input & Image Preview
-  if (screenshotInput) {
-    screenshotInput.addEventListener('change', () => {
-      const file = screenshotInput.files[0];
-      if (file) {
-        if (file.size > 5 * 1024 * 1024) {
-          showError('Screenshot file exceeds the 5MB size limit.');
-          screenshotInput.value = '';
-          if (screenshotPreview) screenshotPreview.classList.remove('show');
-          return;
+    verifyOtpBtn.disabled = true;
+    verifyBtnText.textContent = 'VERIFYING…';
+
+    try {
+      const res = await fetch('/api/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: activeEmail,
+          registrationId: activeRegistrationId,
+          otp
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setOTPError();
+        const reason = data.reason;
+        if (reason === 'EXPIRED') {
+          showError('Your code has expired. Please click "Resend Code" to get a new one.');
+          clearOTPState();
+        } else if (reason === 'TOO_MANY_ATTEMPTS') {
+          showError('Too many incorrect attempts. Please click "Resend Code" to get a new code.');
+          clearOTPState();
+        } else {
+          showError(data.error || 'Incorrect code. Please try again.');
         }
-        clearAlerts();
-        if (screenshotPreview) {
-          screenshotPreview.src = URL.createObjectURL(file);
-          screenshotPreview.classList.add('show');
-        }
-      } else {
-        if (screenshotPreview) screenshotPreview.classList.remove('show');
+        verifyOtpBtn.disabled = false;
+        verifyBtnText.textContent = 'VERIFY CODE';
+        return;
       }
-    });
+
+      // Success
+      setOTPSuccess();
+
+      if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
+      if (confirmedName) confirmedName.textContent = activeName;
+      if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
+
+      goToStep(3);
+
+    } catch (err) {
+      console.error('[OTP] Verify error:', err);
+      showError('Network error during verification. Please try again.');
+      verifyOtpBtn.disabled = false;
+      verifyBtnText.textContent = 'VERIFY CODE';
+    }
   }
 
-  // 5. Submit Payment Proof (UTR + Screenshot)
-  if (proofForm) {
-    proofForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
+  if (verifyOtpBtn) {
+    verifyOtpBtn.addEventListener('click', verifyOTP);
+  }
+
+  // ── Resend OTP ────────────────────────────────────────────────────────────────
+  if (resendOtpBtn) {
+    resendOtpBtn.addEventListener('click', async () => {
       clearAlerts();
-
-      if (!activeRegistrationId) {
-        showError('No active registration found. Please complete Step 1 first.');
-        goToStep(1);
-        return;
-      }
-
-      const utrVal = transactionId ? transactionId.value.trim() : '';
-      if (!utrVal || utrVal.length < 6) {
-        showError('Please enter a valid UPI Transaction ID / UTR (minimum 6 digits).');
-        if (transactionId) transactionId.focus();
-        return;
-      }
-
-      const file = screenshotInput ? screenshotInput.files[0] : null;
-      if (!file) {
-        showError('Please attach a screenshot of your ₹79 UPI payment.');
-        return;
-      }
-
-      submitProofBtn.disabled = true;
-      proofBtnText.textContent = 'UPLOADING PROOF…';
-
-      const formData = new FormData();
-      formData.append('registrationId', activeRegistrationId);
-      formData.append('transactionId', utrVal);
-      formData.append('screenshot', file);
+      resendOtpBtn.disabled = true;
+      resendOtpBtn.textContent = 'Sending…';
 
       try {
-        const res = await fetch('/api/payments/submit-proof', {
+        const res = await fetch('/api/otp/send', {
           method: 'POST',
-          body: formData
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: activeEmail, registrationId: activeRegistrationId })
         });
 
         const data = await res.json();
 
+        resendOtpBtn.textContent = 'Resend Code';
+
         if (!res.ok || !data.success) {
-          showError(data.error || 'Failed to submit payment proof. Please try again.');
-          submitProofBtn.disabled = false;
-          proofBtnText.textContent = 'SUBMIT PAYMENT PROOF (₹79)';
+          if (data.secondsRemaining) {
+            showError(`Please wait ${data.secondsRemaining} seconds before requesting another code.`);
+            startResendCooldown(data.secondsRemaining);
+          } else {
+            showError(data.error || 'Failed to resend code. Please try again.');
+            resendOtpBtn.disabled = false;
+          }
           return;
         }
 
-        // Track custom analytics (no PII)
-        if (typeof window.trackEvent === 'function') {
-          window.trackEvent('payment_proof_submitted');
-        }
-
-        showSuccess('✓ Payment proof submitted! Redirecting to your pass status page...');
-        setTimeout(() => {
-          window.location.href = `/registration/success?id=${encodeURIComponent(activeRegistrationId)}`;
-        }, 500);
+        clearOTPState();
+        otpExpiresAt = data.expiresAt || new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        startOTPCountdown();
+        startResendCooldown(60);
+        if (otpDigits[0]) otpDigits[0].focus();
+        showSuccess('A new verification code has been sent to your email.');
 
       } catch (err) {
-        console.error('Payment proof submission error:', err);
-        showError('Network error uploading payment proof. Please check your internet connection.');
-        submitProofBtn.disabled = false;
-        proofBtnText.textContent = 'SUBMIT PAYMENT PROOF (₹79)';
+        console.error('[OTP] Resend error:', err);
+        showError('Network error. Please try again.');
+        resendOtpBtn.disabled = false;
+        resendOtpBtn.textContent = 'Resend Code';
       }
+    });
+  }
+
+  // ── Back to Form ──────────────────────────────────────────────────────────────
+  if (backToFormBtn) {
+    backToFormBtn.addEventListener('click', () => {
+      clearTimers();
+      clearOTPState();
+      activeRegistrationId = null;
+      activeEmail = null;
+      goToStep(1);
     });
   }
 

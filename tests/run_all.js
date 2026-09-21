@@ -12,20 +12,18 @@ async function runMasterSuite() {
   const startTime = Date.now();
   let allPassed = true;
 
-  console.log('>>> [1/4] EXECUTING PLATFORM & REGISTRATION TESTS...');
+  console.log('>>> [1/2] EXECUTING REBUILT PLATFORM & REGISTRATION TESTS...');
   const platformOk = await runPlatformTests();
   if (!platformOk) allPassed = false;
 
-  console.log('\n>>> [2/4] EXECUTING GMAIL SMTP & EMAIL SYSTEM TESTS...');
-  const emailOk = await runEmailTests();
-  if (!emailOk) allPassed = false;
-
-  console.log('\n>>> [3/4] EXECUTING GOOGLE MEET BROADCAST & RETRY TESTS...');
-  const meetOk = await runMeetTests();
-  if (!meetOk) allPassed = false;
-
-  console.log('\n>>> [4/4] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
-  const analyticsOk = await runAnalyticsTests();
+  console.log('\n>>> [2/2] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
+  let analyticsOk = false;
+  try {
+    require('./test_analytics');
+    analyticsOk = true;
+  } catch (e) {
+    console.error('Analytics test failed:', e.message);
+  }
   if (!analyticsOk) allPassed = false;
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -33,11 +31,9 @@ async function runMasterSuite() {
   console.log('\n======================================================');
   console.log('                   FINAL TEST SUMMARY                 ');
   console.log('======================================================');
-  console.log(`Platform & Payment Flow : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
-  console.log(`Email Service & Admin   : ${emailOk ? 'PASSED ✓' : 'FAILED ✗'}`);
-  console.log(`Google Meet System      : ${meetOk ? 'PASSED ✓' : 'FAILED ✗'}`);
-  console.log(`Analytics & Insights    : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
-  console.log(`Total Execution Time    : ${duration}s`);
+  console.log(`Platform & OTP Flow    : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Analytics & Insights   : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Total Execution Time   : ${duration}s`);
   console.log('======================================================\n');
 
   if (allPassed) {

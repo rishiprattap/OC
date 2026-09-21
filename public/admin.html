@@ -4,954 +4,330 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Organizer Admin Dashboard | Offstage Creators</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/admin.css">
-  <link rel="stylesheet" href="/css/forms.css">
   <link rel="icon" href="/assets/logo.png" type="image/png">
   <style>
-    /* Auth Modal */
+    /* Login Overlay */
     .auth-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(10, 9, 8, 0.95);
+      position: fixed; inset: 0;
+      background: rgba(8, 7, 6, 0.97);
       backdrop-filter: blur(12px);
       z-index: 2000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       padding: 20px;
     }
     .auth-card {
-      background: #191613;
-      border: 1px solid rgba(205, 164, 91, 0.4);
-      border-radius: var(--radius-md);
+      background: #181410;
+      border: 1px solid rgba(205,164,91,0.35);
+      border-radius: 16px;
       width: min(420px, 100%);
-      padding: 36px 30px;
+      padding: 40px 32px;
       text-align: center;
-      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+      box-shadow: 0 40px 100px rgba(0,0,0,0.9);
+    }
+    .auth-card h2 {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 32px; color: #f7eee1; margin: 16px 0 6px;
+    }
+    .auth-card p { color: #8e8477; font-size: 14px; margin-bottom: 28px; }
+    .auth-input {
+      width: 100%; box-sizing: border-box;
+      background: #0d0c0a; border: 1px solid #2a231c;
+      color: #f7eee1; padding: 14px 16px; border-radius: 8px;
+      font-size: 15px; margin-bottom: 14px; outline: none;
+      transition: border-color 0.2s ease;
+    }
+    .auth-input:focus { border-color: #e4ad57; }
+    .auth-error { color: #e26947; font-size: 13px; margin-bottom: 14px; min-height: 18px; }
+    .auth-btn {
+      width: 100%; background: #e4ad57; color: #0d0c0a;
+      border: none; padding: 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 800; letter-spacing: 0.12em;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .auth-btn:hover { background: #f5c96b; }
+    .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Admin Layout */
+    .admin-layout { display: flex; min-height: 100vh; }
+    .admin-sidebar {
+      width: 220px; flex-shrink: 0;
+      background: #110f0d; border-right: 1px solid #1e1a16;
+      padding: 0; display: flex; flex-direction: column;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .admin-sidebar .logo-lockup {
+      padding: 24px 20px; border-bottom: 1px solid #1e1a16;
+      display: flex; align-items: center; gap: 10px; text-decoration: none;
+    }
+    .admin-sidebar .logo-lockup img { width: 36px; height: 36px; object-fit: contain; }
+    .admin-sidebar .logo-lockup span { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #e4ad57; }
+    .admin-nav { flex: 1; padding: 16px 12px; }
+    .admin-nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 8px; cursor: pointer;
+      font-size: 13px; font-weight: 600; color: #8e8477;
+      transition: all 0.2s ease; border: none; background: none;
+      width: 100%; text-align: left; margin-bottom: 4px;
+    }
+    .admin-nav-item:hover { background: #1a1612; color: #d5cbbd; }
+    .admin-nav-item.active { background: rgba(228,173,87,0.1); color: #e4ad57; }
+    .admin-nav-item .nav-icon { font-size: 15px; }
+    .logout-btn {
+      margin: 12px; padding: 10px 14px;
+      background: #1a1612; border: 1px solid #2a231c; border-radius: 8px;
+      color: #8e8477; font-size: 12px; font-weight: 700; cursor: pointer;
+      transition: all 0.2s ease; width: calc(100% - 24px);
+    }
+    .logout-btn:hover { border-color: #e26947; color: #e26947; }
+
+    .admin-main { flex: 1; padding: 32px; overflow-y: auto; min-width: 0; }
+
+    /* Stats Grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 32px; }
+    .stat-card {
+      background: #141210; border: 1px solid #2a231c; border-radius: 12px;
+      padding: 20px 18px;
+    }
+    .stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: #8e8477; text-transform: uppercase; margin-bottom: 8px; }
+    .stat-value { font-size: 36px; font-weight: 900; color: #f7eee1; line-height: 1; }
+    .stat-value.gold { color: #e4ad57; }
+    .stat-value.green { color: #6edb8c; }
+    .stat-value.orange { color: #e26947; }
+
+    /* Controls bar */
+    .controls-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .search-input {
+      background: #141210; border: 1px solid #2a231c; color: #f7eee1;
+      padding: 10px 14px; border-radius: 8px; font-size: 13px;
+      outline: none; flex: 1; min-width: 200px;
+    }
+    .search-input:focus { border-color: #e4ad57; }
+    .filter-select {
+      background: #141210; border: 1px solid #2a231c; color: #f7eee1;
+      padding: 10px 14px; border-radius: 8px; font-size: 13px;
+      outline: none; cursor: pointer;
     }
 
-    /* Meet Builder & Live Preview Styles */
-    .var-chip {
-      background: rgba(228, 173, 87, 0.1);
-      border: 1px solid rgba(228, 173, 87, 0.25);
-      color: #ffd685;
-      font-family: monospace;
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s ease;
+    /* Registrations Table */
+    .reg-table { width: 100%; border-collapse: collapse; }
+    .reg-table th {
+      text-align: left; padding: 12px 16px;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.1em;
+      color: #8e8477; text-transform: uppercase;
+      border-bottom: 1px solid #2a231c;
+      background: #110f0d;
     }
-    .var-chip:hover {
-      background: rgba(228, 173, 87, 0.25);
-      border-color: #e4ad57;
+    .reg-table td { padding: 14px 16px; border-bottom: 1px solid #1a1612; font-size: 13px; color: #d5cbbd; vertical-align: middle; }
+    .reg-table tr:hover td { background: #171310; }
+    .reg-table .name-cell { font-weight: 700; color: #f7eee1; }
+    .reg-table .id-cell { font-family: monospace; font-size: 12px; color: #e4ad57; }
+
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 100px; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;
     }
-    .email-preview-wrapper {
-      background: #080706;
-      border: 1px solid #26211c;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
-      display: flex;
-      flex-direction: column;
+    .status-PENDING_VERIFICATION { background: rgba(90,82,72,0.2); color: #8e8477; border: 1px solid #3a3228; }
+    .status-VERIFIED { background: rgba(228,173,87,0.12); color: #e4ad57; border: 1px solid rgba(228,173,87,0.3); }
+    .status-APPROVED { background: rgba(110,219,140,0.12); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
+    .status-REJECTED { background: rgba(226,105,71,0.12); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
+
+    .action-btn {
+      padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 800;
+      letter-spacing: 0.08em; cursor: pointer; border: none; transition: all 0.2s ease;
     }
-    .email-preview-header {
-      background: #14110e;
-      border-bottom: 1px solid #241e18;
-      padding: 14px 18px;
-      font-size: 12px;
-      color: #9d9488;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-    .preview-toggle-btn {
-      background: #1c1814;
-      border: 1px solid #2a241e;
-      color: #8e8477;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 700;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .preview-toggle-btn.active {
-      background: rgba(228, 173, 87, 0.2);
-      border-color: #e4ad57;
-      color: #ffd685;
-    }
-    .preview-frame-container {
+    .btn-approve { background: rgba(110,219,140,0.15); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
+    .btn-approve:hover { background: rgba(110,219,140,0.25); }
+    .btn-reject { background: rgba(226,105,71,0.15); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
+    .btn-reject:hover { background: rgba(226,105,71,0.25); }
+    .btn-view { background: #1a1612; color: #8e8477; border: 1px solid #2a231c; }
+    .btn-view:hover { color: #f7eee1; border-color: #3a3228; }
+
+    /* Detail Modal */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(8,7,6,0.9);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
       padding: 20px;
-      display: flex;
-      justify-content: center;
-      background: #0b0908;
-      min-height: 480px;
-      max-height: 640px;
-      overflow-y: auto;
-      transition: all 0.3s ease;
     }
-    .preview-frame-container.mobile-mode {
-      padding: 20px 10px;
+    .modal-card {
+      background: #181410; border: 1px solid #2a231c;
+      border-radius: 16px; width: min(640px, 100%);
+      max-height: 85vh; overflow-y: auto;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.8);
     }
-    .preview-frame-container.mobile-mode .preview-content-box {
-      max-width: 375px;
-      border: 6px solid #26211c;
-      border-radius: 20px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 24px; border-bottom: 1px solid #2a231c;
+      position: sticky; top: 0; background: #181410; z-index: 10;
     }
-    .preview-content-box {
-      width: 100%;
-      max-width: 600px;
-      background: #0d0c0a;
-      transition: all 0.3s ease;
+    .modal-close {
+      background: none; border: none; color: #8e8477; font-size: 20px;
+      cursor: pointer; padding: 4px 8px; border-radius: 4px;
+      transition: color 0.2s ease;
     }
-    .meet-grid-layout {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      align-items: start;
+    .modal-close:hover { color: #f7eee1; }
+    .modal-body { padding: 24px; }
+    .modal-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #1e1a16; font-size: 13px; }
+    .modal-row:last-child { border-bottom: none; }
+    .modal-label { color: #8e8477; }
+    .modal-value { color: #f7eee1; font-weight: 600; text-align: right; max-width: 60%; word-break: break-word; }
+    .modal-actions { display: flex; gap: 12px; flex-wrap: wrap; padding: 20px 24px; border-top: 1px solid #2a231c; }
+    .reject-reason-input {
+      width: 100%; box-sizing: border-box;
+      background: #0d0c0a; border: 1px solid #2a231c; color: #f7eee1;
+      padding: 12px 14px; border-radius: 8px; font-size: 13px;
+      outline: none; margin-bottom: 12px;
     }
-    @media (max-width: 992px) {
-      .meet-grid-layout {
-        grid-template-columns: 1fr;
-      }
+    .reject-reason-input:focus { border-color: #e26947; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: #5a5248; }
+    .empty-state p { font-size: 15px; margin-top: 12px; }
+
+    @media (max-width: 768px) {
+      .admin-layout { flex-direction: column; }
+      .admin-sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+      .admin-nav { display: flex; flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 8px; }
+      .admin-nav-item { padding: 8px 12px; font-size: 12px; }
+      .admin-main { padding: 16px; }
+      .reg-table { font-size: 12px; }
+      .reg-table th, .reg-table td { padding: 10px 10px; }
     }
   </style>
 </head>
 <body>
   <div class="grain-layer"></div>
 
-  <!-- AUTHENTICATION DIALOG (SHOWN UNTIL VALID SECRET ENTERED) -->
+  <!-- Login Overlay (shown until authenticated) -->
   <div class="auth-overlay" id="authOverlay">
     <div class="auth-card">
-      <div style="font-size: 34px; margin-bottom: 12px;">🔒</div>
-      <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; margin-bottom: 8px;">
-        Organizer Portal
-      </h2>
-      <p style="font-size: 13px; color: #9d9488; margin-bottom: 24px;">
-        Enter your administrative key to manage registrations, verify UPI payments, monitor email deliveries, and check in participants.
-      </p>
-
-      <form id="authForm">
-        <input type="password" id="secretInput" class="form-control" placeholder="Enter Admin Secret Key" required style="margin-bottom: 16px;">
-        <button type="submit" class="cta" style="width: 100%;">
-          UNLOCK DASHBOARD →
-        </button>
-        <div id="authError" style="color: #ff8970; font-size: 12px; margin-top: 12px; display: none;"></div>
+      <div style="font-size:32px; margin-bottom:8px;">🎙️</div>
+      <h2>Admin Login</h2>
+      <p>Offstage Creators Organizer Dashboard</p>
+      <div class="auth-error" id="loginError"></div>
+      <form id="loginForm" autocomplete="off">
+        <input type="email" class="auth-input" id="loginEmail" placeholder="Admin Email" autocomplete="username" required>
+        <input type="password" class="auth-input" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
+        <button type="submit" class="auth-btn" id="loginBtn">LOGIN TO DASHBOARD</button>
       </form>
     </div>
   </div>
 
-  <!-- MAIN ADMIN DASHBOARD -->
-  <header class="nav-header">
-    <div class="nav-container">
+  <!-- Admin Layout (shown after login) -->
+  <div class="admin-layout" id="adminLayout" style="display:none;">
+
+    <!-- Sidebar -->
+    <aside class="admin-sidebar">
       <a class="logo-lockup" href="/">
-        <img src="/assets/logo.png" alt="Offstage Creators Logo">
-        <span>OFFSTAGE<br><b>ADMIN</b></span>
+        <img src="/assets/logo.png" alt="Logo">
+        <span>OFFSTAGE<br>CREATORS</span>
       </a>
-
-      <div class="admin-actions">
-        <a class="cta cta-gold" href="/scanner" style="padding: 9px 18px; font-size: 12px;">
-          📷 OPEN SCANNER
-        </a>
-        <button class="cta cta-secondary" id="exportBtn" style="padding: 9px 18px; font-size: 12px;">
-          📥 EXPORT CSV
+      <nav class="admin-nav">
+        <button class="admin-nav-item active" data-tab="overview" onclick="showTab('overview')">
+          <span class="nav-icon">📊</span> Overview
         </button>
-        <button class="cta cta-secondary" id="logoutBtn" style="padding: 9px 14px; font-size: 12px;">
-          Logout
+        <button class="admin-nav-item" data-tab="registrations" onclick="showTab('registrations')">
+          <span class="nav-icon">📋</span> Registrations
         </button>
-      </div>
-    </div>
-  </header>
+        <button class="admin-nav-item" data-tab="pending" onclick="showTab('pending')">
+          <span class="nav-icon">⏳</span> Pending
+        </button>
+        <button class="admin-nav-item" data-tab="approved" onclick="showTab('approved')">
+          <span class="nav-icon">✓</span> Approved
+        </button>
+      </nav>
+      <button class="logout-btn" id="logoutBtn">⟵ Logout</button>
+    </aside>
 
-  <main class="admin-container">
-    <div class="admin-header">
-      <div class="admin-title-group">
-        <span class="kicker orange">EVENT REGISTRATION, MANUAL UPI &amp; EMAIL SUBSYSTEM</span>
-        <h1>Organizer Command Center</h1>
-      </div>
-      <div>
-        <span class="badge badge-gold" id="eventBadge">ONLINE OPEN MIC (23 SEPT • ₹79)</span>
-      </div>
-    </div>
+    <!-- Main Content -->
+    <main class="admin-main">
 
-    <!-- METRICS CARDS -->
-    <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));">
-      <div class="metric-card">
-        <span class="metric-label">Total Registrations</span>
-        <span class="metric-value" id="statTotal">0</span>
-      </div>
-      <div class="metric-card" style="border-color: rgba(228, 173, 87, 0.5);">
-        <span class="metric-label" style="color: #e4ad57;">Awaiting Verification</span>
-        <span class="metric-value" id="statAwaiting" style="color: #ffd685;">0</span>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Confirmed (Paid ₹79)</span>
-        <span class="metric-value paid" id="statPaid">0</span>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Approval Emails Sent</span>
-        <span class="metric-value" id="statVerifiedEmails" style="color: #6edb8c;">0</span>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Checked-In At Event</span>
-        <span class="metric-value checked" id="statChecked">0</span>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Total Revenue</span>
-        <span class="metric-value revenue" id="statRevenue">₹0</span>
-      </div>
-      <div class="metric-card" style="border-color: rgba(228, 173, 87, 0.45);">
-        <span class="metric-label" style="color: #e4ad57;">Google Meet Sessions</span>
-        <span class="metric-value" id="statMeetSessions" style="color: #f7eee1;">0</span>
-        <div style="font-size: 11px; color: #8e8477; margin-top: 4px;">
-          <span id="statMeetSent" style="color: #6edb8c; font-weight: 700;">0 sent</span> • <span id="statMeetFailed" style="color: #ff8566;">0 failed</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- TABS NAVIGATION -->
-    <div class="admin-tabs">
-      <button type="button" class="tab-btn active" id="tabBtnQueue" onclick="switchAdminTab('queue')">
-        ⏳ Payment Verification Queue
-        <span class="tab-badge" id="queueCountBadge">0</span>
-      </button>
-      <button type="button" class="tab-btn" id="tabBtnRegistrations" onclick="switchAdminTab('registrations')">
-        📋 All Registrations
-      </button>
-      <button type="button" class="tab-btn" id="tabBtnMeet" onclick="switchAdminTab('meet')">
-        🎥 Live Session / Google Meet
-      </button>
-      <button type="button" class="tab-btn" id="tabBtnEmail" onclick="switchAdminTab('email')">
-        ✉️ Email System &amp; Health
-      </button>
-      <button type="button" class="tab-btn" id="tabBtnCheckin" onclick="switchAdminTab('checkin')">
-        ✓ Venue Attendance &amp; Check-in
-      </button>
-      <button type="button" class="tab-btn" id="tabBtnCertificates" onclick="switchAdminTab('certificates')">
-        🎓 Certificates
-      </button>
-    </div>
-
-    <!-- =========================================================
-         TAB 1: PENDING PAYMENT VERIFICATION QUEUE
-         ========================================================= -->
-    <section id="tabSectionQueue">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-        <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: #f7eee1;">
-          Payments Awaiting Manual Verification
-        </h2>
-        <span style="font-size: 13px; color: #8e8477;">
-          Inspect receipt screenshot &amp; bank UTR, then verify or reject.
-        </span>
-      </div>
-
-      <div class="queue-grid" id="queueGrid">
-        <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #8e8477; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md);">
-          Loading pending payments…
-        </div>
-      </div>
-    </section>
-
-    <!-- =========================================================
-         TAB 2: ALL REGISTRATIONS (SEARCH & FILTER)
-         ========================================================= -->
-    <section id="tabSectionRegistrations" style="display: none;">
-      <!-- TOOLBAR (SEARCH & FILTERS) -->
-      <div class="admin-toolbar">
-        <div class="search-input-wrap">
-          <input type="text" id="searchInput" class="form-control" placeholder="Search by Reg ID, Name, UTR / Transaction ID, Phone, or Email…">
+      <!-- ── OVERVIEW TAB ──────────────────────────────── -->
+      <div id="tabOverview">
+        <div style="margin-bottom:28px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:36px; margin:0 0 4px;">Dashboard</h1>
+          <p style="color:#8e8477; font-size:13px; margin:0;">Online Open Mic 2026 — Registration Overview</p>
         </div>
 
-        <div>
-          <select id="paymentFilter" class="form-control" style="width: auto;">
-            <option value="ALL">Payment: All</option>
-            <option value="PENDING_VERIFICATION">Awaiting Verification</option>
-            <option value="PAID">Confirmed (Paid)</option>
+        <div class="stats-grid" id="statsGrid">
+          <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="statTotal">—</div></div>
+          <div class="stat-card"><div class="stat-label">Pending Verification</div><div class="stat-value gold" id="statPendingVerif">—</div></div>
+          <div class="stat-card"><div class="stat-label">Verified</div><div class="stat-value gold" id="statVerified">—</div></div>
+          <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value green" id="statApproved">—</div></div>
+          <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-value orange" id="statRejected">—</div></div>
+          <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statCheckedIn">—</div></div>
+        </div>
+
+        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+          <button class="cta cta-secondary" onclick="loadOverview()">⟳ Refresh Stats</button>
+          <button class="cta" onclick="showTab('pending')">Review Pending Registrations →</button>
+        </div>
+      </div>
+
+      <!-- ── REGISTRATIONS TAB ──────────────────────────── -->
+      <div id="tabRegistrations" style="display:none;">
+        <div style="margin-bottom:24px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">All Registrations</h1>
+        </div>
+        <div class="controls-bar">
+          <input type="search" class="search-input" id="searchInput" placeholder="Search name, email, ID, phone…">
+          <select class="filter-select" id="statusFilter">
+            <option value="ALL">All Statuses</option>
+            <option value="PENDING_VERIFICATION">Pending Verification</option>
+            <option value="VERIFIED">Verified</option>
+            <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
-            <option value="PENDING">Pending (No Proof)</option>
           </select>
+          <button class="cta cta-secondary" onclick="loadRegistrations()">⟳ Refresh</button>
         </div>
+        <div id="regTableWrapper">
+          <div class="empty-state"><p>Loading registrations…</p></div>
+        </div>
+      </div>
 
+      <!-- ── PENDING TAB ────────────────────────────────── -->
+      <div id="tabPending" style="display:none;">
+        <div style="margin-bottom:24px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Pending Review</h1>
+          <p style="color:#8e8477; font-size:13px;">Verified registrations waiting for approval.</p>
+        </div>
+        <div id="pendingTableWrapper">
+          <div class="empty-state"><p>Loading…</p></div>
+        </div>
+      </div>
+
+      <!-- ── APPROVED TAB ────────────────────────────────── -->
+      <div id="tabApproved" style="display:none;">
+        <div style="margin-bottom:24px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Approved Registrations</h1>
+        </div>
+        <div id="approvedTableWrapper">
+          <div class="empty-state"><p>Loading…</p></div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Detail Modal -->
+  <div class="modal-overlay" id="detailModal" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
         <div>
-          <select id="checkinFilter" class="form-control" style="width: auto;">
-            <option value="ALL">Check-in: All</option>
-            <option value="1">Checked In</option>
-            <option value="0">Not Checked In</option>
-          </select>
+          <div style="font-size:12px; color:#8e8477; margin-bottom:2px;">REGISTRATION DETAILS</div>
+          <div style="font-family:monospace; font-size:18px; font-weight:900; color:#e4ad57;" id="modalRegId">—</div>
         </div>
-
-        <button type="button" class="cta cta-secondary" id="refreshBtn" style="padding: 12px 18px; font-size: 12px;">
-          ⟳ Refresh
-        </button>
+        <button class="modal-close" onclick="closeModal()">✕</button>
       </div>
-
-      <!-- REGISTRATIONS TABLE -->
-      <div class="admin-table-card">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Reg ID</th>
-              <th>Participant</th>
-              <th>Phone</th>
-              <th>Email &amp; Verification</th>
-              <th>Category &amp; Piece</th>
-              <th>Amount</th>
-              <th>UPI UTR</th>
-              <th>Proof</th>
-              <th>Payment</th>
-              <th>Check-in</th>
-              <th>Cert</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <tr>
-              <td colspan="12" style="text-align: center; padding: 40px; color: #8e8477;">
-                Loading registrations…
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- =========================================================
-         TAB 3: LIVE SESSION / GOOGLE MEET DISPATCHER
-         ========================================================= -->
-    <section id="tabSectionMeet" style="display: none;">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 12px;">
-        <div>
-          <span class="kicker orange" style="font-size: 11px;">ADMIN LIVE SESSIONS</span>
-          <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; color: #f7eee1; margin: 4px 0;">
-            Live Session / Google Meet Link Dispatcher
-          </h2>
-          <p style="font-size: 13px; color: #8e8477; margin: 0;">
-            Manually create and broadcast Google Meet links to confirmed participants with real-time responsive email preview.
-          </p>
-        </div>
-        <div style="display: flex; gap: 10px;">
-          <button type="button" class="cta cta-secondary" onclick="loadMeetHistory()" style="padding: 8px 16px; font-size: 12px;">
-            ⟳ Refresh Sessions
-          </button>
-        </div>
-      </div>
-
-      <div class="meet-grid-layout">
-        <!-- LEFT COLUMN: SESSION BUILDER & RECIPIENTS -->
-        <div style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 26px;">
-          <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: #e4ad57; text-transform: uppercase; margin-bottom: 8px;">
-            SESSION DETAILS &amp; SETTINGS
-          </div>
-          <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; color: #f7eee1; margin-bottom: 20px;">
-            Configure Live Session
-          </h3>
-
-          <form id="meetComposeForm" onsubmit="return false;">
-            <!-- Event Selection -->
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin-bottom: 6px; display: block;">
-                Event
-              </label>
-              <select id="meetEventSelect" class="form-control" onchange="onMeetEventChange()">
-                <option value="online-open-mic-2026" selected>Online Open Mic 2026 (23 Sept • 7:30 PM IST • ₹79)</option>
-                <option value="delhi-adhure-musafir-2026">Adhure Musafir — Delhi Show (4 October 2026)</option>
-                <option value="all">All Events / Community</option>
-              </select>
-            </div>
-
-            <!-- Session Title -->
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin-bottom: 6px; display: block;">
-                Session Title
-              </label>
-              <input type="text" id="meetTitleInput" class="form-control" placeholder="e.g. Online Open Mic — Performer Briefing" value="Online Open Mic — Performer Briefing" required oninput="updateMeetPreview()">
-            </div>
-
-            <!-- Date & Time Grid -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
-              <div class="form-group">
-                <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin-bottom: 6px; display: block;">
-                  Date
-                </label>
-                <input type="text" id="meetDateInput" class="form-control" placeholder="e.g. 23 September 2026" value="23 September 2026" required oninput="updateMeetPreview()">
-              </div>
-              <div class="form-group">
-                <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin-bottom: 6px; display: block;">
-                  Time
-                </label>
-                <input type="text" id="meetTimeInput" class="form-control" placeholder="e.g. 7:30 PM IST" value="7:30 PM IST" required oninput="updateMeetPreview()">
-              </div>
-            </div>
-
-            <!-- Google Meet Link -->
-            <div class="form-group" style="margin-bottom: 16px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin: 0;">
-                  Google Meet Link
-                </label>
-                <span id="meetUrlBadge" style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; background: rgba(110, 219, 140, 0.15); color: #6edb8c;">
-                  VALID URL ✓
-                </span>
-              </div>
-              <input type="url" id="meetUrlInput" class="form-control" placeholder="https://meet.google.com/xxx-xxxx-xxx" value="https://meet.google.com/oc-openmic-live" required style="font-family: monospace; font-size: 13px;" oninput="validateMeetUrlInput(); updateMeetPreview();">
-              <small id="meetUrlError" style="color: #ff8566; font-size: 11px; margin-top: 4px; display: none;">
-                Must be a valid Google Meet link (e.g. https://meet.google.com/abc-defg-hij)
-              </small>
-            </div>
-
-            <!-- Custom Message with Variable Chips -->
-            <div class="form-group" style="margin-bottom: 20px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                <label style="font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #d5cbbd; text-transform: uppercase; margin: 0;">
-                  Custom Message / Instructions
-                </label>
-                <span style="font-size: 11px; color: #8e8477;">Click to insert variable:</span>
-              </div>
-              <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px;">
-                <button type="button" class="var-chip" onclick="insertVariable('{{name}}')">{{name}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{registration_id}}')">{{registration_id}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{event_name}}')">{{event_name}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{session_title}}')">{{session_title}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{date}}')">{{date}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{time}}')">{{time}}</button>
-                <button type="button" class="var-chip" onclick="insertVariable('{{meet_link}}')">{{meet_link}}</button>
-              </div>
-              <textarea id="meetMessageInput" class="form-control" rows="4" placeholder="Enter session instructions..." oninput="updateMeetPreview()">Please join 10 minutes before the session begins and keep your microphone muted until your turn.</textarea>
-            </div>
-
-            <!-- RECIPIENT TARGETING -->
-            <div style="background: #110e0c; border: 1px solid #221c17; border-radius: 6px; padding: 18px; margin-bottom: 24px;">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                <span style="font-size: 11px; font-weight: 800; letter-spacing: 0.14em; color: #e4ad57; text-transform: uppercase;">
-                  Target Recipients
-                </span>
-                <span id="targetEligibleCountBadge" class="badge" style="font-size: 11px; background: rgba(228, 173, 87, 0.15); color: #ffd685;">
-                  0 recipients selected
-                </span>
-              </div>
-
-              <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
-                <label style="display: flex; align-items: flex-start; gap: 10px; color: #f7eee1; cursor: pointer;">
-                  <input type="radio" name="meetRecipientMode" value="ALL_PAID" checked onchange="onRecipientModeChange()" style="margin-top: 2px;">
-                  <div>
-                    <b>All Confirmed Participants</b>
-                    <div style="font-size: 12px; color: #8e8477;">Send to all participants whose payment_status = PAID for the selected event.</div>
-                  </div>
-                </label>
-
-                <label style="display: flex; align-items: flex-start; gap: 10px; color: #f7eee1; cursor: pointer;">
-                  <input type="radio" name="meetRecipientMode" value="SELECTED" onchange="onRecipientModeChange()" style="margin-top: 2px;">
-                  <div>
-                    <b>Selected Participants</b>
-                    <div style="font-size: 12px; color: #8e8477;">Choose specific performers with checkboxes from a searchable list.</div>
-                  </div>
-                </label>
-
-                <label style="display: flex; align-items: flex-start; gap: 10px; color: #f7eee1; cursor: pointer;">
-                  <input type="radio" name="meetRecipientMode" value="NOT_SENT" onchange="onRecipientModeChange()" style="margin-top: 2px;">
-                  <div>
-                    <b>Participants who have not yet received this Meet link</b>
-                    <div style="font-size: 12px; color: #8e8477;">Prevents sending duplicate emails to participants who already got this session.</div>
-                  </div>
-                </label>
-              </div>
-
-              <!-- Filter by previous session if NOT_SENT is selected -->
-              <div id="meetNotSentSessionContainer" style="display: none; margin-top: 14px; border-top: 1px solid #201c18; padding-top: 14px;">
-                <label style="font-size: 11px; font-weight: 700; color: #d5cbbd; margin-bottom: 6px; display: block;">
-                  EXCLUDE RECIPIENTS WHO ALREADY RECEIVED:
-                </label>
-                <select id="meetNotSentSessionSelect" class="form-control" onchange="loadEligibleRecipients()">
-                  <option value="">Select Previous Session...</option>
-                </select>
-              </div>
-
-              <!-- Participant Selection Searchable Table -->
-              <div id="meetSelectedParticipantsContainer" style="display: none; margin-top: 14px; border-top: 1px solid #201c18; padding-top: 14px;">
-                <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: center;">
-                  <input type="text" id="meetParticipantSearchInput" class="form-control" placeholder="Search by name, ID, phone..." style="font-size: 12px; padding: 7px 10px;" oninput="filterMeetParticipantsList()">
-                  <button type="button" class="cta cta-secondary" onclick="selectAllMeetRecipients(true)" style="padding: 7px 12px; font-size: 11px; white-space: nowrap;">Select All</button>
-                  <button type="button" class="cta cta-secondary" onclick="selectAllMeetRecipients(false)" style="padding: 7px 12px; font-size: 11px; white-space: nowrap;">Clear</button>
-                </div>
-                <div id="meetParticipantsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #241e18; border-radius: 4px; background: #0c0a09; padding: 6px;">
-                  <div style="text-align: center; padding: 16px; color: #8e8477; font-size: 12px;">Loading participants…</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- ACTION BUTTONS -->
-            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-              <button type="button" class="cta cta-secondary" id="openTestEmailModalBtn" onclick="openMeetTestModal()" style="flex: 1; min-width: 160px; padding: 12px 16px; font-size: 13px;">
-                ✉ SEND TEST EMAIL
-              </button>
-              <button type="button" class="cta cta-gold" id="openConfirmSendModalBtn" onclick="openMeetConfirmModal()" style="flex: 1.5; min-width: 180px; padding: 12px 22px; font-size: 13px; font-weight: 800;">
-                🚀 SEND MEET LINK →
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <!-- RIGHT COLUMN: LIVE EMAIL CLIENT PREVIEW -->
-        <div>
-          <div class="email-preview-wrapper">
-            <div class="email-preview-header">
-              <div>
-                <span style="color: #ffd685; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px;">
-                  LIVE EMAIL PREVIEW
-                </span>
-                <span style="margin-left: 8px; font-size: 11px; color: #8e8477;">(Updates in real time)</span>
-              </div>
-              <div class="preview-viewport-toggle">
-                <button type="button" class="preview-toggle-btn active" id="previewDesktopBtn" onclick="setPreviewMode('desktop')">
-                  💻 DESKTOP
-                </button>
-                <button type="button" class="preview-toggle-btn" id="previewMobileBtn" onclick="setPreviewMode('mobile')">
-                  📱 MOBILE
-                </button>
-              </div>
-            </div>
-
-            <!-- Email Client Meta Bar -->
-            <div style="background: #110e0c; border-bottom: 1px solid #201c18; padding: 10px 18px; font-size: 11px; color: #8e8477; line-height: 1.8;">
-              <div><b>From:</b> Offstage Creators &lt;offstagecreators77@gmail.com&gt;</div>
-              <div><b>To:</b> <span id="previewToDisplay">Aarav Sharma &lt;aarav@example.com&gt;</span></div>
-              <div><b>Subject:</b> <span id="previewSubjectDisplay" style="color: #f7eee1; font-weight: 700;">Offstage Creators — Google Meet Details | Online Open Mic — Performer Briefing</span></div>
-            </div>
-
-            <!-- Rendered Email Body -->
-            <div class="preview-frame-container" id="previewFrameContainer">
-              <div class="preview-content-box" id="previewContentBox">
-                <!-- Live HTML injected here -->
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- MEET SESSION HISTORY -->
-      <div style="margin-top: 40px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-          <div>
-            <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #f7eee1; margin: 0 0 4px;">
-              Meet Session History &amp; Audit Logs
-            </h3>
-            <p style="font-size: 13px; color: #8e8477; margin: 0;">
-              View past broadcast sessions, check delivery counts, and retry failed recipients.
-            </p>
-          </div>
-          <button type="button" class="cta cta-secondary" onclick="loadMeetHistory()" style="padding: 7px 14px; font-size: 11px;">
-            ⟳ Refresh
-          </button>
-        </div>
-
-        <div class="admin-table-card">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Session Title</th>
-                <th>Event</th>
-                <th>Date &amp; Time</th>
-                <th>Meet Link</th>
-                <th>Recipients</th>
-                <th>Delivery Status</th>
-                <th>Created At</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="meetHistoryTableBody">
-              <tr>
-                <td colspan="9" style="text-align: center; padding: 30px; color: #8e8477;">
-                  Loading session history…
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- =========================================================
-         TAB 4: EMAIL SUBSYSTEM & SMTP HEALTH CHECK
-         ========================================================= -->
-    <section id="tabSectionEmail" style="display: none;">
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 30px;">
-        <!-- SMTP Config Status Card -->
-        <div style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 26px;">
-          <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: #e4ad57; text-transform: uppercase; margin-bottom: 8px;">
-            GMAIL SMTP CONFIGURATION
-          </div>
-          <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: #f7eee1; margin-bottom: 16px;">
-            Mail Server Status
-          </h3>
-
-          <div style="font-size: 13px; line-height: 2; color: #d5cbbd; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">SMTP Status:</span>
-              <span id="smtpStatusVal" style="font-weight: 700; color: #ffd685;">Ready to Test</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Email Mode:</span>
-              <span id="smtpModeVal" class="table-status-badge status-paid">LIVE</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Configured Sender:</span>
-              <b id="smtpSenderVal">offstagecreators77@gmail.com</b>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Delivery Stats:</span>
-              <span><b id="smtpTotalSent" style="color: #6edb8c;">0</b> sent • <b id="smtpTotalFailed" style="color: #ff8566;">0</b> failed</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #201c18; padding: 6px 0;">
-              <span style="color: #8e8477;">Last Successful Email:</span>
-              <span id="smtpLastSuccessVal" style="font-size: 11px; color: #9d9488;">None</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: 6px 0;">
-              <span style="color: #8e8477;">Last Error / Failed:</span>
-              <span id="smtpLastFailedVal" style="font-size: 11px; color: #ff8566;">None</span>
-            </div>
-          </div>
-
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button type="button" class="cta" id="smtpTestBtn" style="padding: 10px 18px; font-size: 12px;">
-              ⚡ TEST SMTP CONNECTION
-            </button>
-            <button type="button" class="cta cta-secondary" id="sendDiagEmailBtn" style="padding: 10px 18px; font-size: 12px;">
-              ✉ SEND TEST EMAIL
-            </button>
-          </div>
-
-          <div id="smtpDiagOutput" style="margin-top: 16px; font-family: monospace; font-size: 12px; padding: 12px; background: #0c0a09; border: 1px solid #26211c; border-radius: 6px; display: none; white-space: pre-wrap;"></div>
-        </div>
-
-        <!-- Email Features Overview -->
-        <div style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 26px;">
-          <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: #e4ad57; text-transform: uppercase; margin-bottom: 8px;">
-            AUTOMATED WORKFLOWS
-          </div>
-          <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: #f7eee1; margin-bottom: 16px;">
-            Email Templates Active
-          </h3>
-
-          <ul style="font-size: 13px; line-height: 1.9; color: #d5cbbd; padding-left: 18px; margin: 0;">
-            <li><b>Registration Received</b> (Participant slot reserved, ₹79 UPI instructions)</li>
-            <li><b>Payment Proof Received</b> (Status: UNDER VERIFICATION)</li>
-            <li><b>Admin Verification Alert</b> (Sent to offstagecreators77@gmail.com)</li>
-            <li><b>Payment Approved / Ticket Pass</b> (CONFIRMED pass with QR access)</li>
-            <li><b>Payment Rejected Notice</b> (Provides organizer reason + resubmit link)</li>
-            <li><b>Gate Check-in Receipt</b> (Attendance recorded)</li>
-            <li><b>Participation Certificate</b> (Delivered upon attendance eligibility)</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- RECENT EMAIL LOGS TABLE -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; color: #f7eee1;">
-          Recent Email Delivery Audit Log
-        </h3>
-        <button type="button" class="cta cta-secondary" id="refreshLogsBtn" style="padding: 6px 14px; font-size: 11px;">
-          ⟳ Refresh Logs
-        </button>
-      </div>
-
-      <div class="admin-table-card">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Reg ID</th>
-              <th>Recipient</th>
-              <th>Email Type</th>
-              <th>Subject</th>
-              <th>Status</th>
-              <th>Timestamp</th>
-              <th>Message ID / Error</th>
-            </tr>
-          </thead>
-          <tbody id="emailLogsTableBody">
-            <tr>
-              <td colspan="8" style="text-align: center; padding: 30px; color: #8e8477;">
-                Loading email logs…
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- =========================================================
-         TAB 4: VENUE CHECK-IN TERMINAL
-         ========================================================= -->
-    <section id="tabSectionCheckin" style="display: none;">
-      <div style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 30px; text-align: center; max-width: 600px; margin: 0 auto 30px;">
-        <div style="font-size: 36px; margin-bottom: 12px;">📷</div>
-        <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; margin-bottom: 10px;">
-          Live Camera &amp; Barcode Scanner
-        </h2>
-        <p style="color: #9d9488; font-size: 14px; margin-bottom: 24px;">
-          Use your phone or webcam to scan participant entry passes, or manually enter Registration IDs to verify payment and mark venue check-in.
-        </p>
-        <a class="cta cta-gold" href="/scanner" target="_blank" style="display: inline-block;">
-          LAUNCH FULL SCANNER TERMINAL →
-        </a>
-      </div>
-    </section>
-
-    <!-- =========================================================
-         TAB 5: CERTIFICATES MANAGEMENT
-         ========================================================= -->
-    <section id="tabSectionCertificates" style="display: none;">
-      <div style="background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 30px;">
-        <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 28px; margin-bottom: 8px;">
-          Participation Certificate Issuance
-        </h2>
-        <p style="color: #9d9488; font-size: 14px; margin-bottom: 20px;">
-          Certificates are automatically unlocked for participants who have <b>PAID</b> and completed <b>VENUE CHECK-IN</b>.
-        </p>
-        <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
-          <a class="cta cta-secondary" href="/certificate" target="_blank">
-            OPEN PUBLIC CERTIFICATE PORTAL →
-          </a>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- SCREENSHOT LIGHTBOX MODAL -->
-  <div class="modal-overlay" id="screenshotModal" style="display: none;">
-    <div class="modal-content">
-      <button type="button" class="modal-close-btn" onclick="closeScreenshotModal()">✕</button>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; color: #f7eee1; margin-bottom: 14px;">
-        Payment Receipt Screenshot
-      </h3>
-      <div style="max-height: 70vh; overflow: auto; text-align: center;">
-        <img src="" id="modalImg" class="modal-img-preview" alt="Payment Proof">
-      </div>
-      <div style="margin-top: 14px; text-align: right;">
-        <a href="#" id="modalImgDownload" target="_blank" class="cta cta-secondary" style="font-size: 12px; padding: 8px 16px;">
-          Open Original in New Tab ↗
-        </a>
-      </div>
-    </div>
-  </div>
-
-  <!-- REJECTION REASON MODAL -->
-  <div class="modal-overlay" id="rejectModal" style="display: none;">
-    <div class="modal-content" style="max-width: 440px;">
-      <button type="button" class="modal-close-btn" onclick="closeRejectModal()">✕</button>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #ff8566; margin-bottom: 8px;">
-        Reject Payment Proof
-      </h3>
-      <p style="font-size: 13px; color: #9d9488; margin-bottom: 16px;">
-        State the reason for rejecting <b id="rejectTargetId" style="color: #e4ad57;"></b>:
-      </p>
-      <form id="rejectForm">
-        <textarea id="rejectReasonInput" class="form-control" rows="3" placeholder="e.g. UTR does not match bank record, screenshot unreadable, or wrong amount." required style="width: 100%; margin-bottom: 16px;"></textarea>
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" class="cta cta-secondary" onclick="closeRejectModal()">
-            Cancel
-          </button>
-          <button type="submit" class="btn-reject" style="flex: none; padding: 10px 20px;">
-            Confirm Rejection
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- RESEND EMAIL MODAL -->
-  <div class="modal-overlay" id="resendEmailModal" style="display: none;">
-    <div class="modal-content" style="max-width: 460px;">
-      <button type="button" class="modal-close-btn" onclick="closeResendEmailModal()">✕</button>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #f7eee1; margin-bottom: 8px;">
-        Resend Transactional Email
-      </h3>
-      <p style="font-size: 13px; color: #9d9488; margin-bottom: 16px;">
-        Choose which email to dispatch to <b id="resendTargetEmail" style="color: #e4ad57;"></b>:
-      </p>
-
-      <form id="resendEmailForm">
-        <input type="hidden" id="resendRegId">
-        <div class="form-group" style="margin-bottom: 18px;">
-          <label>EMAIL TYPE</label>
-          <select id="resendTypeSelect" class="form-control" required>
-            <option value="PAYMENT_APPROVED">Registration Approved / Ticket Pass</option>
-            <option value="PAYMENT_PROOF_RECEIVED">Payment Proof Under Verification</option>
-            <option value="REGISTRATION_RECEIVED">Registration Received (UPI Instructions)</option>
-            <option value="PAYMENT_REJECTED">Payment Rejection Notice</option>
-            <option value="CHECKIN_CONFIRMED">Check-in Attendance Confirmed</option>
-            <option value="CERTIFICATE_AVAILABLE">Participation Certificate Ready</option>
-          </select>
-        </div>
-
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" class="cta cta-secondary" onclick="closeResendEmailModal()">
-            Cancel
-          </button>
-          <button type="submit" class="cta" id="confirmResendBtn" style="padding: 10px 20px;">
-            ✉ Send Email Now
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MEET SEND TEST MODAL -->
-  <div class="modal-overlay" id="meetTestModal" style="display: none;">
-    <div class="modal-content" style="max-width: 460px;">
-      <button type="button" class="modal-close-btn" onclick="closeMeetTestModal()">✕</button>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #ffd685; margin-bottom: 8px;">
-        ✉ Send Test Meet Email
-      </h3>
-      <p style="font-size: 13px; color: #9d9488; margin-bottom: 16px;">
-        Dispatch an exact preview of this Google Meet invitation to your email address before broadcasting to performers:
-      </p>
-
-      <form id="meetTestForm" onsubmit="executeMeetTestEmail(event)">
-        <div class="form-group" style="margin-bottom: 16px;">
-          <label style="font-size: 11px; font-weight: 700; color: #d5cbbd; margin-bottom: 6px; display: block;">TEST RECIPIENT EMAIL</label>
-          <input type="email" id="meetTestEmailInput" class="form-control" placeholder="e.g. rishiarc01@gmail.com" value="rishiarc01@gmail.com" required>
-        </div>
-        <div id="meetTestStatus" style="font-size: 12px; margin-bottom: 14px; display: none;"></div>
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
-          <button type="button" class="cta cta-secondary" onclick="closeMeetTestModal()">Cancel</button>
-          <button type="submit" class="cta" id="confirmTestSendBtn" style="padding: 10px 20px;">
-            Send Test Preview
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- MEET CONFIRM SEND MODAL -->
-  <div class="modal-overlay" id="meetConfirmModal" style="display: none;">
-    <div class="modal-content" style="max-width: 520px;">
-      <button type="button" class="modal-close-btn" onclick="closeMeetConfirmModal()">✕</button>
-      <div style="font-size: 28px; margin-bottom: 8px;">🚀</div>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #f7eee1; margin-bottom: 6px;">
-        Send Google Meet Invitation?
-      </h3>
-      <p style="font-size: 13px; color: #8e8477; margin-bottom: 18px;">
-        Please review the session parameters before broadcasting to participants:
-      </p>
-
-      <div style="background: #110e0c; border: 1px solid #241e18; border-radius: 6px; padding: 16px; font-size: 13px; line-height: 1.9; margin-bottom: 20px;">
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1c1714; padding-bottom: 4px;">
-          <span style="color: #8e8477;">Event:</span>
-          <b id="confirmEventDisplay" style="color: #f7eee1;">—</b>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1c1714; padding: 4px 0;">
-          <span style="color: #8e8477;">Session Title:</span>
-          <b id="confirmTitleDisplay" style="color: #ffd685;">—</b>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1c1714; padding: 4px 0;">
-          <span style="color: #8e8477;">Date &amp; Time:</span>
-          <span id="confirmDateTimeDisplay" style="color: #f7eee1;">—</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #1c1714; padding: 4px 0;">
-          <span style="color: #8e8477;">Google Meet:</span>
-          <span id="confirmMeetUrlDisplay" style="color: #e4ad57; font-family: monospace; font-size: 12px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">—</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding-top: 4px;">
-          <span style="color: #8e8477;">Target Recipients:</span>
-          <span id="confirmRecipientCountDisplay" class="badge" style="background: rgba(110, 219, 140, 0.15); color: #6edb8c; font-weight: 700;">0 recipients</span>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" class="cta cta-secondary" onclick="closeMeetConfirmModal()">
-          Cancel
-        </button>
-        <button type="button" class="cta cta-gold" id="confirmBroadcastBtn" onclick="executeMeetBroadcast()" style="padding: 10px 22px; font-weight: 800;">
-          Confirm &amp; Send Now →
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MEET SEND PROGRESS & RESULT MODAL -->
-  <div class="modal-overlay" id="meetProgressModal" style="display: none;">
-    <div class="modal-content" style="max-width: 520px;">
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #f7eee1; margin-bottom: 8px;" id="progressTitle">
-        Sending Meet Invitations…
-      </h3>
-      <p style="font-size: 13px; color: #8e8477; margin-bottom: 16px;" id="progressSubtitle">
-        Controlled throttled dispatching via Gmail SMTP in progress…
-      </p>
-
-      <!-- Progress bar -->
-      <div style="background: #110e0c; border: 1px solid #201c18; border-radius: 4px; height: 12px; overflow: hidden; margin-bottom: 16px;">
-        <div id="meetProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #e4ad57, #ff5e3a); transition: width 0.3s ease;"></div>
-      </div>
-
-      <!-- Stats Summary -->
-      <div id="progressStatsSummary" style="font-size: 14px; margin-bottom: 16px; color: #d5cbbd; display: flex; justify-content: space-around; background: #14110e; padding: 12px; border-radius: 6px; border: 1px solid #241e18;">
-        <div>Selected: <b id="progressTotalCount">0</b></div>
-        <div style="color: #6edb8c;">✓ Sent: <b id="progressSentCount">0</b></div>
-        <div style="color: #ff8566;">⚠ Failed: <b id="progressFailedCount">0</b></div>
-      </div>
-
-      <!-- Failed recipients list -->
-      <div id="progressFailedContainer" style="display: none; margin-bottom: 16px; border: 1px solid rgba(255, 133, 102, 0.3); border-radius: 4px; padding: 10px; background: rgba(255, 133, 102, 0.05); max-height: 140px; overflow-y: auto;">
-        <div style="font-size: 11px; font-weight: 800; color: #ff8566; margin-bottom: 6px;">FAILED RECIPIENTS:</div>
-        <div id="progressFailedList" style="font-size: 12px; color: #f7eee1;"></div>
-      </div>
-
-      <div style="display: flex; gap: 10px; justify-content: flex-end;" id="progressActions">
-        <button type="button" class="cta cta-secondary" id="progressRetryBtn" onclick="retryFailedFromProgress()" style="display: none; padding: 10px 18px;">
-          ⟳ Retry Failed
-        </button>
-        <button type="button" class="cta" id="progressCloseBtn" onclick="closeMeetProgressModal()" style="display: none; padding: 10px 20px;">
-          Done
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MEET SESSION DETAILS MODAL -->
-  <div class="modal-overlay" id="meetSessionDetailsModal" style="display: none;">
-    <div class="modal-content" style="max-width: 700px;">
-      <button type="button" class="modal-close-btn" onclick="closeMeetDetailsModal()">✕</button>
-      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #ffd685; margin-bottom: 4px;" id="detailsSessionTitle">
-        Session Details
-      </h3>
-      <p style="font-size: 12px; color: #8e8477; margin-bottom: 16px;" id="detailsSessionMeta">
-        Loading…
-      </p>
-
-      <div class="admin-table-card" style="max-height: 350px; overflow-y: auto; margin-bottom: 16px;">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th>Recipient</th>
-              <th>Reg ID</th>
-              <th>Delivery Status</th>
-              <th>Sent At</th>
-              <th>Error / ID</th>
-            </tr>
-          </thead>
-          <tbody id="detailsSessionLogsTable">
-            <tr><td colspan="5" style="text-align: center; padding: 20px; color: #8e8477;">Loading audit logs…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div style="display: flex; gap: 10px; justify-content: flex-end;">
-        <button type="button" class="cta cta-secondary" id="detailsRetryFailedBtn" onclick="retryFromDetailsModal()" style="padding: 9px 16px; font-size: 12px; display: none;">
-          ⟳ Retry Failed
-        </button>
-        <button type="button" class="cta cta-secondary" onclick="duplicateFromDetailsModal()" style="padding: 9px 16px; font-size: 12px;">
-          📋 Duplicate Session
-        </button>
-        <button type="button" class="cta" onclick="closeMeetDetailsModal()" style="padding: 9px 18px; font-size: 12px;">
-          Close
-        </button>
-      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-actions" id="modalActions"></div>
     </div>
   </div>
 

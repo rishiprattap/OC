@@ -1,3 +1,7 @@
+/**
+ * Offstage Creators — Database Layer
+ * SQLite via sqlite3 with promise wrappers and schema migrations.
+ */
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
@@ -7,48 +11,44 @@ const defaultDataDir = path.join(__dirname, '..', 'data');
 const dataDir = isVercel ? path.join('/tmp', 'data') : defaultDataDir;
 
 if (!fs.existsSync(dataDir)) {
-  try {
-    fs.mkdirSync(dataDir, { recursive: true });
-  } catch (e) {}
+  try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) {}
 }
 
 const dbPath = path.join(dataDir, 'offstage.db');
+
+// On Vercel: copy seed DB from repo into writable /tmp on cold start
 if (isVercel && !fs.existsSync(dbPath)) {
   const seedDb = path.join(defaultDataDir, 'offstage.db');
   if (fs.existsSync(seedDb)) {
-    try {
-      fs.copyFileSync(seedDb, dbPath);
-    } catch (e) {}
+    try { fs.copyFileSync(seedDb, dbPath); } catch (e) {}
   }
 }
 
 const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Failed to open database at:', dbPath, err);
-  } else {
-    console.log('Connected to persistent SQLite database at:', dbPath);
-  }
+  if (err) console.error('Failed to open database at:', dbPath, err);
+  else console.log('Connected to SQLite database at:', dbPath);
 });
 
-// Raw execution without schema hook (used internally by initSchema)
-const rawRun = (sql, params = []) => {
-  return new Promise((resolve, reject) => {
+// Enable WAL mode for better concurrency
+db.run('PRAGMA journal_mode=WAL');
+db.run('PRAGMA foreign_keys=ON');
+
+// ─── Promise Wrappers ──────────────────────────────────────────────────────────
+
+const rawRun = (sql, params = []) =>
+  new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
     });
   });
-};
 
 let schemaInitPromise = null;
 function ensureSchema() {
-  if (!schemaInitPromise) {
-    schemaInitPromise = initSchema();
-  }
+  if (!schemaInitPromise) schemaInitPromise = initSchema();
   return schemaInitPromise;
 }
 
-// Promise wrappers for async/await with schema readiness guarantee
 const run = async (sql, params = []) => {
   await ensureSchema();
   return rawRun(sql, params);
@@ -74,18 +74,20 @@ const all = async (sql, params = []) => {
   });
 };
 
-// Safe helper to add column if it doesn't already exist
+// Safe column migration helper
 async function addColumnIfNotExists(table, columnDef) {
   try {
     await rawRun(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
-  } catch (err) {
-    // Error is expected if column already exists
+  } catch (_) {
+    // Column already exists — expected
   }
 }
 
-// Initialize schema and migrations
+// ─── Schema Initialization ────────────────────────────────────────────────────
+
 const initSchema = async () => {
   try {
+    // ── Registrations ──────────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS registrations (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,57 +102,88 @@ const initSchema = async () => {
         performance_title TEXT,
         performance_description TEXT,
         amount INTEGER NOT NULL DEFAULT 79,
-        payment_status TEXT NOT NULL DEFAULT 'PENDING',
+        -- OTP verification state
+        otp_verified INTEGER NOT NULL DEFAULT 0,
+        otp_verified_at TEXT,
+        -- Registration status (replaces old payment_status vocabulary)
+        reg_status TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION',
+        -- Admin approval
+        approved_at TEXT,
+        approved_by TEXT,
+        rejected_at TEXT,
+        rejected_reason TEXT,
+        -- Payment proof (UPI)
         transaction_id TEXT,
         payment_screenshot_url TEXT,
         payment_submitted_at TEXT,
         payment_verified_at TEXT,
         payment_verified_by TEXT,
-        rejection_reason TEXT,
+        -- Event check-in
         checked_in INTEGER NOT NULL DEFAULT 0,
         checkin_at TEXT,
         certificate_eligible INTEGER NOT NULL DEFAULT 0,
+        -- Email tracking
+        registration_email_sent_at TEXT,
+        approval_email_sent_at TEXT,
+        rejection_email_sent_at TEXT,
+        last_email_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     `);
 
-    // Run migrations for manual UPI and email columns if upgrading from earlier version
-    await addColumnIfNotExists('registrations', 'transaction_id TEXT');
-    await addColumnIfNotExists('registrations', 'payment_screenshot_url TEXT');
-    await addColumnIfNotExists('registrations', 'payment_submitted_at TEXT');
-    await addColumnIfNotExists('registrations', 'payment_verified_at TEXT');
-    await addColumnIfNotExists('registrations', 'payment_verified_by TEXT');
-    await addColumnIfNotExists('registrations', 'rejection_reason TEXT');
-    await addColumnIfNotExists('registrations', 'checkin_at TEXT');
-
-    // Email verification and delivery tracking columns
-    await addColumnIfNotExists('registrations', 'email_verified INTEGER NOT NULL DEFAULT 0');
-    await addColumnIfNotExists('registrations', 'email_verified_at TEXT');
-    await addColumnIfNotExists('registrations', 'email_otp_hash TEXT');
-    await addColumnIfNotExists('registrations', 'email_otp_salt TEXT');
-    await addColumnIfNotExists('registrations', 'email_otp_expires_at TEXT');
-    await addColumnIfNotExists('registrations', 'email_verification_attempts INTEGER NOT NULL DEFAULT 0');
-    await addColumnIfNotExists('registrations', 'email_last_sent_at TEXT');
+    // Legacy columns (keep for backwards compat with existing rows)
+    await addColumnIfNotExists('registrations', 'payment_status TEXT');
+    await addColumnIfNotExists('registrations', 'otp_verified INTEGER NOT NULL DEFAULT 0');
+    await addColumnIfNotExists('registrations', 'otp_verified_at TEXT');
+    await addColumnIfNotExists('registrations', 'reg_status TEXT NOT NULL DEFAULT \'PENDING_VERIFICATION\'');
+    await addColumnIfNotExists('registrations', 'approved_at TEXT');
+    await addColumnIfNotExists('registrations', 'approved_by TEXT');
+    await addColumnIfNotExists('registrations', 'rejected_at TEXT');
+    await addColumnIfNotExists('registrations', 'rejected_reason TEXT');
     await addColumnIfNotExists('registrations', 'registration_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'payment_proof_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'payment_confirmation_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'payment_rejection_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'checkin_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'certificate_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'last_email_type TEXT');
-    await addColumnIfNotExists('registrations', 'last_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'email_error TEXT');
-    await addColumnIfNotExists('registrations', 'email_status TEXT DEFAULT "PENDING"');
+    await addColumnIfNotExists('registrations', 'approval_email_sent_at TEXT');
+    await addColumnIfNotExists('registrations', 'rejection_email_sent_at TEXT');
+    await addColumnIfNotExists('registrations', 'last_email_error TEXT');
 
-    // Indexes for fast lookup
+    // Migrate existing rows: map old payment_status → new reg_status
+    await rawRun(`
+      UPDATE registrations
+      SET reg_status = CASE
+        WHEN payment_status = 'PAID' THEN 'APPROVED'
+        WHEN payment_status = 'PENDING_VERIFICATION' THEN 'VERIFIED'
+        WHEN payment_status = 'REJECTED' THEN 'REJECTED'
+        ELSE 'PENDING_VERIFICATION'
+      END
+      WHERE reg_status IS NULL OR reg_status = ''
+    `);
+
+    // Indexes
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email ON registrations(email)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_phone ON registrations(phone)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_trans_id ON registrations(transaction_id)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_status ON registrations(payment_status)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_verified ON registrations(email_verified)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_status ON registrations(reg_status)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_verified ON registrations(otp_verified)`);
 
-    // Audit log table for all sent & attempted emails
+    // ── OTP Sessions ────────────────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS otp_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        registration_id TEXT NOT NULL,
+        otp_hash TEXT NOT NULL,
+        otp_salt TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_sent_at TEXT NOT NULL,
+        verified INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_sessions(email)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_reg_id ON otp_sessions(registration_id)`);
+
+    // ── Email Audit Log ─────────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS email_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,47 +198,9 @@ const initSchema = async () => {
       )
     `);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_reg ON email_logs(registration_id)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_status ON email_logs(status)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_type ON email_logs(email_type)`);
 
-    // Google Meet Sessions and Email Delivery Audit Tables
-    await rawRun(`
-      CREATE TABLE IF NOT EXISTS meet_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_id TEXT NOT NULL,
-        event_name TEXT NOT NULL,
-        title TEXT NOT NULL,
-        date TEXT NOT NULL,
-        time TEXT NOT NULL,
-        meet_url TEXT NOT NULL,
-        message TEXT,
-        scheduled_at TEXT,
-        status TEXT NOT NULL DEFAULT 'SENT',
-        created_by TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      )
-    `);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_sessions_event ON meet_sessions(event_id)`);
-
-    await rawRun(`
-      CREATE TABLE IF NOT EXISTS meet_email_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        meet_session_id INTEGER NOT NULL,
-        registration_id TEXT,
-        recipient_email TEXT NOT NULL,
-        recipient_name TEXT,
-        status TEXT NOT NULL,
-        provider_message_id TEXT,
-        error_message TEXT,
-        sent_at TEXT NOT NULL,
-        FOREIGN KEY (meet_session_id) REFERENCES meet_sessions(id)
-      )
-    `);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_session ON meet_email_logs(meet_session_id)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_reg ON meet_email_logs(registration_id)`);
-    await rawRun(`CREATE INDEX IF NOT EXISTS idx_meet_logs_status ON meet_email_logs(status)`);
-
-    // Legacy certificates table to retain previous participants from certificate.html
+    // ── Legacy certificates (keep unchanged) ────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS legacy_certificates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -215,7 +210,6 @@ const initSchema = async () => {
       )
     `);
 
-    // Seed previous 10 legacy hashes if not present
     const legacyHashes = [
       "be73c2bc683d4be53e8f203d2faedb34a7aa3794526efd77022eae855e63d442",
       "8969db9beafcdab746cd4cd80a7b787e83e68faac0ddc7f2b793077e7476147b",
@@ -228,25 +222,20 @@ const initSchema = async () => {
       "16d3315151d5eb3a028e2315321244fe433224e0be2d3a3ab46f218e019e5119",
       "74e0c4bc687027924b29d5c6cbe6157de16b1cc7253fc2bead217ca53ad6293a"
     ];
-
     for (const h of legacyHashes) {
-      await rawRun(`
-        INSERT OR IGNORE INTO legacy_certificates (hash, event_name, created_at)
-        VALUES (?, 'ONLINE OPEN MIC 2026 (Edition 1)', datetime('now'))
-      `, [h]);
+      await rawRun(
+        `INSERT OR IGNORE INTO legacy_certificates (hash, event_name, created_at) VALUES (?, 'ONLINE OPEN MIC 2026 (Edition 1)', datetime('now'))`,
+        [h]
+      );
     }
 
-    console.log('Database schema and manual UPI columns initialized successfully.');
+    console.log('✓ Database schema initialized.');
   } catch (err) {
     console.error('Database schema initialization error:', err);
+    throw err;
   }
 };
 
 initSchema();
 
-module.exports = {
-  db,
-  run,
-  get,
-  all
-};
+module.exports = { db, run, get, all };

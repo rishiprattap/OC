@@ -3,24 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Register for Offstage Creators Online Open Mic. Fee: ₹79. Pay via UPI.">
+  <meta name="description" content="Register for Offstage Creators Online Open Mic. Verify your email and secure your performance slot.">
   <title>Performer Registration | Online Open Mic — Offstage Creators</title>
-  <link rel="stylesheet" href="./css/style.css">
-  <link rel="stylesheet" href="./css/forms.css">
-  <link rel="icon" href="./assets/logo.png" type="image/png">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <style>
-    @media (max-width: 640px) {
-      .pass-content-grid {
-        grid-template-columns: 1fr !important;
-        text-align: center;
-      }
-      .pass-content-grid > div:last-child {
-        margin: 10px auto 0;
-      }
-    }
-  </style>
-  <!-- Vercel Web Analytics & Speed Insights -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
   <script>
     window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
     window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
@@ -28,6 +18,135 @@
   <script defer src="/_vercel/insights/script.js"></script>
   <script defer src="/_vercel/speed-insights/script.js"></script>
   <script src="/js/analytics.js"></script>
+  <style>
+    /* OTP Input Styling */
+    .otp-input-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 24px 0;
+    }
+    .otp-digit {
+      width: 52px;
+      height: 60px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 800;
+      font-family: 'Courier New', monospace;
+      background: #0d0c0a;
+      border: 2px solid #2a231c;
+      border-radius: 8px;
+      color: #f7eee1;
+      transition: border-color 0.2s ease;
+      outline: none;
+    }
+    .otp-digit:focus {
+      border-color: #e4ad57;
+      box-shadow: 0 0 0 3px rgba(228, 173, 87, 0.15);
+    }
+    .otp-digit.filled { border-color: rgba(228, 173, 87, 0.5); }
+    .otp-digit.error { border-color: #e26947; }
+    .otp-digit.success { border-color: #6edb8c; }
+
+    .otp-timer {
+      font-size: 12px;
+      color: #8e8477;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .otp-timer span { color: #e4ad57; font-weight: 700; font-family: monospace; }
+
+    .resend-btn {
+      background: none;
+      border: 1px solid #2a231c;
+      color: #8e8477;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .resend-btn:not(:disabled):hover {
+      border-color: #e4ad57;
+      color: #e4ad57;
+    }
+    .resend-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .reg-id-display {
+      font-family: 'Courier New', monospace;
+      font-size: 22px;
+      font-weight: 900;
+      color: #e4ad57;
+      letter-spacing: 0.05em;
+      margin: 8px 0 4px;
+    }
+
+    /* Steps bar */
+    .steps-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      justify-content: center;
+    }
+    .step-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      border: 1px solid #2a231c;
+      color: #5a5248;
+      background: transparent;
+      transition: all 0.3s ease;
+    }
+    .step-pill .num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 900;
+      background: #2a231c;
+      color: #5a5248;
+    }
+    .step-pill.active {
+      border-color: rgba(228, 173, 87, 0.5);
+      color: #e4ad57;
+    }
+    .step-pill.active .num {
+      background: #e4ad57;
+      color: #0d0c0a;
+    }
+    .step-pill.done {
+      border-color: rgba(110, 219, 140, 0.4);
+      color: #6edb8c;
+    }
+    .step-pill.done .num {
+      background: #6edb8c;
+      color: #0d0c0a;
+    }
+    .step-sep { color: #2a231c; font-size: 16px; }
+
+    .success-icon {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      background: rgba(110, 219, 140, 0.1);
+      border: 2px solid #6edb8c;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 24px;
+    }
+
+    @media (max-width: 480px) {
+      .otp-digit { width: 42px; height: 52px; font-size: 20px; }
+      .step-pill { padding: 6px 10px; font-size: 11px; }
+    }
+  </style>
 </head>
 <body>
   <div class="grain-layer"></div>
@@ -36,10 +155,9 @@
   <header class="nav-header">
     <div class="nav-container">
       <a class="logo-lockup" href="/">
-        <img src="./assets/logo.png" alt="Offstage Creators Logo">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
         <span>OFFSTAGE<br><b>CREATORS</b></span>
       </a>
-
       <nav class="nav-links">
         <a href="/">Home</a>
         <a class="active" href="/register">Register</a>
@@ -47,42 +165,38 @@
         <a href="/#delhi-event">Delhi Show</a>
         <a href="/#about">About</a>
       </nav>
-
       <div class="nav-actions">
-        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
-          ◎
-        </a>
+        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Instagram">◎</a>
       </div>
     </div>
   </header>
 
   <main class="page-wrapper">
-    <a class="back-link" href="/">
-      ← Back to Offstage Creators
-    </a>
+    <a class="back-link" href="/">← Back to Offstage Creators</a>
 
-    <!-- MULTI-STEP PROGRESS INDICATOR -->
+    <!-- STEPS BAR -->
     <div class="steps-bar">
-      <div class="step-indicator active" id="stepIndicator1">
-        <span class="step-num">1</span>
-        <span>Details</span>
+      <div class="step-pill active" id="stepPill1">
+        <span class="num">1</span> Your Details
       </div>
       <span class="step-sep">›</span>
-      <div class="step-indicator" id="stepIndicator2">
-        <span class="step-num">2</span>
-        <span>Pass &amp; Pay ₹79</span>
+      <div class="step-pill" id="stepPill2">
+        <span class="num">2</span> Verify Email
+      </div>
+      <span class="step-sep">›</span>
+      <div class="step-pill" id="stepPill3">
+        <span class="num">3</span> Confirmed
       </div>
     </div>
 
+    <!-- PAGE HEADER -->
     <div class="page-head" id="pageHead">
       <span class="kicker orange">ONLINE OPEN MIC — 23 SEPTEMBER</span>
       <h1 id="pageHeading">Performer<br><em>Registration</em></h1>
-      <p id="pageSubheading">
-        Reserve your performance slot for the upcoming edition. Each registered creator receives a 5-7 minute stage slot and a verified certificate.
-      </p>
+      <p id="pageSubheading">Reserve your 5–7 minute performance slot. Each registered creator receives a verified participation certificate.</p>
     </div>
 
-    <!-- EVENT SUMMARY BAR -->
+    <!-- Event Summary Bar -->
     <div class="event-summary-bar">
       <div class="summary-details">
         <div class="summary-item">
@@ -109,210 +223,160 @@
     </div>
 
     <!-- ALERTS -->
-    <div class="alert-box alert-error" id="errorAlert"></div>
-    <div class="alert-box alert-success" id="successAlert"></div>
+    <div class="alert-box alert-error" id="errorAlert" role="alert"></div>
+    <div class="alert-box alert-success" id="successAlert" role="status"></div>
 
-    <!-- =======================================================
-         STEP 1: PARTICIPANT INFORMATION FORM
-         ======================================================= -->
+    <!-- ══════════════════════════════════════════════════
+         STEP 1: DETAILS FORM
+         ══════════════════════════════════════════════════ -->
     <div class="form-card" id="step1Card">
-      <form id="regForm">
+      <form id="regForm" novalidate>
         <div class="form-grid">
-          <!-- Full Name -->
           <div class="form-group">
             <label for="fullName">Full Name <span class="req">*</span></label>
-            <input type="text" id="fullName" name="fullName" class="form-control" placeholder="e.g. Aarav Sharma" required>
+            <input type="text" id="fullName" name="fullName" class="form-control" placeholder="e.g. Aarav Sharma" autocomplete="name" required>
           </div>
 
-          <!-- WhatsApp / Phone -->
           <div class="form-group">
             <label for="phone">WhatsApp / Mobile Number <span class="req">*</span></label>
-            <input type="tel" id="phone" name="phone" class="form-control" placeholder="10-digit WhatsApp number" maxlength="10" required>
+            <input type="tel" id="phone" name="phone" class="form-control" placeholder="10-digit number" maxlength="10" autocomplete="tel" required>
           </div>
 
-          <!-- Email -->
           <div class="form-group">
             <label for="email">Email Address <span class="req">*</span></label>
-            <input type="email" id="email" name="email" class="form-control" placeholder="e.g. aarav@example.com" required>
-            <small style="color: #8e8477; font-size: 11px; margin-top: 4px;">Your event confirmation and ticket link will be sent to this email address.</small>
+            <input type="email" id="email" name="email" class="form-control" placeholder="e.g. aarav@example.com" autocomplete="email" required>
+            <small style="color:#8e8477; font-size:11px; margin-top:4px; display:block;">A 6-digit verification code will be sent to this email.</small>
           </div>
 
-          <!-- City -->
           <div class="form-group">
             <label for="city">Your City <span class="req">*</span></label>
             <input type="text" id="city" name="city" class="form-control" placeholder="e.g. New Delhi, Mumbai, Jaipur" required>
           </div>
 
-          <!-- Category -->
           <div class="form-group">
             <label for="category">Performance Category <span class="req">*</span></label>
             <select id="category" name="category" class="form-control" required>
               <option value="" disabled selected>Select category...</option>
-              <option value="Poetry & Shayari">Poetry &amp; Shayari</option>
+              <option value="Poetry &amp; Shayari">Poetry &amp; Shayari</option>
               <option value="Storytelling">Heartfelt Storytelling</option>
               <option value="Stand-up Comedy">Stand-up Comedy</option>
-              <option value="Music & Vocals">Music &amp; Vocals</option>
+              <option value="Music &amp; Vocals">Music &amp; Vocals</option>
               <option value="Spoken Word">Spoken Word</option>
               <option value="Other">Other Creative Performance</option>
             </select>
           </div>
 
-          <!-- Instagram Handle -->
           <div class="form-group">
             <label for="instagram">Instagram Handle (Optional)</label>
             <input type="text" id="instagram" name="instagram" class="form-control" placeholder="e.g. aarav_writes">
           </div>
 
-          <!-- Performance Title -->
           <div class="form-group full">
             <label for="performanceTitle">Performance / Piece Title <span class="req">*</span></label>
-            <input type="text" id="performanceTitle" name="performanceTitle" class="form-control" placeholder="Title of your poem, story or piece" required>
+            <input type="text" id="performanceTitle" name="performanceTitle" class="form-control" placeholder="Title of your poem, story or set" required>
           </div>
 
-          <!-- Short Description -->
           <div class="form-group full">
             <label for="performanceDescription">Brief Description / Notes (Optional)</label>
-            <textarea id="performanceDescription" name="performanceDescription" class="form-control" placeholder="What is your piece about? Any notes or acoustic instruments?"></textarea>
+            <textarea id="performanceDescription" name="performanceDescription" class="form-control" placeholder="What is your piece about? Any instruments or tech notes?"></textarea>
           </div>
 
-          <!-- Terms Checkbox -->
           <div class="form-group full">
             <label class="terms-row">
               <input type="checkbox" id="terms" name="terms" required>
-              <span>
-                I agree to the performance guidelines (5-7 minute slot) and understand that the registration fee is ₹79 payable via UPI. I will maintain respect and creative honesty.
-              </span>
+              <span>I agree to the performance guidelines (5–7 minute slot) and confirm I will maintain respect and creative honesty on stage.</span>
             </label>
           </div>
         </div>
 
         <div class="form-submit-row">
-          <div style="font-size: 13px; color: #9d9488;">
-            Step 1 of 2: Participant Details
-          </div>
-
-          <button type="submit" id="submitDetailsBtn" class="cta">
-            <span id="btnText">CONTINUE TO PASS &amp; PAYMENT</span>
+          <div style="font-size:13px; color:#9d9488;">Step 1 of 3 — Your Details</div>
+          <button type="submit" id="submitBtn" class="cta">
+            <span id="submitBtnText">CONTINUE — VERIFY EMAIL</span>
             <b>→</b>
           </button>
         </div>
       </form>
     </div>
 
-    <!-- =======================================================
-         STEP 2: IMMEDIATE REGISTRATION PASS & UPI PAYMENT
-         ======================================================= -->
-    <div class="form-card" id="step2Card" style="display: none;">
-      <!-- PARTICIPANT PASS PREVIEW -->
-      <div class="pass-preview-card" style="background: linear-gradient(135deg, #181512 0%, #0d0c0a 100%); border: 1px solid rgba(228, 173, 87, 0.4); border-radius: var(--radius-md); padding: 24px; margin-bottom: 28px; position: relative; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.5);">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid var(--line); padding-bottom: 16px;">
-          <div>
-            <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.18em; color: #e4ad57;">OFFSTAGE CREATORS</div>
-            <h2 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: #f7eee1; margin: 4px 0 2px;">Online Open Mic</h2>
-            <div style="font-size: 13px; color: #d5cbbd;">23 September • 7:30 PM IST</div>
-          </div>
-          <div style="text-align: right;">
-            <span class="badge badge-gold" style="font-size: 11px; padding: 6px 14px; letter-spacing: 0.08em;">PAYMENT REQUIRED</span>
-            <div style="font-size: 12px; color: #8e8477; margin-top: 6px;">Registration Fee: <b style="color: #6edb8c;">₹79</b></div>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center;" class="pass-content-grid">
-          <div>
-            <div style="margin-bottom: 12px;">
-              <span style="font-size: 11px; text-transform: uppercase; color: #8e8477; letter-spacing: 0.1em; display: block;">Participant:</span>
-              <span id="passParticipantName" style="font-size: 18px; font-weight: 700; color: #f7eee1;">—</span>
-            </div>
-            <div style="margin-bottom: 12px;">
-              <span style="font-size: 11px; text-transform: uppercase; color: #8e8477; letter-spacing: 0.1em; display: block;">Registration ID:</span>
-              <span id="passRegId" style="font-family: monospace; font-size: 18px; font-weight: 800; color: #e4ad57; letter-spacing: 0.05em;">—</span>
-            </div>
-            <div style="font-size: 12px; color: #9d9488; line-height: 1.5;">
-              🎟️ <b>Official Entry Pass:</b> This QR pass is unique to your registration. Event entry will be unlocked after your ₹79 UPI payment is verified by organizers.
-            </div>
-          </div>
-
-          <div style="text-align: center; background: #fff; padding: 12px; border-radius: var(--radius-sm); box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
-            <div id="passQrcode" style="display: flex; justify-content: center; align-items: center; min-width: 130px; min-height: 130px;"></div>
-            <div style="font-family: monospace; font-size: 10px; font-weight: 700; color: #111; margin-top: 6px; letter-spacing: 0.05em;" id="passQrCaption">
-              ENTRY PASS
-            </div>
-          </div>
-        </div>
+    <!-- ══════════════════════════════════════════════════
+         STEP 2: OTP VERIFICATION
+         ══════════════════════════════════════════════════ -->
+    <div class="form-card" id="step2Card" style="display:none;">
+      <div style="text-align:center; padding: 8px 0 24px;">
+        <div style="font-size:32px; margin-bottom:16px;">✉️</div>
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 10px;">Verify Your Email</h2>
+        <p style="color:#d5cbbd; font-size:14px; max-width:420px; margin:0 auto;">
+          We sent a 6-digit verification code to<br>
+          <strong id="otpEmailDisplay" style="color:#e4ad57;"></strong>
+        </p>
+        <p style="font-size:12px; color:#8e8477; margin-top:8px;">Check your spam/junk folder if you don't see it.</p>
       </div>
 
-      <!-- UPI PAYMENT & PROOF SUBMISSION -->
-      <div class="upi-card-layout">
-        <!-- UPI QR & Info Frame -->
-        <div class="upi-qr-frame">
-          <span class="kicker gold" style="font-size: 10px; margin-bottom: 8px;">SCAN VIA ANY UPI APP</span>
-          <img src="./assets/payment-qr.jpeg" alt="Offstage Creators Official UPI QR Code">
-          
-          <div class="upi-amount-tag">₹79.00</div>
-          <div style="font-size: 11px; color: #8e8477; text-transform: uppercase; font-weight: 800;">
-            EXACT REGISTRATION FEE
-          </div>
-
-          <div class="upi-id-box">
-            <span class="upi-id-text" id="upiIdText">preetiyadav15071985@okaxis</span>
-            <button type="button" class="copy-upi-btn" id="copyUpiBtn">Copy</button>
-          </div>
-          <small style="color: #8e8477; font-size: 11px; margin-top: 8px; display: block;">
-            Payee: <b>Preeti Yadav / Offstage Creators</b>
-          </small>
+      <div style="text-align:center;">
+        <label style="font-size:11px; font-weight:800; letter-spacing:0.15em; color:#8e8477; text-transform:uppercase; margin-bottom:12px; display:block;">Enter 6-Digit Code</label>
+        <div class="otp-input-group" id="otpInputGroup">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp1" aria-label="OTP digit 1">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp2" aria-label="OTP digit 2">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp3" aria-label="OTP digit 3">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp4" aria-label="OTP digit 4">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp5" aria-label="OTP digit 5">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="otp6" aria-label="OTP digit 6">
         </div>
 
-        <!-- Instructions & Proof Submission Form -->
-        <div class="upi-instructions-list">
-          <form id="proofForm">
-            <div style="margin-bottom: 18px;">
-              <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; color: #f7eee1; margin-bottom: 6px;">
-                Submit Payment Proof
-              </h3>
-              <p style="font-size: 13px; color: var(--muted); margin: 0;">
-                Pay ₹79 using the QR code or UPI ID, then enter your UTR and attach your screenshot receipt.
-              </p>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 18px;">
-              <label for="transactionId">
-                UPI TRANSACTION ID / UTR (MIN 6 CHARS) <span class="req">*</span>
-              </label>
-              <input type="text" id="transactionId" name="transactionId" class="form-control" placeholder="e.g. 426819876543" required minlength="6">
-              <small style="color: #8e8477; font-size: 11px; margin-top: 4px; display: block;">
-                Found in your UPI app payment receipt (listed as UPI Ref No, UTR, or Transaction ID).
-              </small>
-            </div>
-
-            <div class="form-group" style="margin-bottom: 20px;">
-              <label>
-                PAYMENT SCREENSHOT <span class="req">*</span>
-              </label>
-              <div class="upload-dropzone" id="dropzone">
-                <input type="file" id="screenshotInput" name="screenshot" accept="image/jpeg,image/png,image/webp,image/jpg" required>
-                <div style="font-size: 28px; margin-bottom: 6px;">📷</div>
-                <div style="font-size: 13px; font-weight: 700; color: #f7eee1;">
-                  Click or drag your payment screenshot here
-                </div>
-                <div style="font-size: 11px; color: #8e8477; margin-top: 2px;">
-                  Supports JPG, JPEG, PNG, WebP (Max 5MB)
-                </div>
-                <img id="screenshotPreview" class="screenshot-preview" alt="Payment Screenshot Preview">
-              </div>
-            </div>
-
-            <div class="form-submit-row" style="margin-top: 20px;">
-              <button type="button" class="cta cta-secondary" id="editDetailsBtn">
-                ← Edit Details
-              </button>
-              <button type="submit" id="submitProofBtn" class="cta">
-                <span id="proofBtnText">SUBMIT PAYMENT PROOF (₹79)</span>
-                <b>✓</b>
-              </button>
-            </div>
-          </form>
+        <div class="otp-timer" id="otpTimerDiv">
+          Code expires in <span id="otpCountdown">10:00</span>
         </div>
+
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:24px;">
+          <button type="button" id="verifyOtpBtn" class="cta" style="padding:14px 32px;">
+            <span id="verifyBtnText">VERIFY CODE</span>
+            <b>✓</b>
+          </button>
+          <button type="button" id="resendOtpBtn" class="resend-btn" disabled>
+            Resend Code <span id="resendTimer"></span>
+          </button>
+        </div>
+
+        <button type="button" id="backToFormBtn" style="background:none; border:none; color:#8e8477; font-size:13px; cursor:pointer; text-decoration:underline;">
+          ← Use a different email
+        </button>
       </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         STEP 3: REGISTRATION CONFIRMED
+         ══════════════════════════════════════════════════ -->
+    <div class="form-card" id="step3Card" style="display:none; text-align:center;">
+      <div class="success-icon">✓</div>
+      <span class="badge badge-live" style="margin-bottom:16px; display:inline-block;">✓ EMAIL VERIFIED</span>
+      <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:36px; margin:0 0 12px; color:#f7eee1;">
+        Registration Confirmed!
+      </h2>
+      <p style="color:#d5cbbd; font-size:15px; max-width:480px; margin:0 auto 24px;">
+        Your email is verified and registration is created. A confirmation email has been sent to your inbox.
+      </p>
+
+      <div style="background:#0d0c0a; border:1px solid rgba(228,173,87,0.3); border-radius:12px; padding:24px; max-width:420px; margin:0 auto 24px; text-align:left;">
+        <div style="font-size:11px; font-weight:800; letter-spacing:0.15em; color:#8e8477; text-transform:uppercase; margin-bottom:12px;">Your Registration</div>
+        <div style="font-size:13px; color:#9d9488; margin-bottom:4px;">Registration ID</div>
+        <div class="reg-id-display" id="confirmedRegId">—</div>
+        <div style="font-size:13px; color:#9d9488; margin:12px 0 4px;">Name</div>
+        <div style="font-weight:700; color:#f7eee1;" id="confirmedName">—</div>
+        <div style="font-size:13px; color:#9d9488; margin:12px 0 4px;">Status</div>
+        <div><span class="badge badge-gold">Pending Organizer Approval</span></div>
+      </div>
+
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+        <a id="viewPassLink" href="#" class="cta">
+          <span>VIEW MY REGISTRATION PASS</span>
+          <b>→</b>
+        </a>
+      </div>
+
+      <p style="font-size:12px; color:#8e8477; margin-top:20px;">
+        The organizers will review your registration. You'll receive an approval email once confirmed.
+      </p>
     </div>
   </main>
 
@@ -323,10 +387,10 @@
     <div class="footer-nav">
       <a href="/">Home</a>
       <a href="/certificate">Certificate</a>
-      <a href="/scanner">Event Scanner</a>
+      <a href="/scanner">Scanner</a>
     </div>
   </footer>
 
-  <script src="./js/register.js"></script>
+  <script src="/js/register.js"></script>
 </body>
 </html>

@@ -1,39 +1,45 @@
+/**
+ * Offstage Creators — Registrations Routes
+ * POST /api/registrations         — Create a new registration (returns registration ID, triggers OTP send)
+ * GET  /api/registrations/:id     — Get registration by ID (public, no sensitive data)
+ */
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 const { run, get } = require('../db');
 const config = require('../config');
+const otpService = require('../services/otp');
+const emailService = require('../services/email');
 
-// Helper to generate a unique, clean registration ID: e.g. OC-OM-4892
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function generateRegistrationId() {
-  const randomNum = Math.floor(1000 + Math.random() * 9000);
-  const randomLetters = crypto.randomBytes(2).toString('hex').toUpperCase();
-  return `OC-OM-${randomNum}${randomLetters}`;
+  const num = Math.floor(1000 + Math.random() * 9000);
+  const letters = crypto.randomBytes(2).toString('hex').toUpperCase();
+  return `OC-OM-${num}${letters}`;
 }
 
-// Helper to normalize phone numbers (strip non-digits)
 function normalizePhone(phone) {
   return String(phone || '').replace(/\D/g, '');
 }
 
-// POST /api/registrations
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ─── POST /api/registrations ─────────────────────────────────────────────────
+
 router.post('/', async (req, res) => {
   try {
     const {
-      fullName,
-      phone,
-      email,
-      city,
-      category,
-      instagram,
-      performanceTitle,
-      performanceDescription,
-      terms
+      fullName, phone, email, city, category,
+      instagram, performanceTitle, performanceDescription, terms
     } = req.body;
 
-    // Validation
+    // ── Validation ────────────────────────────────────────────────────────────
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
-      return res.status(400).json({ success: false, error: 'Please enter a valid full name.' });
+      return res.status(400).json({ success: false, error: 'Please enter a valid full name (minimum 2 characters).' });
     }
 
     const cleanPhone = normalizePhone(phone);
@@ -41,13 +47,20 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please provide a valid 10-digit phone/WhatsApp number.' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email.trim())) {
+    if (!email || !validateEmail(email.trim())) {
       return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+
+    if (!city || city.trim().length < 2) {
+      return res.status(400).json({ success: false, error: 'Please enter your city.' });
     }
 
     if (!category || typeof category !== 'string' || category.trim().length < 2) {
       return res.status(400).json({ success: false, error: 'Please select a performance category.' });
+    }
+
+    if (!performanceTitle || performanceTitle.trim().length < 2) {
+      return res.status(400).json({ success: false, error: 'Please enter a title for your performance.' });
     }
 
     if (!terms) {
@@ -57,136 +70,139 @@ router.post('/', async (req, res) => {
     const eventId = config.EVENT.id;
     const cleanFullName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanCity = (city || '').trim();
+    const cleanCity = city.trim();
     const cleanCategory = category.trim();
     const cleanInstagram = (instagram || '').trim().replace(/^@/, '');
-    const cleanTitle = (performanceTitle || '').trim();
+    const cleanTitle = performanceTitle.trim();
     const cleanDesc = (performanceDescription || '').trim();
+    const now = new Date().toISOString();
 
-    // Check for existing PAID registration for this phone and event
-    const existingPaid = await get(
-      `SELECT * FROM registrations WHERE event_id = ? AND phone = ? AND payment_status = 'PAID'`,
-      [eventId, cleanPhone]
+    // ── Duplicate check ───────────────────────────────────────────────────────
+    // Block if already APPROVED or VERIFIED for this email
+    const existing = await get(
+      `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
+      [eventId, cleanEmail]
     );
 
-    if (existingPaid) {
+    if (existing) {
       return res.status(409).json({
         success: false,
-        error: 'A registration for this phone number already exists and is confirmed.',
-        registrationId: existingPaid.registration_id
+        error: 'A verified registration already exists for this email address.',
+        registrationId: existing.registration_id,
+        status: existing.reg_status
       });
     }
 
-    // Check if there is already a pending registration created recently
+    // ── Reuse or create ───────────────────────────────────────────────────────
+    // If there's an existing PENDING_VERIFICATION record, update it instead of creating a new one
     let regId;
-    const pendingExisting = await get(
-      `SELECT * FROM registrations WHERE event_id = ? AND phone = ? AND payment_status IN ('PENDING', 'PENDING_VERIFICATION') ORDER BY id DESC LIMIT 1`,
-      [eventId, cleanPhone]
+    const pending = await get(
+      `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status = 'PENDING_VERIFICATION' ORDER BY id DESC LIMIT 1`,
+      [eventId, cleanEmail]
     );
 
-    const now = new Date().toISOString();
-
-    if (pendingExisting) {
-      regId = pendingExisting.registration_id;
+    if (pending) {
+      regId = pending.registration_id;
       await run(
         `UPDATE registrations SET
-          full_name = ?,
-          email = ?,
-          city = ?,
-          category = ?,
-          instagram = ?,
-          performance_title = ?,
-          performance_description = ?,
-          updated_at = ?
-        WHERE id = ?`,
-        [
-          cleanFullName,
-          cleanEmail,
-          cleanCity,
-          cleanCategory,
-          cleanInstagram,
-          cleanTitle,
-          cleanDesc,
-          now,
-          pendingExisting.id
-        ]
+           full_name = ?, phone = ?, city = ?, category = ?,
+           instagram = ?, performance_title = ?, performance_description = ?,
+           updated_at = ?
+         WHERE id = ?`,
+        [cleanFullName, cleanPhone, cleanCity, cleanCategory,
+         cleanInstagram, cleanTitle, cleanDesc, now, pending.id]
       );
     } else {
       regId = generateRegistrationId();
       await run(
         `INSERT INTO registrations (
-          registration_id,
-          event_id,
-          full_name,
-          phone,
-          email,
-          city,
-          category,
-          instagram,
-          performance_title,
-          performance_description,
-          amount,
-          payment_status,
-          checked_in,
-          certificate_eligible,
-          created_at,
-          updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 'PENDING', 0, 0, ?, ?)`,
-        [
-          regId,
-          eventId,
-          cleanFullName,
-          cleanPhone,
-          cleanEmail,
-          cleanCity,
-          cleanCategory,
-          cleanInstagram,
-          cleanTitle,
-          cleanDesc,
-          now,
-          now
-        ]
+           registration_id, event_id, full_name, phone, email, city,
+           category, instagram, performance_title, performance_description,
+           amount, otp_verified, reg_status, checked_in, certificate_eligible,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 0, 'PENDING_VERIFICATION', 0, 0, ?, ?)`,
+        [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
+         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, now, now]
       );
     }
 
-    return res.status(201).json({
-      success: true,
-      message: 'Registration created successfully. Please complete your ₹79 UPI payment.',
-      registrationId: regId,
-      fullName: cleanFullName,
-      email: cleanEmail,
-      amount: config.OPEN_MIC_FEE_INR,
-      upi: {
-        id: config.UPI.upiId,
-        payee: config.UPI.payeeName,
-        qr: config.UPI.qrAssetPath,
-        amount: config.UPI.amount
-      },
-      event: {
-        title: config.EVENT.title,
-        date: config.EVENT.date,
-        time: config.EVENT.time,
-        fee: config.OPEN_MIC_FEE_INR
-      }
-    });
+    // ── Send OTP ──────────────────────────────────────────────────────────────
+    try {
+      const otp = otpService.generateOTP();
+      const { expiresAt } = await otpService.storeOTP(cleanEmail, regId, otp);
+
+      await emailService.sendOTPEmail({
+        registrationId: regId,
+        email: cleanEmail,
+        name: cleanFullName,
+        otp,
+        expiryMinutes: config.OTP_EXPIRY_MINUTES
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: `Registration created. A verification code has been sent to ${cleanEmail}.`,
+        registrationId: regId,
+        email: cleanEmail,
+        expiresAt,
+        expiryMinutes: config.OTP_EXPIRY_MINUTES
+      });
+
+    } catch (emailErr) {
+      console.error('[Registration] OTP email failed:', emailErr.message);
+      // Registration created but email failed — return specific error
+      return res.status(201).json({
+        success: true,
+        otpEmailFailed: true,
+        message: 'Registration created but we could not send the verification email. Please use "Resend OTP" on the next screen.',
+        registrationId: regId,
+        email: cleanEmail,
+        expiryMinutes: config.OTP_EXPIRY_MINUTES
+      });
+    }
 
   } catch (err) {
-    console.error('Error in POST /api/registrations:', err);
-    return res.status(500).json({ success: false, error: 'Internal server error while processing registration.' });
+    console.error('[Registration] Error in POST /api/registrations:', err);
+    return res.status(500).json({ success: false, error: 'Server error while creating registration.' });
   }
 });
 
-// GET /api/registrations/:id
+// ─── GET /api/registrations/:id ──────────────────────────────────────────────
+
 router.get('/:id', async (req, res) => {
   try {
-    const regId = req.params.id;
+    const regId = (req.params.id || '').trim().toUpperCase();
+
+    if (!regId) {
+      return res.status(400).json({ success: false, error: 'Registration ID is required.' });
+    }
+
     const record = await get(
-      `SELECT * FROM registrations WHERE registration_id = ? OR id = ?`,
-      [regId, regId]
+      `SELECT * FROM registrations WHERE registration_id = ?`,
+      [regId]
     );
 
     if (!record) {
-      return res.status(404).json({ success: false, error: 'Registration record not found.' });
+      return res.status(404).json({ success: false, error: 'Registration not found.' });
+    }
+
+    // Map reg_status to user-friendly label
+    const statusLabels = {
+      PENDING_VERIFICATION: 'Pending Email Verification',
+      VERIFIED: 'Registered — Pending Approval',
+      APPROVED: 'Approved',
+      REJECTED: 'Rejected'
+    };
+
+    let qrCode = null;
+    try {
+      qrCode = await QRCode.toDataURL(record.registration_id, {
+        width: 240,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' }
+      });
+    } catch (qrErr) {
+      console.warn('[Registration] Could not generate QR code:', qrErr.message);
     }
 
     return res.json({
@@ -194,95 +210,33 @@ router.get('/:id', async (req, res) => {
       registration: {
         registrationId: record.registration_id,
         fullName: record.full_name,
+        email: record.email,
         category: record.category,
         performanceTitle: record.performance_title,
         city: record.city,
-        amount: record.amount,
-        paymentStatus: record.payment_status,
-        transactionId: record.transaction_id,
-        paymentScreenshotUrl: record.payment_screenshot_url,
-        paymentSubmittedAt: record.payment_submitted_at,
-        paymentVerifiedAt: record.payment_verified_at,
-        rejectionReason: record.rejection_reason,
-        email: record.email,
-        emailVerified: Boolean(record.email_verified),
+        instagram: record.instagram,
+        status: record.reg_status || 'PENDING_VERIFICATION',
+        statusLabel: statusLabels[record.reg_status] || 'Unknown',
+        otpVerified: Boolean(record.otp_verified),
         checkedIn: Boolean(record.checked_in),
-        checkinAt: record.checkin_at,
         certificateEligible: Boolean(record.certificate_eligible),
+        approvedAt: record.approved_at,
+        rejectedAt: record.rejected_at,
+        rejectedReason: record.rejected_reason,
         createdAt: record.created_at,
+        qrCode,
         event: {
           title: config.EVENT.title,
           date: config.EVENT.date,
           time: config.EVENT.time,
-          venue: 'Online (Google Meet / Private Room)'
-        },
-        upi: {
-          id: config.UPI.upiId,
-          qr: config.UPI.qrAssetPath,
-          amount: config.UPI.amount
+          venue: 'Online (Google Meet)'
         }
       }
     });
 
   } catch (err) {
-    console.error('Error in GET /api/registrations/:id:', err);
-    return res.status(500).json({ success: false, error: 'Internal server error.' });
-  }
-});
-
-// POST /api/registrations/status-lookup
-router.post('/status-lookup', async (req, res) => {
-  try {
-    const { registrationId, phone } = req.body;
-    const cleanId = (registrationId || '').trim().toUpperCase();
-    const cleanPhone = normalizePhone(phone);
-
-    if (!cleanId || !cleanPhone) {
-      return res.status(400).json({
-        success: false,
-        error: 'Please provide both your Registration ID and registered 10-digit Phone Number.'
-      });
-    }
-
-    const record = await get(
-      `SELECT * FROM registrations WHERE registration_id = ? AND phone = ?`,
-      [cleanId, cleanPhone]
-    );
-
-    if (!record) {
-      return res.status(404).json({
-        success: false,
-        error: 'No matching registration found for this Registration ID and Phone combination.'
-      });
-    }
-
-    // Map internal status to user-friendly label
-    let statusLabel = 'PAYMENT REQUIRED';
-    if (record.payment_status === 'PENDING_VERIFICATION') {
-      statusLabel = 'PAYMENT UNDER VERIFICATION';
-    } else if (record.payment_status === 'PAID') {
-      statusLabel = 'PAYMENT CONFIRMED';
-    } else if (record.payment_status === 'REJECTED') {
-      statusLabel = 'PAYMENT REJECTED';
-    }
-
-    return res.json({
-      success: true,
-      registration: {
-        registrationId: record.registration_id,
-        fullName: record.full_name,
-        category: record.category,
-        paymentStatus: record.payment_status,
-        statusLabel: statusLabel,
-        transactionId: record.transaction_id,
-        checkedIn: Boolean(record.checked_in),
-        rejectionReason: record.rejection_reason
-      }
-    });
-
-  } catch (err) {
-    console.error('Error in status-lookup:', err);
-    return res.status(500).json({ success: false, error: 'Server error looking up status.' });
+    console.error('[Registration] Error in GET /api/registrations/:id:', err);
+    return res.status(500).json({ success: false, error: 'Server error while fetching registration.' });
   }
 });
 

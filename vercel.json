@@ -3,12 +3,12 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/register", "destination": "/register.html" },
-    { "source": "/registration", "destination": "/register.html" },
-    { "source": "/success", "destination": "/success.html" },
-    { "source": "/registration/success", "destination": "/success.html" },
-    { "source": "/certificate", "destination": "/certificate.html" },
-    { "source": "/scanner", "destination": "/scanner.html" },
-    { "source": "/admin", "destination": "/admin.html" }
+    { "source": "/register", "destination": "/public/register.html" },
+    { "source": "/registration/:id", "destination": "/public/registration.html" },
+    { "source": "/registration/success", "destination": "/public/success.html" },
+    { "source": "/success", "destination": "/public/success.html" },
+    { "source": "/certificate", "destination": "/public/certificate.html" },
+    { "source": "/scanner", "destination": "/public/scanner.html" },
+    { "source": "/admin", "destination": "/public/admin.html" }
   ]
 }
