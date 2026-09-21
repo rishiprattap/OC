@@ -32,7 +32,8 @@ app.get(['/_vercel/insights/script.js', '/_vercel/speed-insights/script.js'], (r
 });
 
 // Uploaded screenshots
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
+const uploadsDir = isVercel ? path.join('/tmp', 'uploads') : path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
 // API Routes
@@ -94,18 +95,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(config.PORT, () => {
-  console.log('========================================================');
-  console.log(`✦ OFFSTAGE CREATORS PLATFORM RUNNING ✦`);
-  console.log(`URL: http://localhost:${config.PORT}`);
-  console.log(`Environment: ${config.NODE_ENV}`);
-  console.log(`Event #1: ${config.EVENT.title} (${config.EVENT.date} at ${config.EVENT.time}) - Fee: ₹${config.OPEN_MIC_FEE_INR}`);
-  console.log(`Event #2: ${config.DELHI_EVENT.title} (${config.DELHI_EVENT.date})`);
-  console.log(`Registration Route: http://localhost:${config.PORT}/register`);
-  console.log(`Certificate Route: http://localhost:${config.PORT}/certificate`);
-  console.log(`Scanner Route: http://localhost:${config.PORT}/scanner`);
-  console.log(`Admin Portal: http://localhost:${config.PORT}/admin`);
-  console.log('========================================================');
-});
+if (!isVercel && require.main === module) {
+  app.listen(config.PORT, () => {
+    console.log('========================================================');
+    console.log(`✦ OFFSTAGE CREATORS PLATFORM RUNNING ✦`);
+    console.log(`URL: http://localhost:${config.PORT}`);
+    console.log(`Environment: ${config.NODE_ENV}`);
+    console.log(`Event #1: ${config.EVENT.title} (${config.EVENT.date} at ${config.EVENT.time}) - Fee: ₹${config.OPEN_MIC_FEE_INR}`);
+    console.log(`Event #2: ${config.DELHI_EVENT.title} (${config.DELHI_EVENT.date})`);
+    console.log(`Registration Route: http://localhost:${config.PORT}/register`);
+    console.log(`Certificate Route: http://localhost:${config.PORT}/certificate`);
+    console.log(`Scanner Route: http://localhost:${config.PORT}/scanner`);
+    console.log(`Admin Portal: http://localhost:${config.PORT}/admin`);
+    console.log('========================================================');
+  });
+}
 
 module.exports = app;

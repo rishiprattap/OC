@@ -5,7 +5,7 @@ module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   APP_URL: process.env.APP_URL || 'http://localhost:3000',
   DATABASE_URL: process.env.DATABASE_URL || '',
-  ADMIN_SECRET: process.env.ADMIN_SECRET || 'offstage_admin_secret_placeholder',
+  ADMIN_SECRET: process.env.ADMIN_SECRET || 'R!SHI88',
   OPEN_MIC_FEE_INR: parseInt(process.env.OPEN_MIC_FEE_INR, 10) || 79,
   UPI: {
     upiId: 'preetiyadav15071985@okaxis',

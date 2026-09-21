@@ -2,12 +2,26 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-const dataDir = path.join(__dirname, '..', 'data');
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
+const defaultDataDir = path.join(__dirname, '..', 'data');
+const dataDir = isVercel ? path.join('/tmp', 'data') : defaultDataDir;
+
 if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+  } catch (e) {}
 }
 
 const dbPath = path.join(dataDir, 'offstage.db');
+if (isVercel && !fs.existsSync(dbPath)) {
+  const seedDb = path.join(defaultDataDir, 'offstage.db');
+  if (fs.existsSync(seedDb)) {
+    try {
+      fs.copyFileSync(seedDb, dbPath);
+    } catch (e) {}
+  }
+}
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Failed to open database at:', dbPath, err);

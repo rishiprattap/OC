@@ -81,6 +81,9 @@
           authOverlay.style.display = 'none';
           authError.style.display = 'none';
           loadDashboard();
+        } else if (res.status === 404) {
+          authError.textContent = 'Backend API route not found (HTTP 404). Please check server deployment.';
+          authError.style.display = 'block';
         } else {
           authError.textContent = 'Invalid Admin Secret Key. Access Denied.';
           authError.style.display = 'block';
