@@ -196,6 +196,7 @@ async function runEmailTests() {
     assert(submitProofRes.json.paymentStatus === 'PENDING_VERIFICATION', 'Status transitioned to PENDING_VERIFICATION');
 
     // Test 8: Check email_logs for Payment Proof and Admin Notification
+    await sleep(1500);
     const proofLogs = await request(
       {
         path: '/api/admin/email-logs',
