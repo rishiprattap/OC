@@ -6,12 +6,15 @@ const emailService = require('../services/email');
 
 // Strict Admin Authentication Middleware
 function requireAdminAuth(req, res, next) {
-  const secret =
+  const rawSecret =
     req.headers['x-admin-secret'] ||
     req.query.secret ||
     (req.body && req.body.secret);
 
-  if (!secret || secret !== config.ADMIN_SECRET) {
+  const cleanInput = (rawSecret || '').trim().replace(/^["']|["']$/g, '');
+  const cleanExpected = (config.ADMIN_SECRET || '').trim().replace(/^["']|["']$/g, '');
+
+  if (!cleanInput || cleanInput !== cleanExpected) {
     return res.status(401).json({ success: false, error: 'Unauthorized: Invalid admin secret key.' });
   }
   next();

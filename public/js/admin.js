@@ -67,7 +67,7 @@
   if (authForm) {
     authForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const key = secretInput.value.trim();
+      const key = secretInput.value.trim().replace(/^["']|["']$/g, '');
       if (!key) return;
 
       try {
