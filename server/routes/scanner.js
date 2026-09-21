@@ -156,10 +156,14 @@ router.post('/check-in', async (req, res) => {
 
     // Dispatch check-in email (idempotent, only sent once upon initial check-in)
     const { sendCheckinEmail } = require('../services/email');
-    sendCheckinEmail({
-      to: record.email,
-      registration: { ...record, checkin_at: now }
-    }).catch(err => console.error('Failed to dispatch check-in email:', err));
+    try {
+      await sendCheckinEmail({
+        to: record.email,
+        registration: { ...record, checkin_at: now }
+      });
+    } catch (err) {
+      console.error('Failed to dispatch check-in email:', err);
+    }
 
     return res.json({
       success: true,

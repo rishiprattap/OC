@@ -99,10 +99,14 @@ router.post('/verify-otp', async (req, res) => {
 
     // Send Registration Received email with UPI payment instructions
     const updatedRecord = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [cleanRegId]);
-    sendRegistrationReceivedEmail({
-      to: updatedRecord.email,
-      registration: updatedRecord
-    }).catch(err => console.error('Failed to dispatch registration received email:', err));
+    try {
+      await sendRegistrationReceivedEmail({
+        to: updatedRecord.email,
+        registration: updatedRecord
+      });
+    } catch (err) {
+      console.error('Failed to dispatch registration received email:', err);
+    }
 
     return res.json({
       success: true,

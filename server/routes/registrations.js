@@ -182,12 +182,16 @@ router.post('/', async (req, res) => {
     }
 
     // Send verification email
-    sendEmailVerificationEmail({
-      to: cleanEmail,
-      name: cleanFullName,
-      otp: otp,
-      registrationId: regId
-    }).catch(err => console.error('Failed to send verification email:', err));
+    try {
+      await sendEmailVerificationEmail({
+        to: cleanEmail,
+        name: cleanFullName,
+        otp: otp,
+        registrationId: regId
+      });
+    } catch (err) {
+      console.error('Failed to send verification email:', err);
+    }
 
     return res.status(201).json({
       success: true,

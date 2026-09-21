@@ -138,15 +138,23 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
     } = require('../services/email');
 
     // Send confirmation to participant
-    sendPaymentProofReceivedEmail({
-      to: updatedReg.email,
-      registration: updatedReg
-    }).catch(err => console.error('Failed to dispatch payment proof email:', err));
+    try {
+      await sendPaymentProofReceivedEmail({
+        to: updatedReg.email,
+        registration: updatedReg
+      });
+    } catch (err) {
+      console.error('Failed to dispatch payment proof email:', err);
+    }
 
     // Send notification alert to admin
-    sendAdminNotificationEmail({
-      registration: updatedReg
-    }).catch(err => console.error('Failed to dispatch admin payment alert:', err));
+    try {
+      await sendAdminNotificationEmail({
+        registration: updatedReg
+      });
+    } catch (err) {
+      console.error('Failed to dispatch admin payment alert:', err);
+    }
 
     return res.json({
       success: true,

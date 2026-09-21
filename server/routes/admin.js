@@ -106,10 +106,14 @@ router.post('/verify-payment', async (req, res) => {
     const updatedReg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
     const { sendPaymentApprovedEmail } = require('../services/email');
 
-    sendPaymentApprovedEmail({
-      to: updatedReg.email,
-      registration: updatedReg
-    }).catch(err => console.error('Failed to send payment approval email:', err));
+    try {
+      await sendPaymentApprovedEmail({
+        to: updatedReg.email,
+        registration: updatedReg
+      });
+    } catch (err) {
+      console.error('Failed to send payment approval email:', err);
+    }
 
     return res.json({
       success: true,
@@ -158,11 +162,15 @@ router.post('/reject-payment', async (req, res) => {
     const updatedReg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
     const { sendPaymentRejectedEmail } = require('../services/email');
 
-    sendPaymentRejectedEmail({
-      to: updatedReg.email,
-      registration: updatedReg,
-      reason: rejectReason
-    }).catch(err => console.error('Failed to send payment rejection email:', err));
+    try {
+      await sendPaymentRejectedEmail({
+        to: updatedReg.email,
+        registration: updatedReg,
+        reason: rejectReason
+      });
+    } catch (err) {
+      console.error('Failed to send payment rejection email:', err);
+    }
 
     return res.json({
       success: true,

@@ -46,10 +46,14 @@ router.post('/verify', async (req, res) => {
 
         // Dispatch certificate email if not sent recently
         const { sendCertificateAvailableEmail } = require('../services/email');
-        sendCertificateAvailableEmail({
-          to: record.email,
-          registration: record
-        }).catch(err => console.error('Failed to dispatch certificate email:', err));
+        try {
+          await sendCertificateAvailableEmail({
+            to: record.email,
+            registration: record
+          });
+        } catch (err) {
+          console.error('Failed to dispatch certificate email:', err);
+        }
 
         return res.json({
           success: true,
