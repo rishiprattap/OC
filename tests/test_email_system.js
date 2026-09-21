@@ -196,16 +196,22 @@ async function runEmailTests() {
     assert(submitProofRes.json.paymentStatus === 'PENDING_VERIFICATION', 'Status transitioned to PENDING_VERIFICATION');
 
     // Test 8: Check email_logs for Payment Proof and Admin Notification
-    await sleep(1500);
-    const proofLogs = await request(
-      {
-        path: '/api/admin/email-logs',
-        method: 'GET',
-        headers: { 'x-admin-secret': adminSecret }
+    let proofLogs;
+    for (let attempts = 0; attempts < 8; attempts++) {
+      await sleep(500);
+      proofLogs = await request(
+        {
+          path: '/api/admin/email-logs',
+          method: 'GET',
+          headers: { 'x-admin-secret': adminSecret }
+        }
+      );
+      if (proofLogs.status === 200 && proofLogs.json && proofLogs.json.logs && proofLogs.json.logs.length >= 1) {
+        break;
       }
-    );
-    assert(proofLogs.status === 200, 'Admin can access email_logs');
-    assert(proofLogs.json.logs.length >= 1, 'Email audit logs recorded deliveries');
+    }
+    assert(proofLogs && proofLogs.status === 200, 'Admin can access email_logs');
+    assert(proofLogs && proofLogs.json.logs.length >= 1, 'Email audit logs recorded deliveries');
 
     // Test 9: Admin verifies payment -> Sends payment approval & confirmation emails
     const verifyPayRes = await request(

@@ -52,6 +52,23 @@
   let activeEmail = null;
   let isEmailVerified = false;
   let resendTimer = null;
+  let formStartedTracked = false;
+
+  // Track initial registration view
+  if (typeof window.trackEvent === 'function') {
+    window.trackEvent('registration_started');
+  }
+
+  if (regForm) {
+    regForm.addEventListener('focusin', () => {
+      if (!formStartedTracked) {
+        formStartedTracked = true;
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('registration_form_started');
+        }
+      }
+    }, { once: true });
+  }
 
   function showError(msg) {
     errorAlert.textContent = msg;
@@ -173,9 +190,17 @@
       btnText.textContent = 'CONTINUE TO VERIFY EMAIL';
 
       if (isEmailVerified) {
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('registration_form_completed');
+          window.trackEvent('payment_page_viewed');
+        }
         // If somehow already verified, proceed directly to UPI Pay
         goToStep(3);
       } else {
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('registration_form_completed');
+          window.trackEvent('email_verification_started');
+        }
         // Advance to Step 2: Email OTP Verification
         goToStep(2);
         showSuccess(`A 6-digit verification code has been dispatched to ${activeEmail}. Please check your inbox.`);
@@ -227,6 +252,11 @@
         isEmailVerified = true;
         verifyOtpBtn.disabled = false;
         verifyOtpBtnText.textContent = 'VERIFY EMAIL & PROCEED';
+
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('email_verification_completed');
+          window.trackEvent('payment_page_viewed');
+        }
 
         showSuccess('✓ Email verified successfully! You may now complete your ₹79 UPI payment.');
         setTimeout(() => {
@@ -407,6 +437,9 @@
         }
 
         showSuccess('✓ Payment proof submitted! A confirmation has been sent to your email.');
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('payment_proof_submitted');
+        }
         setTimeout(() => {
           window.location.href = `/registration/success?id=${encodeURIComponent(activeRegistrationId)}`;
         }, 700);

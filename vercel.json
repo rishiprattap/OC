@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/register", "destination": "/register.html" },
+    { "source": "/registration", "destination": "/register.html" },
+    { "source": "/success", "destination": "/success.html" },
+    { "source": "/registration/success", "destination": "/success.html" },
+    { "source": "/certificate", "destination": "/certificate.html" },
+    { "source": "/scanner", "destination": "/scanner.html" },
+    { "source": "/admin", "destination": "/admin.html" }
+  ]
+}

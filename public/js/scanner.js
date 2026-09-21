@@ -5,6 +5,11 @@
   let html5QrCode = null;
   let activeParticipant = null;
 
+  // Anonymous scanner open tracking
+  if (typeof window.trackEvent === 'function') {
+    window.trackEvent('scanner_opened');
+  }
+
   const startCamBtn = document.getElementById('startCamBtn');
   const stopCamBtn = document.getElementById('stopCamBtn');
   const manualForm = document.getElementById('manualForm');
@@ -77,7 +82,14 @@
         participantCard.classList.remove('show');
         showFeedback(data.error || 'Unknown or invalid registration ticket.', false);
         playAudioBeep(false);
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('scanner_invalid_qr');
+        }
         return;
+      }
+
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('scanner_success');
       }
 
       const p = data.participant;

@@ -69,6 +69,9 @@
 
     if (status === 'PAID') {
       if (stateConfirmed) stateConfirmed.style.display = 'block';
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('registration_confirmation_viewed');
+      }
       if (participantName) participantName.textContent = reg.fullName || reg.full_name;
       const id = reg.registrationId || reg.registration_id;
       if (ticketRegId) ticketRegId.textContent = id;
@@ -207,5 +210,15 @@
       if (desc) desc.textContent = 'Enter your Registration ID and phone number below to view your verification status or entry pass.';
     }
   }
+
+  // Track any Meet link clicks anonymously
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (link && (link.href.includes('meet.google.com') || link.dataset.meetLink)) {
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('meet_link_clicked');
+      }
+    }
+  });
 
 })();

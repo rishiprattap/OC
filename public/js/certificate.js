@@ -20,6 +20,11 @@
   let activeVerifiedName = '';
   let activeEventTitle = 'ONLINE OPEN MIC 2026';
 
+  // Track page view
+  if (typeof window.trackEvent === 'function') {
+    window.trackEvent('certificate_page_viewed');
+  }
+
   // Tab switching
   tabNamePhone.addEventListener('click', () => {
     tabNamePhone.classList.add('active');
@@ -225,6 +230,10 @@
     }
 
     try {
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('certificate_verification_started');
+      }
+
       const res = await fetch('/api/certificate/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -234,6 +243,9 @@
       const data = await res.json();
 
       if (res.ok && data.success) {
+        if (typeof window.trackEvent === 'function') {
+          window.trackEvent('certificate_verification_success');
+        }
         showSuccess(`✓ Participant verified: ${data.verifiedName}. Your official certificate is ready!`);
         drawCertificate(data.verifiedName, data.event);
         previewBox.classList.add('show');
@@ -251,6 +263,9 @@
 
   // PNG Download
   document.getElementById('pngBtn').addEventListener('click', () => {
+    if (typeof window.trackEvent === 'function') {
+      window.trackEvent('certificate_downloaded', { format: 'png' });
+    }
     const a = document.createElement('a');
     const cleanFileName = (activeVerifiedName || 'Participant').replace(/[^a-z0-9]+/gi, '-');
     a.download = `Offstage-Creators-Certificate-${cleanFileName}.png`;
@@ -263,6 +278,9 @@
     if (!window.jspdf) {
       alert('PDF generation requires internet connectivity. You can download the PNG version directly.');
       return;
+    }
+    if (typeof window.trackEvent === 'function') {
+      window.trackEvent('certificate_downloaded', { format: 'pdf' });
     }
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({

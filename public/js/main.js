@@ -75,4 +75,42 @@
     });
   }
 
+  // 4. Analytics: Public Events & CTAs
+  if (typeof window.trackEvent === 'function') {
+    // Track initial hero event view
+    window.trackEvent('online_open_mic_viewed');
+
+    // Track Registration CTAs
+    document.querySelectorAll('a[href="/register"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.trackEvent('registration_cta_clicked');
+        window.trackEvent('online_open_mic_register_clicked');
+      });
+    });
+
+    // Track BookMyShow button
+    const bmsBtn = document.querySelector('.bms-btn');
+    if (bmsBtn) {
+      bmsBtn.addEventListener('click', () => {
+        window.trackEvent('delhi_event_ticket_clicked');
+      });
+    }
+
+    // Track Delhi Event section view via IntersectionObserver
+    const delhiSection = document.getElementById('delhi-event');
+    if (delhiSection && 'IntersectionObserver' in window) {
+      let delhiTracked = false;
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && !delhiTracked) {
+            delhiTracked = true;
+            window.trackEvent('delhi_event_viewed');
+            observer.disconnect();
+          }
+        });
+      }, { threshold: 0.3 });
+      observer.observe(delhiSection);
+    }
+  }
+
 })();
