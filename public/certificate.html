@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Verify and download your official Offstage Creators Participation Certificate.">
+  <title>Participation Certificate | Offstage Creators</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+  <style>
+    .cert-page {
+      width: min(1050px, calc(100% - 30px));
+      margin: auto;
+      padding: 50px 0 80px;
+    }
+    .cert-head {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .cert-head h1 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: clamp(48px, 7vw, 84px);
+      line-height: 0.9;
+      margin: 12px 0 16px;
+    }
+    .cert-head p {
+      color: #a8a096;
+      max-width: 600px;
+      margin: 0 auto;
+      font-size: 16px;
+    }
+    .verify-box {
+      max-width: 620px;
+      margin: auto;
+      padding: 32px;
+      background: rgba(20, 18, 15, 0.94);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(10px);
+    }
+    .verify-note {
+      background: #1c1916;
+      border: 1px solid rgba(205, 164, 91, 0.25);
+      border-radius: 10px;
+      padding: 16px;
+      color: #b9afa3;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .cert-tab-bar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 12px;
+    }
+    .cert-tab {
+      background: none;
+      border: none;
+      color: #8e8477;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 6px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .cert-tab.active {
+      color: #e4ad57;
+      background: rgba(205, 164, 91, 0.12);
+    }
+    .preview-box {
+      display: none;
+      margin-top: 55px;
+      text-align: center;
+    }
+    .preview-box.show {
+      display: block;
+    }
+    .preview-box canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border: 1px solid #6c5c43;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+      border-radius: 4px;
+    }
+    .downloads-bar {
+      display: none;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 24px;
+    }
+    .downloads-bar.show {
+      display: flex;
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/register">Register</a>
+        <a class="active" href="/certificate">Certificate</a>
+        <a href="/#delhi-event">Delhi Show</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
+          ◎
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="cert-page">
+    <a class="back-link" href="/">
+      ← Back to Offstage Creators
+    </a>
+
+    <div class="cert-head">
+      <span class="kicker orange">ONLINE OPEN MIC</span>
+      <h1>Participation<br><em>Certificate</em></h1>
+      <p>
+        Certificates are available for verified participants. Enter your registered name and WhatsApp number or Registration ID.
+      </p>
+    </div>
+
+    <section class="verify-box">
+      <div class="verify-note">
+        🔒 <b>Live Participant Verification</b><br>
+        Your credentials are securely verified against the database. Phone numbers and sensitive information are never displayed publicly.
+      </div>
+
+      <div class="cert-tab-bar">
+        <button type="button" class="cert-tab active" id="tabNamePhone">Name &amp; Phone</button>
+        <button type="button" class="cert-tab" id="tabRegId">Registration ID</button>
+      </div>
+
+      <form id="certForm">
+        <div id="groupNamePhone">
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label for="certName">FULL NAME (AS REGISTERED)</label>
+            <input type="text" id="certName" class="form-control" placeholder="Enter your registered full name">
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="certPhone">WHATSAPP / PHONE NUMBER</label>
+            <input type="tel" id="certPhone" class="form-control" placeholder="Enter your registered 10-digit number">
+          </div>
+        </div>
+
+        <div id="groupRegId" style="display: none; margin-bottom: 20px;">
+          <div class="form-group">
+            <label for="certRegId">REGISTRATION ID</label>
+            <input type="text" id="certRegId" class="form-control" placeholder="e.g. OC-OM-4892">
+          </div>
+        </div>
+
+        <button type="submit" class="cta" id="verifyBtn" style="width: 100%;">
+          ✓ &nbsp; VERIFY &amp; GENERATE CERTIFICATE
+        </button>
+
+        <div class="alert-box alert-error" id="certError" style="margin-top: 18px;"></div>
+        <div class="alert-box alert-success" id="certSuccess" style="margin-top: 18px;"></div>
+      </form>
+    </section>
+
+    <!-- CERTIFICATE PREVIEW & DOWNLOADS -->
+    <section class="preview-box" id="previewBox">
+      <p class="kicker" style="margin-bottom: 16px;">OFFICIAL CERTIFICATE PREVIEW</p>
+      <canvas id="certCanvas" width="1600" height="1131"></canvas>
+      <div class="downloads-bar" id="downloadsBar">
+        <button class="cta" id="pngBtn" type="button">
+          📥 DOWNLOAD HIGH-RES PNG
+        </button>
+        <button class="cta cta-gold" id="pdfBtn" type="button">
+          📄 DOWNLOAD PRINT-READY PDF
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/register">Register</a>
+      <a href="/scanner">Event Scanner</a>
+    </div>
+  </footer>
+
+  <!-- jsPDF Library for PDF Export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/js/certificate.js"></script>
+</body>
+</html>

@@ -1,0 +1,656 @@
+/* ==========================================================================
+   OFFSTAGE CREATORS — FORMS, UPI PAYMENT & STATUS PASS STYLES
+   ========================================================================== */
+
+.page-wrapper {
+  width: min(1100px, calc(100% - 40px));
+  margin: 40px auto 90px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #a69d92;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+  transition: color 0.2s ease;
+}
+
+.back-link:hover {
+  color: #ffffff;
+}
+
+.page-head {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+.page-head h1 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(48px, 6vw, 84px);
+  font-weight: 700;
+  line-height: 0.88;
+  margin: 12px 0 16px;
+}
+
+.page-head h1 em {
+  font-style: italic;
+  color: #d8ccb7;
+}
+
+.page-head p {
+  color: var(--muted);
+  max-width: 620px;
+  margin: 0 auto;
+  font-size: 16px;
+}
+
+/* Multi-step progress bar */
+.steps-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 680px;
+  margin: 0 auto 35px;
+  position: relative;
+  gap: 12px;
+}
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #726a61;
+}
+
+.step-indicator.active {
+  color: #e4ad57;
+}
+
+.step-indicator.completed {
+  color: #6edb8c;
+}
+
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.step-indicator.active .step-num {
+  background: rgba(205, 164, 91, 0.2);
+  border-color: #cda45b;
+}
+
+.step-indicator.completed .step-num {
+  background: rgba(110, 219, 140, 0.2);
+  border-color: #6edb8c;
+}
+
+.step-sep {
+  color: #4a433a;
+  font-size: 14px;
+}
+
+/* Event Summary Bar */
+.event-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(20, 18, 15, 0.95);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 20px 28px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.summary-details {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9d9488;
+}
+
+.summary-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f7eee1;
+}
+
+.summary-price {
+  font-size: 26px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 700;
+  color: #e26947;
+}
+
+/* Form Card */
+.form-card {
+  background: rgba(20, 18, 15, 0.92);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 40px 45px;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group.full {
+  grid-column: span 2;
+}
+
+.form-group label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #d5cabb;
+  margin-bottom: 8px;
+}
+
+.form-group label span.req {
+  color: #e26947;
+}
+
+.form-control {
+  width: 100%;
+  background: #0c0b0a;
+  border: 1px solid #4a4239;
+  border-radius: var(--radius-sm);
+  color: #eee7dd;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #cda45b;
+  box-shadow: 0 0 0 3px rgba(205, 164, 91, 0.15);
+}
+
+.form-control::placeholder {
+  color: #6d6459;
+}
+
+select.form-control {
+  cursor: pointer;
+}
+
+textarea.form-control {
+  resize: vertical;
+  min-height: 90px;
+}
+
+/* Terms Checkbox */
+.terms-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: #b8aea2;
+  cursor: pointer;
+}
+
+.terms-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #c84e2e;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   UPI PAYMENT STYLING
+   ========================================================================== */
+.upi-payment-section {
+  display: none;
+}
+
+.upi-payment-section.active {
+  display: block;
+}
+
+.upi-card-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) 1fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.upi-qr-frame {
+  background: #12100e;
+  border: 1px solid rgba(205, 164, 91, 0.4);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 15px 45px rgba(0, 0, 0, 0.6);
+}
+
+.upi-qr-frame img {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  margin: 0 auto 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px;
+  display: block;
+}
+
+.upi-amount-tag {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 32px;
+  font-weight: 700;
+  color: #e26947;
+  margin-bottom: 6px;
+}
+
+.upi-id-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #090807;
+  border: 1px dashed rgba(205, 164, 91, 0.35);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 12px;
+  gap: 10px;
+}
+
+.upi-id-text {
+  font-family: monospace;
+  font-size: 13px;
+  color: #e4ad57;
+  word-break: break-all;
+}
+
+.copy-upi-btn {
+  background: rgba(205, 164, 91, 0.15);
+  border: 1px solid #cda45b;
+  color: #f7eee1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.copy-upi-btn:hover {
+  background: #cda45b;
+  color: #0c0b0a;
+}
+
+.upi-instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.instruction-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.step-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(200, 78, 46, 0.2);
+  border: 1px solid #e26947;
+  color: #ff8566;
+  font-weight: 800;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-text h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #f7eee1;
+  margin-bottom: 2px;
+}
+
+.step-text p {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Upload Dropzone */
+.upload-dropzone {
+  border: 2px dashed #51473c;
+  border-radius: var(--radius-sm);
+  padding: 24px;
+  text-align: center;
+  background: #0e0c0a;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.upload-dropzone:hover, .upload-dropzone.dragover {
+  border-color: #cda45b;
+  background: #14110e;
+}
+
+.upload-dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.screenshot-preview {
+  max-width: 220px;
+  max-height: 160px;
+  margin: 12px auto 0;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  display: none;
+  object-fit: contain;
+}
+
+.screenshot-preview.show {
+  display: block;
+}
+
+/* Alert Boxes */
+.alert-box {
+  padding: 14px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin-bottom: 24px;
+  display: none;
+}
+
+.alert-box.show {
+  display: block;
+}
+
+.alert-error {
+  background: rgba(226, 105, 71, 0.15);
+  border: 1px solid #e26947;
+  color: #ff9e85;
+}
+
+.alert-success {
+  background: rgba(110, 219, 140, 0.15);
+  border: 1px solid #6edb8c;
+  color: #88f0a4;
+}
+
+.alert-info {
+  background: rgba(205, 164, 91, 0.15);
+  border: 1px solid #cda45b;
+  color: #e4ad57;
+}
+
+/* Submit Action Row */
+.form-submit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+/* ==========================================================================
+   STATUS & TICKET PASS STYLES (/success / status)
+   ========================================================================== */
+.status-card {
+  background: #181512;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
+  margin-bottom: 30px;
+}
+
+.status-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  margin: 0 auto 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+.status-icon.pending-verification {
+  background: rgba(205, 164, 91, 0.18);
+  border: 2px solid #cda45b;
+  color: #e4ad57;
+}
+
+.status-icon.paid {
+  background: rgba(110, 219, 140, 0.18);
+  border: 2px solid #6edb8c;
+  color: #7ef29d;
+}
+
+.status-icon.rejected {
+  background: rgba(226, 105, 71, 0.18);
+  border: 2px solid #e26947;
+  color: #ff8566;
+}
+
+.ticket-container {
+  max-width: 800px;
+  margin: 30px auto;
+}
+
+.ticket-pass {
+  background: #191613;
+  border: 1px solid rgba(205, 164, 91, 0.35);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.75);
+  position: relative;
+}
+
+.ticket-header {
+  background: linear-gradient(135deg, #25201a 0%, #15120f 100%);
+  border-bottom: 1px dashed rgba(205, 164, 91, 0.3);
+  padding: 26px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.ticket-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ticket-brand img {
+  width: 42px;
+  height: 50px;
+  object-fit: contain;
+}
+
+.ticket-body {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  padding: 32px;
+  gap: 32px;
+}
+
+.ticket-details-col h2 {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 34px;
+  color: #f7eee1;
+  margin-bottom: 4px;
+}
+
+.ticket-details-col .ticket-event {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #e4ad57;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.ticket-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.ticket-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-cell small {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8e8477;
+}
+
+.ticket-cell span {
+  font-size: 14px;
+  font-weight: 700;
+  color: #eee4d5;
+}
+
+.ticket-instructions {
+  background: rgba(10, 9, 8, 0.6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  font-size: 12px;
+  color: #b5aaa0;
+  line-height: 1.6;
+}
+
+.ticket-qr-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px dashed rgba(205, 164, 91, 0.3);
+  padding-left: 32px;
+  text-align: center;
+}
+
+.ticket-qr-box {
+  background: #ffffff;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.ticket-qr-box canvas, .ticket-qr-box img {
+  width: 140px;
+  height: 140px;
+  display: block;
+}
+
+.ticket-reg-id {
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e4ad57;
+  letter-spacing: 0.08em;
+}
+
+.ticket-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 32px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 800px) {
+  .form-card {
+    padding: 26px 20px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .form-group.full {
+    grid-column: span 1;
+  }
+  .upi-card-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .ticket-body {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .ticket-qr-col {
+    border-left: none;
+    border-top: 1px dashed rgba(205, 164, 91, 0.3);
+    padding-left: 0;
+    padding-top: 24px;
+  }
+}

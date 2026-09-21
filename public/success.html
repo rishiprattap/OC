@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registration Status &amp; Ticket Pass | Offstage Creators</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+  <!-- QR Code Generator Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      .ticket-pass, .ticket-pass * {
+        visibility: visible;
+      }
+      .ticket-pass {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+      }
+      .ticket-actions-bar, .back-link, .nav-header, .site-footer, .status-card {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/register">Register</a>
+        <a href="/certificate">Certificate</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <a class="back-link" href="/">
+      ← Back to Offstage Creators
+    </a>
+
+    <!-- =========================================================
+         STATE 1: PAYMENT UNDER VERIFICATION
+         ========================================================= -->
+    <div class="status-card" id="stateVerification" style="display: none;">
+      <div class="status-icon pending-verification">⏳</div>
+      <span class="badge badge-gold" style="margin-bottom: 14px;">
+        PAYMENT UNDER VERIFICATION
+      </span>
+      <h1 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: clamp(38px, 5vw, 62px); margin-bottom: 12px;">
+        Payment Proof Submitted
+      </h1>
+      <p style="color: #d5cbbd; max-width: 600px; margin: 0 auto 24px; font-size: 16px; line-height: 1.6;">
+        Your registration details and ₹79 UPI payment proof have been received. The Offstage Creators team is verifying your payment.
+      </p>
+
+      <div style="background: #110f0d; border: 1px solid var(--line); border-radius: var(--radius-md); max-width: 480px; margin: 0 auto 28px; padding: 20px; text-align: left;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px;">
+          <span style="color: #8e8477;">Participant:</span>
+          <b id="verifName" style="color: #f7eee1;">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px;">
+          <span style="color: #8e8477;">Registration ID:</span>
+          <b id="verifRegId" style="color: #e4ad57; font-family: monospace;">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px;">
+          <span style="color: #8e8477;">UPI Transaction ID / UTR:</span>
+          <b id="verifUtr" style="color: #eee4d5; font-family: monospace;">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px;">
+          <span style="color: #8e8477;">Payment Status:</span>
+          <span class="table-status-badge status-pending">UNDER VERIFICATION</span>
+        </div>
+      </div>
+
+      <p style="font-size: 13px; color: #8e8477; margin-bottom: 24px;">
+        Once approved by organizers, your official QR entry pass will appear on this page automatically.
+      </p>
+
+      <button type="button" class="cta cta-secondary" id="refreshStatusBtn">
+        ⟳ Refresh Verification Status
+      </button>
+    </div>
+
+    <!-- =========================================================
+         STATE 2: PAYMENT CONFIRMED / TICKET PASS
+         ========================================================= -->
+    <div id="stateConfirmed" style="display: none;">
+      <div class="page-head">
+        <span class="badge badge-live" style="margin: 0 auto 16px;">
+          ✓ PAYMENT VERIFIED &amp; ENTRY CONFIRMED
+        </span>
+        <h1>Registration<br><em>Confirmed!</em></h1>
+        <p>
+          Your ₹79 payment has been verified by the organizers. Here is your official entry pass for Online Open Mic.
+        </p>
+      </div>
+
+      <div class="ticket-container">
+        <div class="ticket-pass">
+          <div class="ticket-header">
+            <div class="ticket-brand">
+              <img src="/assets/logo.png" alt="Offstage Creators">
+              <div>
+                <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: #e4ad57;">OFFSTAGE CREATORS</div>
+                <div style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 700; color: #f7eee1;">
+                  Online Open Mic Pass
+                </div>
+              </div>
+            </div>
+            <span class="badge" style="background: rgba(110, 219, 140, 0.15); border: 1px solid #6edb8c; color: #88f0a4;">
+              ✓ PAID &amp; CONFIRMED (₹79)
+            </span>
+          </div>
+
+          <div class="ticket-body">
+            <div class="ticket-details-col">
+              <h2 id="participantName">Participant Name</h2>
+              <div class="ticket-event">Online Open Mic 2026</div>
+
+              <div class="ticket-grid">
+                <div class="ticket-cell">
+                  <small>Registration ID</small>
+                  <span id="ticketRegId" class="ticket-reg-id">—</span>
+                </div>
+                <div class="ticket-cell">
+                  <small>Performance Type</small>
+                  <span id="ticketCategory">—</span>
+                </div>
+                <div class="ticket-cell">
+                  <small>Performance Title</small>
+                  <span id="ticketTitle">—</span>
+                </div>
+                <div class="ticket-cell">
+                  <small>City</small>
+                  <span id="ticketCity">—</span>
+                </div>
+                <div class="ticket-cell">
+                  <small>Date &amp; Time</small>
+                  <span>23 Sept • 7:30 PM IST</span>
+                </div>
+                <div class="ticket-cell">
+                  <small>Slot Duration</small>
+                  <span>5 – 7 Minutes</span>
+                </div>
+              </div>
+
+              <div class="ticket-instructions">
+                <b>Performer Guidelines:</b><br>
+                • Join the online room 10 minutes before show time (7:20 PM IST) for audio check.<br>
+                • Have your camera and quiet space ready.<br>
+                • Participation certificates are unlocked on the Certificate page after attendance check-in.
+              </div>
+            </div>
+
+            <!-- Dynamic QR Column -->
+            <div class="ticket-qr-col">
+              <div class="ticket-qr-box" id="qrcode"></div>
+              <div style="font-size: 10px; font-weight: 800; letter-spacing: 0.12em; color: #8e8477; text-transform: uppercase;">
+                Entry QR Code
+              </div>
+              <div class="ticket-reg-id" id="ticketRegIdDisplay" style="margin-top: 4px;">
+                —
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ticket-actions-bar">
+          <button type="button" class="cta" onclick="window.print()">
+            🖨️ PRINT / SAVE PASS
+          </button>
+          <a class="cta cta-secondary" href="/certificate">
+            CERTIFICATE PORTAL →
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+         STATE 3: PAYMENT REJECTED
+         ========================================================= -->
+    <div class="status-card" id="stateRejected" style="display: none;">
+      <div class="status-icon rejected">✕</div>
+      <span class="badge" style="background: rgba(226, 105, 71, 0.15); border: 1px solid #e26947; color: #ff8566; margin-bottom: 14px;">
+        PAYMENT VERIFICATION FAILED
+      </span>
+      <h1 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: clamp(38px, 5vw, 56px); margin-bottom: 12px;">
+        Proof Not Verified
+      </h1>
+      <p style="color: #d5cbbd; max-width: 580px; margin: 0 auto 16px; font-size: 15px;">
+        Your payment proof could not be verified by the organizers.
+      </p>
+      <div style="background: rgba(226, 105, 71, 0.1); border: 1px solid #e26947; border-radius: 8px; padding: 14px 20px; max-width: 480px; margin: 0 auto 24px; color: #ff9e85; font-size: 13px;" id="rejectReasonText">
+        Reason: Invalid UTR or unreadable screenshot.
+      </div>
+      <a class="cta" href="/register">
+        RE-SUBMIT REGISTRATION / PAYMENT →
+      </a>
+    </div>
+
+    <!-- =========================================================
+         STATE 4: PAYMENT REQUIRED (PENDING)
+         ========================================================= -->
+    <div class="status-card" id="statePending" style="display: none;">
+      <div class="status-icon pending-verification">💳</div>
+      <span class="badge badge-gold" style="margin-bottom: 14px;">
+        PAYMENT REQUIRED (₹79)
+      </span>
+      <h1 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: clamp(38px, 5vw, 56px); margin-bottom: 12px;">
+        Complete Your UPI Payment
+      </h1>
+      <p style="color: #d5cbbd; max-width: 580px; margin: 0 auto 24px; font-size: 15px;">
+        Your registration details were saved, but ₹79 payment proof has not been submitted yet.
+      </p>
+      <a class="cta" href="/register">
+        PROCEED TO PAYMENT →
+      </a>
+    </div>
+
+    <!-- SEARCH / LOOKUP FALLBACK BAR -->
+    <div style="max-width: 580px; margin: 60px auto 0; text-align: center; border-top: 1px solid var(--line); padding-top: 30px;">
+      <span class="kicker" style="font-size: 10px; margin-bottom: 8px;">CHECK EXISTING REGISTRATION STATUS</span>
+      <form id="lookupForm" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px;">
+        <input type="text" id="lookupId" class="form-control" style="flex: 1 1 200px; min-width: 180px;" placeholder="Registration ID (e.g. OC-OM-1234)" required>
+        <input type="tel" id="lookupPhone" class="form-control" style="flex: 1 1 180px; min-width: 160px;" placeholder="Phone (10-digits)" required>
+        <button type="submit" class="cta cta-secondary" style="white-space: nowrap; padding: 12px 22px;">
+          Check Status
+        </button>
+      </form>
+      <div id="lookupMessage" style="margin-top: 12px; font-size: 13px; display: none;"></div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/register">Register</a>
+      <a href="/certificate">Certificate</a>
+      <a href="/scanner">Event Scanner</a>
+    </div>
+  </footer>
+
+  <script src="/js/success.js"></script>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Register for Offstage Creators Online Open Mic. Fee: ₹79. Pay via UPI.">
+  <title>Performer Registration | Online Open Mic — Offstage Creators</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/forms.css">
+  <link rel="icon" href="./assets/logo.png" type="image/png">
+  <style>
+    .otp-input-field {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: 0.35em;
+      text-align: center;
+      max-width: 280px;
+      margin: 12px auto 0;
+      padding: 14px 10px;
+      background: #080706;
+      border: 2px solid #e4ad57;
+      color: #ffd685;
+      border-radius: var(--radius-sm);
+    }
+    .otp-input-field:focus {
+      outline: none;
+      border-color: #f7eee1;
+      box-shadow: 0 0 15px rgba(228, 173, 87, 0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="./assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a class="active" href="/register">Register</a>
+        <a href="/certificate">Certificate</a>
+        <a href="/#delhi-event">Delhi Show</a>
+        <a href="/#about">About</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
+          ◎
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <a class="back-link" href="/">
+      ← Back to Offstage Creators
+    </a>
+
+    <!-- MULTI-STEP PROGRESS INDICATOR -->
+    <div class="steps-bar">
+      <div class="step-indicator active" id="stepIndicator1">
+        <span class="step-num">1</span>
+        <span>Details</span>
+      </div>
+      <span class="step-sep">›</span>
+      <div class="step-indicator" id="stepIndicator2">
+        <span class="step-num">2</span>
+        <span>Verify Email</span>
+      </div>
+      <span class="step-sep">›</span>
+      <div class="step-indicator" id="stepIndicator3">
+        <span class="step-num">3</span>
+        <span>UPI Pay ₹79</span>
+      </div>
+      <span class="step-sep">›</span>
+      <div class="step-indicator" id="stepIndicator4">
+        <span class="step-num">4</span>
+        <span>Proof</span>
+      </div>
+    </div>
+
+    <div class="page-head" id="pageHead">
+      <span class="kicker orange">ONLINE OPEN MIC — 23 SEPTEMBER</span>
+      <h1 id="pageHeading">Performer<br><em>Registration</em></h1>
+      <p id="pageSubheading">
+        Reserve your performance slot for the upcoming edition. Each registered creator receives a 5-7 minute stage slot and a verified certificate.
+      </p>
+    </div>
+
+    <!-- EVENT SUMMARY BAR -->
+    <div class="event-summary-bar">
+      <div class="summary-details">
+        <div class="summary-item">
+          <span class="summary-label">Event</span>
+          <span class="summary-value">Online Open Mic 2026</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Date</span>
+          <span class="summary-value">23 September</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Time</span>
+          <span class="summary-value">7:30 PM IST</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">Tonight's Voice</span>
+          <span class="summary-value">Tomboy</span>
+        </div>
+      </div>
+      <div class="summary-item" style="text-align: right;">
+        <span class="summary-label">Registration Fee</span>
+        <span class="summary-price">₹79</span>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="alert-box alert-error" id="errorAlert"></div>
+    <div class="alert-box alert-success" id="successAlert"></div>
+
+    <!-- =======================================================
+         STEP 1: PARTICIPANT INFORMATION FORM
+         ======================================================= -->
+    <div class="form-card" id="step1Card">
+      <form id="regForm">
+        <div class="form-grid">
+          <!-- Full Name -->
+          <div class="form-group">
+            <label for="fullName">Full Name <span class="req">*</span></label>
+            <input type="text" id="fullName" name="fullName" class="form-control" placeholder="e.g. Aarav Sharma" required>
+          </div>
+
+          <!-- WhatsApp / Phone -->
+          <div class="form-group">
+            <label for="phone">WhatsApp / Mobile Number <span class="req">*</span></label>
+            <input type="tel" id="phone" name="phone" class="form-control" placeholder="10-digit WhatsApp number" maxlength="10" required>
+          </div>
+
+          <!-- Email -->
+          <div class="form-group">
+            <label for="email">Email Address <span class="req">*</span></label>
+            <input type="email" id="email" name="email" class="form-control" placeholder="e.g. aarav@example.com" required>
+            <small style="color: #8e8477; font-size: 11px; margin-top: 4px;">A 6-digit verification code will be sent to this email address.</small>
+          </div>
+
+          <!-- City -->
+          <div class="form-group">
+            <label for="city">Your City <span class="req">*</span></label>
+            <input type="text" id="city" name="city" class="form-control" placeholder="e.g. New Delhi, Mumbai, Jaipur" required>
+          </div>
+
+          <!-- Category -->
+          <div class="form-group">
+            <label for="category">Performance Category <span class="req">*</span></label>
+            <select id="category" name="category" class="form-control" required>
+              <option value="" disabled selected>Select category...</option>
+              <option value="Poetry & Shayari">Poetry &amp; Shayari</option>
+              <option value="Storytelling">Heartfelt Storytelling</option>
+              <option value="Stand-up Comedy">Stand-up Comedy</option>
+              <option value="Music & Vocals">Music &amp; Vocals</option>
+              <option value="Spoken Word">Spoken Word</option>
+              <option value="Other">Other Creative Performance</option>
+            </select>
+          </div>
+
+          <!-- Instagram Handle -->
+          <div class="form-group">
+            <label for="instagram">Instagram Handle (Optional)</label>
+            <input type="text" id="instagram" name="instagram" class="form-control" placeholder="e.g. aarav_writes">
+          </div>
+
+          <!-- Performance Title -->
+          <div class="form-group full">
+            <label for="performanceTitle">Performance / Piece Title <span class="req">*</span></label>
+            <input type="text" id="performanceTitle" name="performanceTitle" class="form-control" placeholder="Title of your poem, story or piece" required>
+          </div>
+
+          <!-- Short Description -->
+          <div class="form-group full">
+            <label for="performanceDescription">Brief Description / Notes (Optional)</label>
+            <textarea id="performanceDescription" name="performanceDescription" class="form-control" placeholder="What is your piece about? Any notes or acoustic instruments?"></textarea>
+          </div>
+
+          <!-- Terms Checkbox -->
+          <div class="form-group full">
+            <label class="terms-row">
+              <input type="checkbox" id="terms" name="terms" required>
+              <span>
+                I agree to the performance guidelines (5-7 minute slot) and understand that the registration fee is ₹79 payable via UPI. I will maintain respect and creative honesty.
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-submit-row">
+          <div style="font-size: 13px; color: #9d9488;">
+            Step 1 of 4: Enter Details &amp; Verify Email
+          </div>
+
+          <button type="submit" id="submitDetailsBtn" class="cta">
+            <span id="btnText">CONTINUE TO VERIFY EMAIL</span>
+            <b>→</b>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- =======================================================
+         STEP 2: EMAIL VERIFICATION (6-DIGIT OTP)
+         ======================================================= -->
+    <div class="form-card" id="step2Card" style="display: none; max-width: 580px; margin: 0 auto; text-align: center;">
+      <div style="font-size: 38px; margin-bottom: 10px;">✉️</div>
+      <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 30px; color: #f7eee1; margin-bottom: 8px;">
+        Verify Your Email
+      </h3>
+      <p style="font-size: 14px; color: #d5cbbd; margin-bottom: 20px;">
+        We sent a 6-digit verification code to <b id="otpEmailDisplay" style="color: #e4ad57;">your email</b>.<br>
+        Please enter the code below to confirm your registration.
+      </p>
+
+      <form id="otpForm">
+        <div style="margin-bottom: 22px;">
+          <input type="text" id="otpInput" class="otp-input-field" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" placeholder="••••••" required autocomplete="one-time-code">
+          <div style="font-size: 12px; color: #8e8477; margin-top: 10px;">
+            ⏳ Code expires in <b>10 minutes</b>. (Max 5 attempts)
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; align-items: center;">
+          <button type="submit" id="verifyOtpBtn" class="cta" style="width: 100%; max-width: 320px;">
+            <span id="verifyOtpBtnText">VERIFY EMAIL &amp; PROCEED</span>
+            <b>→</b>
+          </button>
+
+          <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 13px;">
+            <button type="button" class="cta cta-secondary" id="resendOtpBtn" style="padding: 8px 16px; font-size: 12px;">
+              ⟳ Resend Code
+            </button>
+            <button type="button" class="cta cta-secondary" id="editEmailBtn" style="padding: 8px 16px; font-size: 12px;">
+              ← Edit Details
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- =======================================================
+         STEP 3: UPI PAYMENT SCREEN
+         ======================================================= -->
+    <div class="form-card upi-payment-section" id="step3Card" style="display: none;">
+      <div class="upi-card-layout">
+        <div class="upi-qr-frame">
+          <span class="kicker gold" style="font-size: 10px; margin-bottom: 8px;">SCAN VIA ANY UPI APP</span>
+          <!-- Official QR from repository assets -->
+          <img src="./assets/payment-qr.jpeg" alt="Offstage Creators Official UPI QR Code">
+          
+          <div class="upi-amount-tag">₹79.00</div>
+          <div style="font-size: 11px; color: #8e8477; text-transform: uppercase; font-weight: 800;">
+            EXACT REGISTRATION FEE
+          </div>
+
+          <div class="upi-id-box">
+            <span class="upi-id-text" id="upiIdText">preetiyadav15071985@okaxis</span>
+            <button type="button" class="copy-upi-btn" id="copyUpiBtn">Copy</button>
+          </div>
+        </div>
+
+        <div class="upi-instructions-list">
+          <div class="instruction-step">
+            <div class="step-badge">1</div>
+            <div class="step-text">
+              <h4>Scan QR or Use UPI ID</h4>
+              <p>Open Google Pay, PhonePe, Paytm, BHIM, or any banking UPI app and scan the QR code, or transfer ₹79 to <b>preetiyadav15071985@okaxis</b>.</p>
+            </div>
+          </div>
+
+          <div class="instruction-step">
+            <div class="step-badge">2</div>
+            <div class="step-text">
+              <h4>Pay Exactly ₹79</h4>
+              <p>Complete the payment of ₹79. Please verify the payee name is <b>Preeti Yadav / Offstage Creators</b> before confirming.</p>
+            </div>
+          </div>
+
+          <div class="instruction-step">
+            <div class="step-badge">3</div>
+            <div class="step-text">
+              <h4>Take a Screenshot &amp; Copy UTR</h4>
+              <p>Take a screenshot of the completed payment and copy the 12-digit UPI Reference / UTR / Transaction ID.</p>
+            </div>
+          </div>
+
+          <div style="margin-top: 18px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; gap: 14px; flex-wrap: wrap;">
+            <button type="button" class="cta" id="iHavePaidBtn">
+              <span>I HAVE PAID (PROCEED TO UPLOAD PROOF)</span>
+              <b>→</b>
+            </button>
+            <button type="button" class="cta cta-secondary" id="backToVerifyBtn">
+              ← Email Verification
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =======================================================
+         STEP 4: PROOF SUBMISSION FORM
+         ======================================================= -->
+    <div class="form-card upi-payment-section" id="step4Card" style="display: none;">
+      <form id="proofForm">
+        <div style="margin-bottom: 24px;">
+          <h3 style="font-family: 'Cormorant Garamond', Georgia, serif; font-size: 26px; color: #f7eee1; margin-bottom: 6px;">
+            Submit Payment Proof
+          </h3>
+          <p style="font-size: 13px; color: var(--muted);">
+            Registration ID: <b id="displayRegId" style="color: #e4ad57; font-family: monospace;">—</b>
+          </p>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 22px;">
+          <label for="transactionId">
+            UPI TRANSACTION ID / UTR (12 DIGITS) <span class="req">*</span>
+          </label>
+          <input type="text" id="transactionId" name="transactionId" class="form-control" placeholder="e.g. 426819876543" required minlength="6">
+          <small style="color: #8e8477; font-size: 11px; margin-top: 6px;">
+            Found in your UPI app payment receipt (listed as UPI Ref No, UTR, or Transaction ID).
+          </small>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 24px;">
+          <label>
+            PAYMENT SCREENSHOT <span class="req">*</span>
+          </label>
+          <div class="upload-dropzone" id="dropzone">
+            <input type="file" id="screenshotInput" name="screenshot" accept="image/jpeg,image/png,image/webp,image/jpg" required>
+            <div style="font-size: 32px; margin-bottom: 8px;">📷</div>
+            <div style="font-size: 14px; font-weight: 700; color: #f7eee1;">
+              Click or drag your payment screenshot here
+            </div>
+            <div style="font-size: 11px; color: #8e8477; margin-top: 4px;">
+              Supports JPG, JPEG, PNG, WebP (Max 5MB)
+            </div>
+            <img id="screenshotPreview" class="screenshot-preview" alt="Payment Screenshot Preview">
+          </div>
+        </div>
+
+        <div class="form-submit-row">
+          <button type="button" class="cta cta-secondary" id="backToQrBtn">
+            ← Back to QR
+          </button>
+          <button type="submit" id="submitProofBtn" class="cta">
+            <span id="proofBtnText">SUBMIT PAYMENT PROOF (₹79)</span>
+            <b>✓</b>
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/certificate">Certificate</a>
+      <a href="/scanner">Event Scanner</a>
+    </div>
+  </footer>
+
+  <script src="./js/register.js"></script>
+</body>
+</html>

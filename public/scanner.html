@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Offstage Creators Event Check-in Terminal & QR Scanner">
+  <title>Event Check-in Scanner | Offstage Creators</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/admin.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+  <!-- html5-qrcode camera barcode/QR scanner library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/register">Register</a>
+        <a href="/certificate">Certificate</a>
+        <a class="active" href="/scanner">Scanner</a>
+        <a href="/admin">Admin Portal</a>
+      </nav>
+
+      <div class="nav-actions">
+        <span class="badge badge-live">CHECK-IN TERMINAL</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="scanner-page">
+    <a class="back-link" href="/">
+      ← Back to Home
+    </a>
+
+    <div class="page-head">
+      <span class="kicker gold">OFFSTAGE CREATORS GATE SYSTEM</span>
+      <h1 style="font-size: clamp(38px, 5vw, 62px);">Event Check-in<br><em>QR Scanner</em></h1>
+      <p>Scan participant ticket QR codes to verify registration, payment status, and record live entry timestamps.</p>
+    </div>
+
+    <div class="scanner-box">
+      <!-- Camera Preview Box -->
+      <div class="scanner-video-wrap">
+        <div id="reader"></div>
+        <div class="scanner-reticle" id="reticle"></div>
+      </div>
+
+      <div class="scanner-controls">
+        <button type="button" class="cta cta-gold" id="startCamBtn">
+          📷 START CAMERA SCANNER
+        </button>
+        <button type="button" class="cta cta-secondary" id="stopCamBtn" style="display: none;">
+          ⏹️ STOP CAMERA
+        </button>
+      </div>
+
+      <!-- Feedback Banner -->
+      <div class="scan-feedback" id="scanFeedback"></div>
+
+      <!-- Manual Input Option -->
+      <div class="manual-entry-box">
+        <span class="kicker" style="font-size: 10px; margin-bottom: 6px;">MANUAL REGISTRATION LOOKUP</span>
+        <form class="manual-form" id="manualForm">
+          <input type="text" id="manualCode" class="form-control" placeholder="Enter Registration ID or Phone Number" required>
+          <button type="submit" class="cta" style="padding: 12px 18px; white-space: nowrap;">
+            LOOKUP →
+          </button>
+        </form>
+      </div>
+
+      <!-- Participant Result Card -->
+      <div class="participant-card" id="participantCard">
+        <div class="participant-head">
+          <div>
+            <div class="participant-name" id="pName">Aarav Sharma</div>
+            <div class="participant-cat" id="pCategory">Poetry &amp; Shayari</div>
+          </div>
+          <span class="table-status-badge status-paid" id="pPaymentBadge">PAID (₹79)</span>
+        </div>
+
+        <div class="participant-meta-list">
+          <div>
+            <span style="color: #8e8477; font-size: 10px; text-transform: uppercase; font-weight: 800;">REGISTRATION ID</span><br>
+            <b id="pRegId" style="font-family: monospace; color: #e4ad57;">OC-OM-1234</b>
+          </div>
+          <div>
+            <span style="color: #8e8477; font-size: 10px; text-transform: uppercase; font-weight: 800;">PHONE (VERIFIED)</span><br>
+            <b id="pPhone">98••••••32</b>
+          </div>
+          <div>
+            <span style="color: #8e8477; font-size: 10px; text-transform: uppercase; font-weight: 800;">PERFORMANCE TITLE</span><br>
+            <b id="pTitle">Dil Ke Alfaaz</b>
+          </div>
+          <div>
+            <span style="color: #8e8477; font-size: 10px; text-transform: uppercase; font-weight: 800;">CHECK-IN STATUS</span><br>
+            <span class="table-status-badge" id="pCheckinBadge">NOT CHECKED IN</span>
+          </div>
+        </div>
+
+        <button type="button" class="cta checkin-action-btn" id="checkinBtn">
+          ✓ CONFIRM ENTRY &amp; CHECK-IN
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/admin">Admin Portal</a>
+    </div>
+  </footer>
+
+  <script src="/js/scanner.js"></script>
+</body>
+</html>
