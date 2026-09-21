@@ -88,13 +88,6 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
       return res.status(404).json({ success: false, error: 'Registration record not found.' });
     }
 
-    if (!reg.email_verified) {
-      return res.status(403).json({
-        success: false,
-        error: 'Email verification required. Please verify your email with the 6-digit OTP before submitting payment proof.'
-      });
-    }
-
     if (reg.payment_status === 'PAID') {
       return res.status(400).json({
         success: false,

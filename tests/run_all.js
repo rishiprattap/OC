@@ -34,7 +34,7 @@ async function runMasterSuite() {
   console.log('                   FINAL TEST SUMMARY                 ');
   console.log('======================================================');
   console.log(`Platform & Payment Flow : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
-  console.log(`Email Service & OTP     : ${emailOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Email Service & Admin   : ${emailOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Google Meet System      : ${meetOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Analytics & Insights    : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Total Execution Time    : ${duration}s`);

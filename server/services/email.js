@@ -656,53 +656,57 @@ async function sendPaymentProofReceivedEmail({ to, registration }) {
 async function sendPaymentApprovedEmail({ to, registration }) {
   const regId = registration.registration_id;
   const appUrl = config.APP_URL || 'http://localhost:3000';
-  const subject = `Offstage Creators — Payment Confirmed ✓ | ${regId}`;
-  const headline = `Payment Verified &amp; <em>Confirmed!</em>`;
+  const subject = `Offstage Creators — Registration Approved ✓ | ${regId}`;
+  const headline = `Registration <em>Approved</em>`;
 
   const bodyContent = `
     <p class="content-text">
       Hello <b>${escapeHtml(registration.full_name)}</b>,
     </p>
     <p class="content-text">
-      Great news! Your ₹79 payment has been manually verified by the Offstage Creators organizing team. Your registration is now <b>CONFIRMED</b>.
+      Your registration for the Online Open Mic has been approved.
     </p>
 
     <div class="highlight-card" style="border-color: #3b6b45;">
       <div class="detail-row">
-        <span class="detail-label">Registration ID:</span>
+        <span class="detail-label">EVENT:</span>
+        <span class="detail-val">Online Open Mic</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">DATE:</span>
+        <span class="detail-val">23 September</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">TIME:</span>
+        <span class="detail-val">7:30 PM</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">REGISTRATION ID:</span>
         <span class="detail-val" style="color: #e4ad57; font-family: monospace;">${regId}</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Event:</span>
-        <span class="detail-val">Online Open Mic 2026</span>
+        <span class="detail-label">PAYMENT:</span>
+        <span class="detail-val" style="color: #6edb8c;">₹79 — VERIFIED</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Date &amp; Time:</span>
-        <span class="detail-val">23 September • 7:30 PM IST</span>
-      </div>
-      <div class="detail-row">
-        <span class="detail-label">Payment Status:</span>
-        <span class="detail-val" style="color: #6edb8c;">PAID &amp; VERIFIED (₹79)</span>
+        <span class="detail-label">STATUS:</span>
+        <span class="detail-val" style="color: #6edb8c; font-weight: 800;">REGISTRATION APPROVED</span>
       </div>
     </div>
 
-    <p class="content-text" style="font-size: 13px; color: #d5cbbd;">
-      <b>Important Performer Instructions:</b><br>
-      • Your official entry pass with a check-in QR code is ready.<br>
-      • Keep your pass accessible on your phone.<br>
-      • Please join 10 minutes prior (7:20 PM IST) for audio check.<br>
-      • Participation certificates will be unlocked on the certificate portal following attendance.
+    <p class="content-text" style="font-size: 13px; color: #d5cbbd; margin-top: 16px;">
+      <b>Please keep your QR pass ready when joining/checking in.</b>
     </p>
   `;
 
   const html = renderEmailWrapper({
     title: subject,
-    preheader: `Payment verified! Registration ${regId} is confirmed for Online Open Mic.`,
+    preheader: `Your registration ${regId} has been approved for Online Open Mic.`,
     headline,
     bodyContent,
-    ctaUrl: `${appUrl}/success?id=${encodeURIComponent(regId)}`,
-    ctaText: 'VIEW MY REGISTRATION PASS →',
-    badgeText: '✓ PAYMENT VERIFIED & CONFIRMED',
+    ctaUrl: `${appUrl}/registration/success?id=${encodeURIComponent(regId)}`,
+    ctaText: 'VIEW MY QR PASS →',
+    badgeText: '✓ REGISTRATION APPROVED',
     badgeColor: '#6edb8c'
   });
 
@@ -734,24 +738,28 @@ async function sendPaymentRejectedEmail({ to, registration, reason }) {
 
     <div class="highlight-card" style="border-color: #8c3b28;">
       <div class="detail-row">
-        <span class="detail-label">Registration ID:</span>
+        <span class="detail-label">REGISTRATION ID:</span>
         <span class="detail-val" style="color: #e4ad57; font-family: monospace;">${regId}</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Submitted UTR:</span>
+        <span class="detail-label">PARTICIPANT:</span>
+        <span class="detail-val">${escapeHtml(registration.full_name)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">SUBMITTED UTR:</span>
         <span class="detail-val" style="font-family: monospace;">${escapeHtml(registration.transaction_id || '—')}</span>
       </div>
       <div class="detail-row">
-        <span class="detail-label">Status:</span>
+        <span class="detail-label">STATUS:</span>
         <span class="detail-val" style="color: #ff8566;">VERIFICATION FAILED</span>
       </div>
       <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #2d2620; font-size: 13px; color: #ff9e85;">
-        <b>Organizer Note:</b> ${escapeHtml(rejectionReason)}
+        <b>REJECTION REASON:</b> ${escapeHtml(rejectionReason)}
       </div>
     </div>
 
     <p class="content-text">
-      Don't worry — your participant details are saved! Please verify that exactly ₹79 was sent to <b>${config.UPI.upiId}</b> and re-upload a clear screenshot showing the UTR number.
+      Your registration details are preserved. You do not need to create a new registration. Please review the details, verify that ₹79 was sent to <b>${config.UPI.upiId}</b>, and resubmit your payment proof.
     </p>
   `;
 
@@ -760,7 +768,7 @@ async function sendPaymentRejectedEmail({ to, registration, reason }) {
     preheader: `Payment proof for ${regId} could not be verified. Please resubmit proof.`,
     headline,
     bodyContent,
-    ctaUrl: `${appUrl}/register`,
+    ctaUrl: `${appUrl}/registration/success?id=${encodeURIComponent(regId)}`,
     ctaText: 'RESUBMIT PAYMENT PROOF →',
     badgeText: 'VERIFICATION UPDATE',
     badgeColor: '#e26947'

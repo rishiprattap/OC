@@ -270,17 +270,24 @@
           payBadge = `<span class="table-status-badge status-pending">PENDING</span>`;
         }
 
-        // Email Verification Badge
-        const isEmailVerified = Boolean(r.email_verified);
-        const emailVerifBadge = isEmailVerified
-          ? `<span style="display:inline-block; padding:2px 7px; border-radius:10px; font-size:9px; font-weight:800; background:rgba(110,219,140,0.15); color:#6edb8c; border:1px solid rgba(110,219,140,0.4);">VERIFIED ✓</span>`
-          : `<span style="display:inline-block; padding:2px 7px; border-radius:10px; font-size:9px; font-weight:800; background:rgba(226,105,71,0.15); color:#ff8566; border:1px solid rgba(226,105,71,0.4);">UNVERIFIED</span>`;
-
         let emailStatusBadge = '';
-        if (r.email_status === 'SENT') {
-          emailStatusBadge = `<span style="color:#6edb8c; font-size:10px; font-weight:700;">SENT</span>`;
-        } else if (r.email_status === 'FAILED') {
-          emailStatusBadge = `<span style="color:#ff8566; font-size:10px; font-weight:700;" title="${escapeHtml(r.email_error || '')}">FAILED ⚠</span>`;
+        if (r.payment_status === 'PAID') {
+          if (r.email_status === 'SENT') {
+            emailStatusBadge = `<span style="display:inline-block; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:800; background:rgba(110,219,140,0.15); color:#6edb8c; border:1px solid rgba(110,219,140,0.4);">APPROVAL EMAIL: SENT ✓</span>`;
+          } else if (r.email_status === 'FAILED') {
+            emailStatusBadge = `
+              <div style="margin-top:2px;">
+                <span style="display:inline-block; padding:2px 7px; border-radius:4px; font-size:9px; font-weight:800; background:rgba(226,105,71,0.15); color:#ff8566; border:1px solid rgba(226,105,71,0.4);" title="${escapeHtml(r.email_error || '')}">APPROVAL EMAIL: FAILED ⚠</span>
+                <button type="button" class="table-btn" style="color:#e4ad57; font-size:9px; padding:2px 6px; margin-top:3px; display:inline-block;" onclick="resendApprovalEmail('${r.registration_id}')">RESEND EMAIL</button>
+              </div>
+            `;
+          } else {
+            emailStatusBadge = `<span style="color:#e4ad57; font-size:10px; font-weight:700;">APPROVAL EMAIL: QUEUED</span>`;
+          }
+        } else if (r.payment_status === 'PENDING_VERIFICATION') {
+          emailStatusBadge = `<span style="color:#e4ad57; font-size:10px;">PROOF SUBMITTED</span>`;
+        } else if (r.payment_status === 'REJECTED') {
+          emailStatusBadge = `<span style="color:#ff8566; font-size:10px;">REJECTED</span>`;
         }
 
         const isChecked = Boolean(r.checked_in);
@@ -322,8 +329,7 @@
             <td>${escapeHtml(r.phone)}</td>
             <td>
               <span style="color:#f7eee1; font-size:12px;">${escapeHtml(r.email)}</span><br>
-              <div style="margin-top:3px; display:flex; gap:6px; align-items:center;">
-                ${emailVerifBadge}
+              <div style="margin-top:4px;">
                 ${emailStatusBadge}
               </div>
             </td>
@@ -619,6 +625,30 @@
       }
     });
   }
+
+  // Direct Resend Approval Email for Paid Registrations
+  window.resendApprovalEmail = async function (regId) {
+    if (!regId) return;
+    try {
+      const res = await fetch('/api/admin/email/resend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-secret': adminSecret
+        },
+        body: JSON.stringify({ registrationId: regId, emailType: 'PAYMENT_APPROVED' })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert(data.message || 'Registration approved email resent successfully!');
+        await loadDashboard();
+      } else {
+        alert(`Email sending failed: ${data.error || 'Check mail configuration'}`);
+      }
+    } catch (err) {
+      alert(`Network error resending email: ${err.message}`);
+    }
+  };
 
   // Resend Email Modal & Action
   window.openResendEmailModal = function (regId, email) {

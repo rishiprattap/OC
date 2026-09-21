@@ -29,11 +29,10 @@
 Offstage Creators is a creative community platform for poets, storytellers, stand-up comedians, and musicians. The platform manages attendee and performer lifecycle end-to-end:
 
 - **Featured Showcase**: Multi-event discovery with Online Open Mic dominating as Event #1 and Adhure Musafir (Delhi Show) as Event #2.
-- **Performer Registration**: Multi-step booking form with client-side input masking and server-side validation.
-- **Email OTP Verification**: Two-factor email validation before payment proof submission to eliminate spam and invalid email addresses.
-- **Manual UPI Payment Verification**: Direct ₹79 UPI QR payment (`preetiyadav15071985@okaxis`), transaction screenshot upload, unique UTR verification, and admin approval.
+- **Performer Registration**: Streamlined booking form with client-side validation and immediate registration pass issuance.
+- **Immediate QR Pass & UPI Payment**: Instant digital pass issuance upon registration submission, direct ₹79 UPI QR payment (`preetiyadav15071985@okaxis`), screenshot upload, UTR verification, and admin approval.
 - **Live Session / Google Meet Dispatcher**: Admin-only manual Meet link distributor with variable interpolation (`{{name}}`, `{{meet_link}}`, etc.), live responsive email preview, test email dispatch, batch delivery throttling, and failed retry queue.
-- **Event Entry QR Passes & Scanner**: Client-side SVG/Canvas QR pass generation matching registration ID, and an in-browser camera QR code scanner with duplicate entry prevention.
+- **Event Entry QR Passes & Scanner**: Client-side QR pass generation encoding registration ID, and an in-browser camera QR code scanner with payment status enforcement (only `PAID` allowed entry).
 - **Participation Certificates**: Dynamic Canvas-rendered certificates with verified signature seals, exportable to high-resolution PNG and PDF (via jsPDF).
 
 ---
@@ -76,13 +75,10 @@ The homepage and registration routing strictly follow this order:
 [ User Registers ]
        │
        ▼
-[ Server issues Registration ID (e.g. OC-OM-XXXX) ]
+[ Server issues Registration ID (e.g. OC-OM-XXXXXX) ]
        │
        ▼
-[ Email OTP Sent (6-digit, salted SHA-256 hash) ]
-       │
-       ▼
-[ User Verifies Email OTP ]
+[ Immediate Registration Pass & QR Code Shown ]
        │
        ▼
 [ User views ₹79 UPI QR (preetiyadav15071985@okaxis) ]
@@ -91,20 +87,24 @@ The homepage and registration routing strictly follow this order:
 [ User pays via GPay / PhonePe / Paytm / BHIM ]
        │
        ▼
-[ User uploads Screenshot + enters 12-digit UTR ]
+[ User uploads Screenshot + enters UTR / Transaction ID ]
        │
        ▼
 [ Backend saves proof in /uploads/screenshots ]
 [ Status = PENDING_VERIFICATION ]
        │
        ▼
-[ Admin reviews UTR & image in Dashboard ]
-       ├── APPROVE ──► Status = PAID ──► Ticket Pass Unlocked & Emailed
-       └── REJECT  ──► Status = REJECTED (Custom Reason) ──► Re-submission Allowed
+[ User redirected to /registration/success (Pass under verification) ]
+       │
+       ▼
+[ Admin reviews UTR & Screenshot in Dashboard ]
+       ├── APPROVE ──► Status = PAID ──► Automatic "Registration Approved" Email Sent ──► QR Pass Active for Entry
+       └── REJECT  ──► Status = REJECTED (Reason Emailed) ──► Resubmit Proof Allowed
 ```
 
 - **Duplicate UTR Prevention**: The database enforces uniqueness on submitted transaction IDs across registrations to prevent fraud.
 - **Tamper-Proof Status**: The frontend cannot alter payment status; only authenticated admin calls to `/api/admin/verify-payment` can transition a record to `PAID`.
+- **Scanner Gatekeeper**: Entry scanner verifies `payment_status === 'PAID'` in backend before permitting admission.
 
 ---
 
@@ -134,11 +134,9 @@ Located in the Admin Dashboard under **"🎥 Live Session / Google Meet"**:
 ## 6. Email Notification Suite (Gmail SMTP)
 
 Dispatches branded HTML emails with dark obsidian card headers, gold trim, clear CTAs, and sender attribution:
-- `EMAIL_VERIFICATION` — 6-digit registration OTP.
-- `REGISTRATION_RECEIVED` — Booking acknowledgement with UPI instructions.
 - `PAYMENT_PROOF_RECEIVED` — Confirmation that UTR and screenshot are under organizer review.
-- `PAYMENT_APPROVED` — Official confirmation with link to digital QR ticket pass.
-- `PAYMENT_REJECTED` — Polite rejection notice citing the organizer's reason and link to upload new proof.
+- `PAYMENT_APPROVED` — Official "Offstage Creators — Registration Approved ✓" with link to digital QR pass.
+- `PAYMENT_REJECTED` — Rejection notice citing organizer's reason and link to upload new proof.
 - `MEET_SESSION` — Google Meet invitation with high-visibility **"JOIN GOOGLE MEET →"** button.
 - `CHECKIN_CONFIRMED` — Venue check-in greeting and certificate portal link.
 - `CERTIFICATE_AVAILABLE` — Direct certificate download notification.
@@ -252,26 +250,27 @@ The project includes an end-to-end master test suite validating all backend endp
 npm test
 ```
 
-### Test Coverage (119 Tests — 100% Pass Rate):
-1. **Platform & Payment Suite (`tests/test_platform.js`) — 52 Tests**:
+### Test Coverage (110+ Tests — 100% Pass Rate):
+1. **Platform & Payment Suite (`tests/test_platform.js`) — 51 Tests**:
    - Config API verification (`₹79`, UPI ID, QR asset).
    - Homepage event ordering (Open Mic #1, Delhi Show #2, zero "Coming Soon").
-   - Multi-step registration, field validation, unique ID generation.
-   - Email verification OTP generation and validation.
-   - Payment screenshot upload & UTR handling.
+   - Multi-step registration, field validation, unique ID generation (`OC-OM-XXXXXX`).
+   - Immediate registration pass generation and QR issuance.
+   - Payment screenshot upload & UTR handling without OTP blocks.
    - Duplicate UTR collision prevention across registrations (HTTP 409).
    - Admin pending queue, overview stats, payment verification to `PAID`.
-   - Admin payment rejection with custom reason.
-   - Scanner ticket check-in and duplicate check-in blocking.
+   - Admin payment rejection with custom reason and resubmission link.
+   - Scanner ticket check-in and payment enforcement (`PAID` required for entry).
    - Certificate generation access control.
    - Admin security (unauthenticated access rejected with HTTP 401).
    - CSV audit export.
-2. **Gmail SMTP & Email Suite (`tests/test_email_system.js`) — 32 Tests**:
+2. **Gmail SMTP & Email Suite (`tests/test_email_system.js`) — 24 Tests**:
    - Live SMTP connection health check.
-   - Hashed OTP storage (salted SHA-256).
-   - Proof submission blocked before email verification (HTTP 403).
-   - Invalid OTP rejection & attempt incrementing.
-   - Admin transactional email resending.
+   - Immediate registration creation without OTP emails.
+   - Direct payment proof submission.
+   - Entry check-in blocked before admin payment approval.
+   - Admin approval transitions status to `PAID` and sends approval email.
+   - Resend approval email on failure without reverting `PAID` status.
    - Credential protection (no passwords exposed in public endpoints).
 3. **Google Meet Broadcast Suite (`tests/test_meet_system.js`) — 35 Tests**:
    - Security verification on `/api/admin/meet/*`.

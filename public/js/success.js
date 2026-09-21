@@ -15,6 +15,8 @@
   const verifName = document.getElementById('verifName');
   const verifRegId = document.getElementById('verifRegId');
   const verifUtr = document.getElementById('verifUtr');
+  const verifQrcode = document.getElementById('verifQrcode');
+  const verifQrRegId = document.getElementById('verifQrRegId');
   const refreshStatusBtn = document.getElementById('refreshStatusBtn');
 
   // Confirmed Ticket Elements
@@ -45,9 +47,10 @@
   function renderQR(text) {
     if (!qrContainer) return;
     qrContainer.innerHTML = '';
+    const cleanId = String(text).trim().toUpperCase();
     if (window.QRCode) {
       new window.QRCode(qrContainer, {
-        text: text, // ONLY the unique registration ID (e.g. OC-OM-4892)
+        text: cleanId, // ONLY the unique registration ID (e.g. OC-OM-4892)
         width: 140,
         height: 140,
         colorDark: '#000000',
@@ -56,9 +59,30 @@
       });
     } else {
       const img = document.createElement('img');
-      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(text)}`;
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(cleanId)}`;
       img.alt = 'Check-in QR';
       qrContainer.appendChild(img);
+    }
+  }
+
+  function renderVerifQR(text) {
+    if (!verifQrcode) return;
+    verifQrcode.innerHTML = '';
+    const cleanId = String(text).trim().toUpperCase();
+    if (window.QRCode) {
+      new window.QRCode(verifQrcode, {
+        text: cleanId, // ONLY the unique registration ID
+        width: 140,
+        height: 140,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: window.QRCode.CorrectLevel.H
+      });
+    } else {
+      const img = document.createElement('img');
+      img.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(cleanId)}`;
+      img.alt = 'Check-in QR';
+      verifQrcode.appendChild(img);
     }
   }
 
@@ -70,7 +94,8 @@
     if (status === 'PAID') {
       if (stateConfirmed) stateConfirmed.style.display = 'block';
       if (typeof window.trackEvent === 'function') {
-        window.trackEvent('registration_confirmation_viewed');
+        window.trackEvent('registration_approved');
+        window.trackEvent('qr_pass_viewed');
       }
       if (participantName) participantName.textContent = reg.fullName || reg.full_name;
       const id = reg.registrationId || reg.registration_id;
@@ -85,8 +110,15 @@
     } else if (status === 'PENDING_VERIFICATION') {
       if (stateVerification) stateVerification.style.display = 'block';
       if (verifName) verifName.textContent = reg.fullName || reg.full_name || 'Participant';
-      if (verifRegId) verifRegId.textContent = reg.registrationId || reg.registration_id || '—';
+      const id = reg.registrationId || reg.registration_id || '—';
+      if (verifRegId) verifRegId.textContent = id;
+      if (verifQrRegId) verifQrRegId.textContent = id;
       if (verifUtr) verifUtr.textContent = reg.transactionId || reg.transaction_id || 'Submitted via Screenshot';
+
+      renderVerifQR(id);
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('qr_pass_viewed');
+      }
 
     } else if (status === 'REJECTED') {
       if (stateRejected) stateRejected.style.display = 'block';

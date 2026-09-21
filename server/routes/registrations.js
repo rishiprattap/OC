@@ -86,19 +86,6 @@ router.post('/', async (req, res) => {
 
     const now = new Date().toISOString();
 
-    const {
-      generateOtp,
-      generateSalt,
-      hashOtp,
-      sendEmailVerificationEmail
-    } = require('../services/email');
-
-    // Generate secure OTP for email ownership verification
-    const otp = generateOtp();
-    const salt = generateSalt();
-    const otpHash = hashOtp(otp, salt);
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
     if (pendingExisting) {
       regId = pendingExisting.registration_id;
       await run(
@@ -110,12 +97,6 @@ router.post('/', async (req, res) => {
           instagram = ?,
           performance_title = ?,
           performance_description = ?,
-          email_otp_hash = ?,
-          email_otp_salt = ?,
-          email_otp_expires_at = ?,
-          email_verification_attempts = 0,
-          email_last_sent_at = NULL,
-          email_status = 'PENDING',
           updated_at = ?
         WHERE id = ?`,
         [
@@ -126,9 +107,6 @@ router.post('/', async (req, res) => {
           cleanInstagram,
           cleanTitle,
           cleanDesc,
-          otpHash,
-          salt,
-          expiresAt,
           now,
           pendingExisting.id
         ]
@@ -149,18 +127,11 @@ router.post('/', async (req, res) => {
           performance_description,
           amount,
           payment_status,
-          email_verified,
-          email_otp_hash,
-          email_otp_salt,
-          email_otp_expires_at,
-          email_verification_attempts,
-          email_last_sent_at,
-          email_status,
           checked_in,
           certificate_eligible,
           created_at,
           updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 'PENDING', 0, ?, ?, ?, 0, NULL, 'PENDING', 0, 0, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 'PENDING', 0, 0, ?, ?)`,
         [
           regId,
           eventId,
@@ -172,64 +143,18 @@ router.post('/', async (req, res) => {
           cleanInstagram,
           cleanTitle,
           cleanDesc,
-          otpHash,
-          salt,
-          expiresAt,
           now,
           now
         ]
       );
     }
 
-    // Send verification email
-    let emailResult = null;
-    try {
-      emailResult = await sendEmailVerificationEmail({
-        to: cleanEmail,
-        name: cleanFullName,
-        otp: otp,
-        registrationId: regId
-      });
-    } catch (err) {
-      console.error('Failed to send verification email:', err);
-      emailResult = { success: false, error: err.message || 'SMTP delivery failure' };
-    }
-
-    const emailSent = Boolean(emailResult && emailResult.success);
-
-    if (emailSent) {
-      await run(
-        `UPDATE registrations SET
-          email_last_sent_at = ?,
-          email_status = 'SENT',
-          email_error = NULL,
-          last_email_type = 'EMAIL_VERIFICATION'
-        WHERE registration_id = ?`,
-        [now, regId]
-      );
-    } else {
-      await run(
-        `UPDATE registrations SET
-          email_last_sent_at = NULL,
-          email_status = 'FAILED',
-          email_error = ?,
-          last_email_type = 'EMAIL_VERIFICATION'
-        WHERE registration_id = ?`,
-        [emailResult?.error || 'Failed to dispatch verification email via SMTP.', regId]
-      );
-    }
-
     return res.status(201).json({
       success: true,
-      emailSent: emailSent,
-      emailError: emailSent ? null : (emailResult?.error || 'Failed to dispatch verification email via SMTP.'),
-      message: emailSent
-        ? 'Verification code sent. Please check your inbox and spam folder.'
-        : "Registration was created, but we couldn't send the verification email. Please try again.",
+      message: 'Registration created successfully. Please complete your ₹79 UPI payment.',
       registrationId: regId,
+      fullName: cleanFullName,
       email: cleanEmail,
-      needsVerification: true,
-      emailVerified: false,
       amount: config.OPEN_MIC_FEE_INR,
       upi: {
         id: config.UPI.upiId,

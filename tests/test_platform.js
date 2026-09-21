@@ -153,21 +153,7 @@ async function runTests() {
     assert(checkinBlocked.status === 400, 'Scanner check-in rejected unpaid participant (HTTP 400)');
     assert(checkinBlocked.json.error.includes('PAYMENT NOT VERIFIED'), 'Error message states PAYMENT NOT VERIFIED');
 
-    // Test 6b: Email OTP Verification Step
-    const { get: dbGet, run: dbRun } = require('../server/db');
-    const { hashOtp } = require('../server/services/email');
-    const regRecord = await dbGet(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
-    const knownOtp = '654321';
-    const testHash = hashOtp(knownOtp, regRecord.email_otp_salt);
-    await dbRun(`UPDATE registrations SET email_otp_hash = ? WHERE registration_id = ?`, [testHash, regId]);
-
-    const verifyOtpRes = await request(
-      { path: '/api/email/verify-otp', method: 'POST', headers: { 'Content-Type': 'application/json' } },
-      { registrationId: regId, otp: knownOtp }
-    );
-    assert(verifyOtpRes.status === 200 && verifyOtpRes.json.emailVerified === true, 'Email successfully verified via 6-digit OTP');
-
-    // Test 7: Submit UPI Payment Proof (UTR + Screenshot)
+    // Test 7: Submit UPI Payment Proof directly without OTP verification (UTR + Screenshot)
     const dummyImageBuffer = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
       'base64'
@@ -193,7 +179,7 @@ async function runTests() {
       formData.headers
     );
 
-    assert(submitProofRes.status === 200, 'Payment proof submitted successfully (HTTP 200)');
+    assert(submitProofRes.status === 200, 'Payment proof submitted successfully without OTP (HTTP 200)');
     assert(submitProofRes.json.paymentStatus === 'PENDING_VERIFICATION', 'Status transitioned to PENDING_VERIFICATION');
     assert(submitProofRes.json.transactionId === testUtr, 'UTR recorded correctly');
     assert(submitProofRes.json.screenshotUrl && submitProofRes.json.screenshotUrl.startsWith('/uploads/screenshots/'), 'Screenshot saved to persistent storage');
@@ -211,7 +197,6 @@ async function runTests() {
       }
     );
     const reg2Id = reg2Res.json.registrationId;
-    await dbRun(`UPDATE registrations SET email_verified = 1 WHERE registration_id = ?`, [reg2Id]);
 
     const dupFormData = createMultipartFormData(
       {

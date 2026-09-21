@@ -31,7 +31,7 @@ router.get('/overview', async (req, res) => {
     const rejectedRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE payment_status = 'REJECTED'`);
     const checkedInRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE checked_in = 1`);
     const certEligibleRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE certificate_eligible = 1`);
-    const verifiedEmailsRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE email_verified = 1`);
+    const verifiedEmailsRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE payment_status = 'PAID' AND email_status = 'SENT'`);
     const failedEmailsRow = await get(`SELECT COUNT(*) as count FROM registrations WHERE email_status = 'FAILED'`);
 
     return res.json({
@@ -113,6 +113,13 @@ router.post('/verify-payment', async (req, res) => {
       });
     } catch (err) {
       console.error('Failed to send payment approval email:', err);
+      await run(
+        `UPDATE registrations SET
+          email_status = 'FAILED',
+          email_error = ?
+        WHERE registration_id = ?`,
+        [err.message || 'Approval email dispatch failed', registrationId]
+      );
     }
 
     return res.json({
@@ -217,15 +224,7 @@ router.post('/email/resend', async (req, res) => {
     } else if (type === 'CERTIFICATE_AVAILABLE') {
       result = await emailService.sendCertificateAvailableEmail({ to: reg.email, registration: reg });
     } else if (type === 'EMAIL_VERIFICATION') {
-      const otp = emailService.generateOtp();
-      const salt = emailService.generateSalt();
-      const hash = emailService.hashOtp(otp, salt);
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-      await run(
-        `UPDATE registrations SET email_otp_hash = ?, email_otp_salt = ?, email_otp_expires_at = ? WHERE registration_id = ?`,
-        [hash, salt, expiresAt, reg.registration_id]
-      );
-      result = await emailService.sendEmailVerificationEmail({ to: reg.email, name: reg.full_name, otp, registrationId: reg.registration_id });
+      return res.status(400).json({ success: false, error: 'Email OTP verification is deprecated and removed.' });
     } else {
       return res.status(400).json({ success: false, error: `Invalid email type requested: ${type}` });
     }

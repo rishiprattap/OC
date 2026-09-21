@@ -100,7 +100,7 @@ async function runEmailTests() {
     assert(healthRes.json.smtp.host === 'smtp.gmail.com', 'SMTP Host verified as smtp.gmail.com');
     assert(healthRes.json.smtp.user === 'offstagecreators77@gmail.com', 'Authenticated user is offstagecreators77@gmail.com');
 
-    // Test 2: Register participant -> Creates registration with email_verified = 0
+    // Test 2: Register participant -> Creates registration immediately without OTP
     const rand = Math.floor(1000 + Math.random() * 9000);
     const testEmail = `performer.${rand}@example.com`;
     const regRes = await request(
@@ -121,67 +121,17 @@ async function runEmailTests() {
     );
 
     assert(regRes.status === 201, 'Registration created with HTTP 201');
-    assert(regRes.json.needsVerification === true, 'Registration reports needsVerification: true');
-    assert(regRes.json.emailVerified === false, 'Registration starts with emailVerified: false');
+    assert(regRes.json && regRes.json.registrationId, 'Registration ID generated');
+    assert(regRes.json && regRes.json.amount === 79, 'Amount is ₹79');
+    assert(regRes.json && regRes.json.upi && regRes.json.upi.id, 'UPI details returned');
     const regId = regRes.json.registrationId;
 
-    // Test 3: Check database stores hashed OTP and salt, never plain text
+    // Test 3: Check database stores registration in PENDING status
     const dbRecord = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
-    assert(dbRecord.email_verified === 0, 'Database confirms email_verified is 0');
-    assert(dbRecord.email_otp_hash && dbRecord.email_otp_hash.length === 64, 'OTP is stored as a 64-char SHA256 hash');
-    assert(dbRecord.email_otp_salt && dbRecord.email_otp_salt.length === 32, 'Salt is securely stored with OTP');
-    assert(new Date(dbRecord.email_otp_expires_at) > new Date(), 'OTP expiration set in future (10m)');
+    assert(dbRecord.payment_status === 'PENDING', 'Database confirms payment_status is PENDING');
 
-    // Test 4: Attempting to submit payment proof BEFORE email verification is blocked
+    // Test 4: Submit UPI Payment Proof directly without OTP verification
     const dummyImageBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
-    const unverifiedProof = createMultipartFormData(
-      { registrationId: regId, transactionId: 'UPI' + Date.now() },
-      { name: 'screenshot', filename: 'test.png', contentType: 'image/png', data: dummyImageBuffer }
-    );
-    const blockedProofRes = await request(
-      { path: '/api/payments/submit-proof', method: 'POST' },
-      unverifiedProof.payload,
-      unverifiedProof.headers
-    );
-    assert(blockedProofRes.status === 403, 'Payment proof submission blocked when email is not verified (HTTP 403)');
-    assert(blockedProofRes.json.error.includes('Email verification required'), 'Error explicitly mentions email verification requirement');
-
-    // Test 5: Invalid OTP is rejected and attempt counter increments
-    const invalidOtpRes = await request(
-      {
-        path: '/api/email/verify-otp',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      },
-      { registrationId: regId, otp: '000000' }
-    );
-    assert(invalidOtpRes.status === 400, 'Invalid OTP rejected with HTTP 400');
-    const recordAfterFailed = await get(`SELECT email_verification_attempts FROM registrations WHERE registration_id = ?`, [regId]);
-    assert(recordAfterFailed.email_verification_attempts === 1, 'Verification attempt counter incremented in database');
-
-    // Test 6: Valid OTP verification succeeds
-    const { hashOtp } = require('../server/services/email');
-    const knownOtp = '123456';
-    const knownSalt = dbRecord.email_otp_salt;
-    const knownHash = hashOtp(knownOtp, knownSalt);
-    await run(`UPDATE registrations SET email_otp_hash = ? WHERE registration_id = ?`, [knownHash, regId]);
-
-    const validOtpRes = await request(
-      {
-        path: '/api/email/verify-otp',
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      },
-      { registrationId: regId, otp: knownOtp }
-    );
-    assert(validOtpRes.status === 200 && validOtpRes.json.emailVerified === true, 'Valid OTP verifies email successfully (HTTP 200)');
-
-    const verifiedRecord = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
-    assert(verifiedRecord.email_verified === 1, 'Database confirms email_verified = 1');
-    assert(verifiedRecord.email_verified_at !== null, 'Database records email_verified_at timestamp');
-    assert(verifiedRecord.email_otp_hash === null, 'OTP hash cleared from database after verification');
-
-    // Test 7: Submit payment proof now succeeds with verified email
     const testUtr = 'UTR' + Date.now();
     const verifiedProof = createMultipartFormData(
       { registrationId: regId, transactionId: testUtr },
@@ -192,10 +142,18 @@ async function runEmailTests() {
       verifiedProof.payload,
       verifiedProof.headers
     );
-    assert(submitProofRes.status === 200, 'Payment proof submitted successfully now that email is verified');
+    assert(submitProofRes.status === 200, 'Payment proof submitted successfully without OTP verification');
     assert(submitProofRes.json.paymentStatus === 'PENDING_VERIFICATION', 'Status transitioned to PENDING_VERIFICATION');
 
-    // Test 8: Check email_logs for Payment Proof and Admin Notification
+    // Test 5: Scanner rejects check-in while under verification
+    const scannerLookup = await request(
+      { path: '/api/scanner/lookup', method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      { code: regId }
+    );
+    assert(scannerLookup.status === 200, 'Scanner lookup succeeds');
+    assert(scannerLookup.json.participant.canCheckIn === false, 'Cannot check in while under verification');
+
+    // Test 6: Check email_logs for Payment Proof and Admin Notification
     let proofLogs;
     for (let attempts = 0; attempts < 8; attempts++) {
       await sleep(500);
@@ -213,7 +171,7 @@ async function runEmailTests() {
     assert(proofLogs && proofLogs.status === 200, 'Admin can access email_logs');
     assert(proofLogs && proofLogs.json.logs.length >= 1, 'Email audit logs recorded deliveries');
 
-    // Test 9: Admin verifies payment -> Sends payment approval & confirmation emails
+    // Test 7: Admin verifies payment -> Sends payment approval email
     const verifyPayRes = await request(
       {
         path: '/api/admin/verify-payment',
@@ -228,7 +186,7 @@ async function runEmailTests() {
     assert(paidRecord.payment_status === 'PAID', 'Database confirms registration is PAID');
     assert(paidRecord.payment_verified_by === 'Organizer', 'Database tracks payment_verified_by');
 
-    // Test 10: Admin Resend Email endpoint
+    // Test 8: Admin Resend Email endpoint
     await sleep(1500);
     const resendRes = await request(
       {
@@ -236,11 +194,11 @@ async function runEmailTests() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecret }
       },
-      { registrationId: regId, emailType: 'REGISTRATION_CONFIRMED' }
+      { registrationId: regId, emailType: 'PAYMENT_APPROVED' }
     );
-    assert(resendRes.status === 200 && resendRes.json.success === true, 'Admin can resend transactional emails on demand');
+    assert(resendRes.status === 200 && resendRes.json.success === true, 'Admin can resend approval emails on demand');
 
-    // Test 11: Scanner check-in sends check-in confirmation email
+    // Test 9: Scanner check-in sends check-in confirmation email
     const checkinRes = await request(
       {
         path: '/api/scanner/check-in',
@@ -251,7 +209,7 @@ async function runEmailTests() {
     );
     assert(checkinRes.status === 200 && checkinRes.json.success === true, 'Venue check-in confirms participant');
 
-    // Test 12: Certificate portal unlocks and triggers certificate available email
+    // Test 10: Certificate portal unlocks and triggers certificate available email
     const certRes = await request(
       {
         path: '/api/certificate/verify',
@@ -262,7 +220,7 @@ async function runEmailTests() {
     );
     assert(certRes.status === 200, 'Certificate verification succeeds for checked-in participant');
 
-    // Test 13: Rejection email flow on second registration
+    // Test 11: Rejection email flow on second registration without OTP
     const reg2Res = await request(
       {
         path: '/api/registrations',
@@ -280,7 +238,6 @@ async function runEmailTests() {
       }
     );
     const reg2Id = reg2Res.json.registrationId;
-    await run(`UPDATE registrations SET email_verified = 1 WHERE registration_id = ?`, [reg2Id]);
     const reg2Proof = createMultipartFormData(
       { registrationId: reg2Id, transactionId: 'UTR_REJECT_' + rand },
       { name: 'screenshot', filename: 'reject.png', contentType: 'image/png', data: dummyImageBuffer }

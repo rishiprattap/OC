@@ -193,7 +193,7 @@
         <span class="metric-value paid" id="statPaid">0</span>
       </div>
       <div class="metric-card">
-        <span class="metric-label">Verified Emails</span>
+        <span class="metric-label">Approval Emails Sent</span>
         <span class="metric-value" id="statVerifiedEmails" style="color: #6edb8c;">0</span>
       </div>
       <div class="metric-card">
@@ -638,7 +638,6 @@
           </h3>
 
           <ul style="font-size: 13px; line-height: 1.9; color: #d5cbbd; padding-left: 18px; margin: 0;">
-            <li><b>Email OTP Verification</b> (6-digit cryptographically secure code, 10m expiry)</li>
             <li><b>Registration Received</b> (Participant slot reserved, ₹79 UPI instructions)</li>
             <li><b>Payment Proof Received</b> (Status: UNDER VERIFICATION)</li>
             <li><b>Admin Verification Alert</b> (Sent to offstagecreators77@gmail.com)</li>
@@ -781,10 +780,10 @@
         <div class="form-group" style="margin-bottom: 18px;">
           <label>EMAIL TYPE</label>
           <select id="resendTypeSelect" class="form-control" required>
-            <option value="PAYMENT_APPROVED">Payment Confirmed / Ticket Pass</option>
+            <option value="PAYMENT_APPROVED">Registration Approved / Ticket Pass</option>
             <option value="PAYMENT_PROOF_RECEIVED">Payment Proof Under Verification</option>
             <option value="REGISTRATION_RECEIVED">Registration Received (UPI Instructions)</option>
-            <option value="EMAIL_VERIFICATION">Email Verification (New 6-digit OTP)</option>
+            <option value="PAYMENT_REJECTED">Payment Rejection Notice</option>
             <option value="CHECKIN_CONFIRMED">Check-in Attendance Confirmed</option>
             <option value="CERTIFICATE_AVAILABLE">Participation Certificate Ready</option>
           </select>
