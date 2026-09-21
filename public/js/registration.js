@@ -28,6 +28,9 @@
   const passCity = document.getElementById('passCity');
   const passDateTime = document.getElementById('passDateTime');
   const passStatusLabel = document.getElementById('passStatusLabel');
+  const passUtrRow = document.getElementById('passUtrRow');
+  const passUtr = document.getElementById('passUtr');
+  const passProofStatus = document.getElementById('passProofStatus');
 
   const qrContainer = document.getElementById('qrContainer');
   const qrCaption = document.getElementById('qrCaption');
@@ -39,6 +42,15 @@
   const rejectedNotice = document.getElementById('rejectedNotice');
   const rejectedReasonText = document.getElementById('rejectedReasonText');
   const performerGuidelines = document.getElementById('performerGuidelines');
+
+  // Payment submission elements on pass page
+  const paymentSubmissionBox = document.getElementById('paymentSubmissionBox');
+  const passProofForm = document.getElementById('passProofForm');
+  const passUtrInput = document.getElementById('passUtrInput');
+  const passScreenshotInput = document.getElementById('passScreenshotInput');
+  const passProofError = document.getElementById('passProofError');
+  const passProofSuccess = document.getElementById('passProofSuccess');
+  const passSubmitProofBtn = document.getElementById('passSubmitProofBtn');
 
   function showError(msg) {
     if (loadingState) loadingState.style.display = 'none';
@@ -157,6 +169,24 @@
         if (passTitleRow) passTitleRow.style.display = 'flex';
       }
 
+      // Payment UTR & Screenshot Status
+      if (reg.transactionId) {
+        if (passUtrRow) passUtrRow.style.display = 'flex';
+        if (passUtr) passUtr.textContent = reg.transactionId;
+        if (passProofStatus) {
+          passProofStatus.innerHTML = '<span style="color:#6edb8c; font-weight:700;">✓ Screenshot Attached (Under Verification)</span>';
+        }
+        if (paymentSubmissionBox) paymentSubmissionBox.style.display = 'none';
+      } else {
+        if (passUtrRow) passUtrRow.style.display = 'none';
+        if (passProofStatus) {
+          passProofStatus.innerHTML = '<span style="color:#e4ad57; font-weight:700;">⚠️ Proof Not Submitted</span>';
+        }
+        if (status !== 'REJECTED' && paymentSubmissionBox) {
+          paymentSubmissionBox.style.display = 'block';
+        }
+      }
+
       // Show status-specific notice
       const noticeId = cfg.notice;
       [pendingVerifNotice, verifiedNotice, approvedNotice, rejectedNotice].forEach(el => {
@@ -203,6 +233,83 @@
       console.error('[Registration] Load error:', err);
       showError('Network error loading registration. Please check your connection and try refreshing.');
     }
+  }
+
+  if (passProofForm) {
+    passProofForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (passProofError) passProofError.style.display = 'none';
+      if (passProofSuccess) passProofSuccess.style.display = 'none';
+
+      const utr = (passUtrInput?.value || '').trim();
+      const file = passScreenshotInput?.files?.[0];
+
+      if (!utr || utr.length < 6) {
+        if (passProofError) {
+          passProofError.textContent = 'Please enter a valid UPI Transaction ID / UTR (minimum 6 digits).';
+          passProofError.style.display = 'block';
+        }
+        return;
+      }
+
+      if (!file) {
+        if (passProofError) {
+          passProofError.textContent = 'Please select your payment screenshot.';
+          passProofError.style.display = 'block';
+        }
+        return;
+      }
+
+      if (passSubmitProofBtn) {
+        passSubmitProofBtn.disabled = true;
+        passSubmitProofBtn.textContent = 'Uploading…';
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('registrationId', registrationId);
+        formData.append('transactionId', utr);
+        formData.append('screenshot', file);
+
+        const res = await fetch('/api/payments/submit-proof', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          if (passProofError) {
+            passProofError.textContent = data.error || 'Failed to upload payment proof.';
+            passProofError.style.display = 'block';
+          }
+          if (passSubmitProofBtn) {
+            passSubmitProofBtn.disabled = false;
+            passSubmitProofBtn.textContent = 'SUBMIT PAYMENT PROOF →';
+          }
+          return;
+        }
+
+        if (passProofSuccess) {
+          passProofSuccess.textContent = 'Payment proof submitted successfully! Updating pass…';
+          passProofSuccess.style.display = 'block';
+        }
+
+        setTimeout(() => {
+          loadRegistration();
+        }, 1200);
+
+      } catch (err) {
+        if (passProofError) {
+          passProofError.textContent = 'Network error uploading proof. Please try again.';
+          passProofError.style.display = 'block';
+        }
+        if (passSubmitProofBtn) {
+          passSubmitProofBtn.disabled = false;
+          passSubmitProofBtn.textContent = 'SUBMIT PAYMENT PROOF →';
+        }
+      }
+    });
   }
 
   loadRegistration();

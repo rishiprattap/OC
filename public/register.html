@@ -146,6 +146,101 @@
       .otp-digit { width: 42px; height: 52px; font-size: 20px; }
       .step-pill { padding: 6px 10px; font-size: 11px; }
     }
+
+    /* Payment Step Styling */
+    .payment-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .payment-grid { grid-template-columns: 1fr; }
+    }
+    .upi-qr-card {
+      background: #0d0c0a;
+      border: 1px solid #2a231c;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+    .upi-qr-img {
+      max-width: 220px;
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      border: 2px solid rgba(228, 173, 87, 0.4);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+      margin: 12px 0 16px;
+    }
+    .upi-copy-box {
+      background: #141210;
+      border: 1px solid #2a231c;
+      border-radius: 8px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .upi-copy-btn {
+      background: rgba(228, 173, 87, 0.15);
+      border: 1px solid #e4ad57;
+      color: #e4ad57;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .upi-copy-btn:hover {
+      background: #e4ad57;
+      color: #0d0c0a;
+    }
+    .dropzone {
+      border: 2px dashed #3a3227;
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      background: rgba(20, 18, 16, 0.5);
+      transition: all 0.2s ease;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #e4ad57;
+      background: rgba(228, 173, 87, 0.05);
+    }
+    .dropzone-preview {
+      display: none;
+      position: relative;
+      margin-top: 12px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #2a231c;
+    }
+    .dropzone-preview img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      background: #000;
+      display: block;
+    }
+    .dropzone-remove-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid #e26947;
+      color: #ff8566;
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -185,7 +280,11 @@
       </div>
       <span class="step-sep">›</span>
       <div class="step-pill" id="stepPill3">
-        <span class="num">3</span> Confirmed
+        <span class="num">3</span> ₹79 Payment
+      </div>
+      <span class="step-sep">›</span>
+      <div class="step-pill" id="stepPill4">
+        <span class="num">4</span> Confirmed
       </div>
     </div>
 
@@ -345,16 +444,99 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════
-         STEP 3: REGISTRATION CONFIRMED
+         STEP 3: ₹79 PAYMENT & SCREENSHOT SUBMISSION
          ══════════════════════════════════════════════════ -->
-    <div class="form-card" id="step3Card" style="display:none; text-align:center;">
+    <div class="form-card" id="step3Card" style="display:none;">
+      <div style="text-align:center; margin-bottom:28px;">
+        <span class="badge badge-live" style="margin-bottom:12px; display:inline-block;">✓ EMAIL VERIFIED</span>
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 8px; color:#f7eee1;">
+          Complete Entry Fee (₹79)
+        </h2>
+        <p style="color:#d5cbbd; font-size:14px; max-width:520px; margin:0 auto;">
+          Pay ₹79 using any UPI app (GPay, PhonePe, Paytm, BHIM). Then enter your 12-digit UPI reference (UTR) and upload your payment screenshot.
+        </p>
+      </div>
+
+      <div class="payment-grid">
+        <!-- LEFT: UPI QR & DETAILS -->
+        <div class="upi-qr-card">
+          <div style="font-size:11px; font-weight:800; letter-spacing:0.18em; color:#e4ad57; text-transform:uppercase;">
+            SCAN &amp; PAY ₹79
+          </div>
+          <img src="/assets/payment-qr.jpeg" alt="₹79 UPI Payment QR Code" class="upi-qr-img" id="paymentQrImg">
+
+          <div style="font-size:12px; color:#9d9488; margin-bottom:4px;">Payee Name</div>
+          <div style="font-weight:700; color:#f7eee1; font-size:15px; margin-bottom:12px;">Preeti Yadav / Offstage Creators</div>
+
+          <div style="font-size:12px; color:#9d9488; margin-bottom:4px;">UPI ID</div>
+          <div class="upi-copy-box">
+            <span style="font-family:monospace; color:#e4ad57; font-weight:700; font-size:13px;" id="upiIdText">preetiyadav15071985@okaxis</span>
+            <button type="button" class="upi-copy-btn" id="copyUpiBtn">COPY</button>
+          </div>
+
+          <div style="font-size:11px; color:#8e8477; margin-top:12px; line-height:1.5;">
+            Accepted Apps: Google Pay · PhonePe · Paytm · BHIM · Cred · Any UPI App
+          </div>
+        </div>
+
+        <!-- RIGHT: SUBMIT PROOF FORM -->
+        <div>
+          <form id="paymentProofForm" novalidate>
+            <div style="background:#141210; border:1px solid #2a231c; border-radius:10px; padding:16px; margin-bottom:20px;">
+              <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:6px;">
+                <span style="color:#8e8477;">Performer:</span>
+                <span style="color:#f7eee1; font-weight:600;" id="paymentPerformerName">—</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:13px;">
+                <span style="color:#8e8477;">Registration ID:</span>
+                <span style="color:#e4ad57; font-family:monospace; font-weight:700;" id="paymentRegIdDisplay">—</span>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:20px;">
+              <label for="utrInput">UPI Transaction ID / UTR <span class="req">*</span></label>
+              <input type="text" id="utrInput" name="transactionId" class="form-control" placeholder="e.g. 423819284729 (min 6 digits)" required autocomplete="off">
+              <small style="color:#8e8477; font-size:11px; margin-top:4px; display:block;">
+                Found in your payment app under "UPI Ref No.", "Transaction ID", or "UTR".
+              </small>
+            </div>
+
+            <div class="form-group" style="margin-bottom:24px;">
+              <label>Payment Screenshot <span class="req">*</span></label>
+              <input type="file" id="screenshotInput" name="screenshot" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;" required>
+              
+              <div class="dropzone" id="screenshotDropzone">
+                <div style="font-size:28px; margin-bottom:8px;">📎</div>
+                <div style="font-size:14px; font-weight:600; color:#f7eee1; margin-bottom:4px;" id="dropzonePrompt">Click or drag screenshot here</div>
+                <div style="font-size:11px; color:#8e8477;" id="dropzoneSub">JPG, PNG, WebP up to 5 MB</div>
+              </div>
+
+              <div class="dropzone-preview" id="screenshotPreviewContainer">
+                <img id="screenshotPreviewImg" src="" alt="Screenshot Preview">
+                <button type="button" class="dropzone-remove-btn" id="removeScreenshotBtn">✕ Remove</button>
+              </div>
+            </div>
+
+            <button type="submit" id="submitProofBtn" class="cta" style="width:100%; justify-content:center;">
+              <span id="submitProofBtnText">SUBMIT PAYMENT PROOF</span>
+              <b>→</b>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         STEP 4: REGISTRATION & PAYMENT CONFIRMED
+         ══════════════════════════════════════════════════ -->
+    <div class="form-card" id="step4Card" style="display:none; text-align:center;">
       <div class="success-icon">✓</div>
-      <span class="badge badge-live" style="margin-bottom:16px; display:inline-block;">✓ EMAIL VERIFIED</span>
+      <span class="badge badge-live" style="margin-bottom:16px; display:inline-block;">✓ PAYMENT PROOF SUBMITTED</span>
       <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:36px; margin:0 0 12px; color:#f7eee1;">
-        Registration Confirmed!
+        Registration Submitted!
       </h2>
       <p style="color:#d5cbbd; font-size:15px; max-width:480px; margin:0 auto 24px;">
-        Your email is verified and registration is created. A confirmation email has been sent to your inbox.
+        Your email is verified and payment proof has been received. The organizers are reviewing your submission.
       </p>
 
       <div style="background:#0d0c0a; border:1px solid rgba(228,173,87,0.3); border-radius:12px; padding:24px; max-width:420px; margin:0 auto 24px; text-align:left;">
@@ -363,6 +545,8 @@
         <div class="reg-id-display" id="confirmedRegId">—</div>
         <div style="font-size:13px; color:#9d9488; margin:12px 0 4px;">Name</div>
         <div style="font-weight:700; color:#f7eee1;" id="confirmedName">—</div>
+        <div style="font-size:13px; color:#9d9488; margin:12px 0 4px;">Transaction ID / UTR</div>
+        <div style="font-family:monospace; color:#e4ad57; font-weight:700;" id="confirmedUtr">—</div>
         <div style="font-size:13px; color:#9d9488; margin:12px 0 4px;">Status</div>
         <div><span class="badge badge-gold">Pending Organizer Approval</span></div>
       </div>
@@ -375,7 +559,7 @@
       </div>
 
       <p style="font-size:12px; color:#8e8477; margin-top:20px;">
-        The organizers will review your registration. You'll receive an approval email once confirmed.
+        Once approved, you will receive an approval email with your Google Meet performance room link.
       </p>
     </div>
   </main>

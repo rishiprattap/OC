@@ -1,8 +1,9 @@
 /**
- * Offstage Creators — Registration Flow
+ * Offstage Creators — Registration Flow (4 Steps)
  * Step 1: Form submission → creates registration + sends OTP
- * Step 2: OTP verification (6-digit input with resend cooldown)
- * Step 3: Confirmed — links to /registration/:id
+ * Step 2: OTP verification (6-digit input with countdown & resend cooldown)
+ * Step 3: ₹79 UPI Payment & Screenshot Submission (UTR + screenshot file upload)
+ * Step 4: Confirmed — links to /registration/:id permalink
  */
 (function () {
   'use strict';
@@ -11,10 +12,12 @@
   const step1Card = document.getElementById('step1Card');
   const step2Card = document.getElementById('step2Card');
   const step3Card = document.getElementById('step3Card');
+  const step4Card = document.getElementById('step4Card');
 
   const stepPill1 = document.getElementById('stepPill1');
   const stepPill2 = document.getElementById('stepPill2');
   const stepPill3 = document.getElementById('stepPill3');
+  const stepPill4 = document.getElementById('stepPill4');
 
   const pageHeading = document.getElementById('pageHeading');
   const pageSubheading = document.getElementById('pageSubheading');
@@ -23,9 +26,9 @@
   const submitBtn = document.getElementById('submitBtn');
   const submitBtnText = document.getElementById('submitBtnText');
 
+  // Step 2 elements
   const otpEmailDisplay = document.getElementById('otpEmailDisplay');
   const otpDigits = [1, 2, 3, 4, 5, 6].map(i => document.getElementById('otp' + i));
-
   const verifyOtpBtn = document.getElementById('verifyOtpBtn');
   const verifyBtnText = document.getElementById('verifyBtnText');
   const resendOtpBtn = document.getElementById('resendOtpBtn');
@@ -34,8 +37,25 @@
   const otpTimerDiv = document.getElementById('otpTimerDiv');
   const backToFormBtn = document.getElementById('backToFormBtn');
 
+  // Step 3 (Payment) elements
+  const paymentPerformerName = document.getElementById('paymentPerformerName');
+  const paymentRegIdDisplay = document.getElementById('paymentRegIdDisplay');
+  const copyUpiBtn = document.getElementById('copyUpiBtn');
+  const upiIdText = document.getElementById('upiIdText');
+  const paymentProofForm = document.getElementById('paymentProofForm');
+  const utrInput = document.getElementById('utrInput');
+  const screenshotInput = document.getElementById('screenshotInput');
+  const screenshotDropzone = document.getElementById('screenshotDropzone');
+  const screenshotPreviewContainer = document.getElementById('screenshotPreviewContainer');
+  const screenshotPreviewImg = document.getElementById('screenshotPreviewImg');
+  const removeScreenshotBtn = document.getElementById('removeScreenshotBtn');
+  const submitProofBtn = document.getElementById('submitProofBtn');
+  const submitProofBtnText = document.getElementById('submitProofBtnText');
+
+  // Step 4 elements
   const confirmedRegId = document.getElementById('confirmedRegId');
   const confirmedName = document.getElementById('confirmedName');
+  const confirmedUtr = document.getElementById('confirmedUtr');
   const viewPassLink = document.getElementById('viewPassLink');
 
   const errorAlert = document.getElementById('errorAlert');
@@ -45,6 +65,7 @@
   let activeRegistrationId = null;
   let activeEmail = null;
   let activeName = null;
+  let selectedScreenshotFile = null;
   let otpExpiresAt = null;
   let otpExpiryTimer = null;
   let resendCooldownTimer = null;
@@ -74,9 +95,9 @@
   function goToStep(step) {
     clearAlerts();
 
-    [step1Card, step2Card, step3Card].forEach(el => { if (el) el.style.display = 'none'; });
+    [step1Card, step2Card, step3Card, step4Card].forEach(el => { if (el) el.style.display = 'none'; });
 
-    const pills = [stepPill1, stepPill2, stepPill3];
+    const pills = [stepPill1, stepPill2, stepPill3, stepPill4];
     pills.forEach((pill, idx) => {
       if (!pill) return;
       pill.className = 'step-pill';
@@ -97,8 +118,15 @@
       startResendCooldown(60);
     } else if (step === 3) {
       if (step3Card) step3Card.style.display = 'block';
-      if (pageHeading) pageHeading.innerHTML = 'You\'re<br><em>Registered!</em>';
-      if (pageSubheading) pageSubheading.textContent = 'Your email is verified and registration is confirmed.';
+      if (pageHeading) pageHeading.innerHTML = 'Complete Entry<br><em>₹79 Payment</em>';
+      if (pageSubheading) pageSubheading.textContent = 'Scan the UPI QR code, make the payment, and upload your payment proof screenshot with the UTR number.';
+      if (paymentPerformerName) paymentPerformerName.textContent = activeName || '—';
+      if (paymentRegIdDisplay) paymentRegIdDisplay.textContent = activeRegistrationId || '—';
+      clearTimers();
+    } else if (step === 4) {
+      if (step4Card) step4Card.style.display = 'block';
+      if (pageHeading) pageHeading.innerHTML = 'You\'re<br><em>All Set!</em>';
+      if (pageSubheading) pageSubheading.textContent = 'Your email is verified and payment proof is under review by our organizers.';
       clearTimers();
     }
 
@@ -119,16 +147,16 @@
         clearInterval(otpExpiryTimer);
         return;
       }
-      const minutes = Math.floor(ms / 60000);
-      const seconds = Math.floor((ms % 60000) / 1000);
-      otpCountdownEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      const totalSec = Math.floor(ms / 1000);
+      const mins = Math.floor(totalSec / 60);
+      const secs = totalSec % 60;
+      otpCountdownEl.textContent = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     }
 
     tick();
     otpExpiryTimer = setInterval(tick, 1000);
   }
 
-  // ── Resend Cooldown ───────────────────────────────────────────────────────────
   function startResendCooldown(seconds) {
     if (resendCooldownTimer) clearInterval(resendCooldownTimer);
     if (!resendOtpBtn) return;
@@ -138,9 +166,9 @@
 
     function tick() {
       if (remaining <= 0) {
-        clearInterval(resendCooldownTimer);
         resendOtpBtn.disabled = false;
         if (resendTimerEl) resendTimerEl.textContent = '';
+        clearInterval(resendCooldownTimer);
         return;
       }
       if (resendTimerEl) resendTimerEl.textContent = `(${remaining}s)`;
@@ -156,77 +184,179 @@
     if (resendCooldownTimer) clearInterval(resendCooldownTimer);
   }
 
-  // ── OTP Input Magic ───────────────────────────────────────────────────────────
-  otpDigits.forEach((input, idx) => {
+  // ── OTP Inputs Logic ──────────────────────────────────────────────────────────
+  otpDigits.forEach((input, index) => {
     if (!input) return;
 
     input.addEventListener('input', (e) => {
       const val = e.target.value.replace(/\D/g, '');
-      e.target.value = val ? val[0] : '';
-      if (val && idx < otpDigits.length - 1) otpDigits[idx + 1].focus();
-      e.target.classList.toggle('filled', Boolean(val));
+      e.target.value = val ? val[val.length - 1] : '';
+
+      if (e.target.value && index < 5) {
+        otpDigits[index + 1].focus();
+      }
+
+      const allFilled = otpDigits.every(inp => inp && inp.value);
+      if (allFilled) {
+        verifyOTP();
+      }
     });
 
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Backspace' && !e.target.value && idx > 0) {
-        otpDigits[idx - 1].focus();
-        otpDigits[idx - 1].value = '';
-        otpDigits[idx - 1].classList.remove('filled');
-      }
-      if (e.key === 'ArrowLeft' && idx > 0) otpDigits[idx - 1].focus();
-      if (e.key === 'ArrowRight' && idx < otpDigits.length - 1) otpDigits[idx + 1].focus();
-      // Auto submit on last digit
-      if (e.key >= '0' && e.key <= '9' && idx === otpDigits.length - 1 && e.target.value) {
-        setTimeout(() => verifyOTP(), 100);
+      if (e.key === 'Backspace' && !e.target.value && index > 0) {
+        otpDigits[index - 1].focus();
       }
     });
 
     input.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
-      otpDigits.forEach((d, i) => {
-        d.value = pasted[i] || '';
-        d.classList.toggle('filled', Boolean(pasted[i]));
-      });
-      const lastFilled = Math.min(pasted.length, otpDigits.length) - 1;
-      if (lastFilled >= 0) otpDigits[lastFilled].focus();
-      if (pasted.length >= 6) setTimeout(() => verifyOTP(), 100);
+      if (pasted.length === 6) {
+        pasted.split('').forEach((char, i) => {
+          if (otpDigits[i]) otpDigits[i].value = char;
+        });
+        otpDigits[5].focus();
+        verifyOTP();
+      }
     });
   });
 
-  function getOTPValue() {
-    return otpDigits.map(d => (d ? d.value : '')).join('');
-  }
-
-  function setOTPError() {
-    otpDigits.forEach(d => { if (d) { d.classList.add('error'); d.classList.remove('success', 'filled'); } });
-  }
-
-  function setOTPSuccess() {
-    otpDigits.forEach(d => { if (d) { d.classList.add('success'); d.classList.remove('error'); } });
+  function getEnteredOTP() {
+    return otpDigits.map(i => (i ? i.value : '')).join('');
   }
 
   function clearOTPState() {
-    otpDigits.forEach(d => { if (d) { d.value = ''; d.className = 'otp-digit'; } });
+    otpDigits.forEach(i => {
+      if (i) {
+        i.value = '';
+        i.classList.remove('error', 'success');
+      }
+    });
+    if (otpDigits[0]) otpDigits[0].focus();
   }
 
-  // ── Step 1: Submit Registration Form ─────────────────────────────────────────
+  function setOTPError() {
+    otpDigits.forEach(i => { if (i) i.classList.add('error'); });
+  }
+
+  function setOTPSuccess() {
+    otpDigits.forEach(i => {
+      if (i) {
+        i.classList.remove('error');
+        i.classList.add('success');
+      }
+    });
+  }
+
+  // ── Copy UPI ID ───────────────────────────────────────────────────────────────
+  if (copyUpiBtn && upiIdText) {
+    copyUpiBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(upiIdText.textContent.trim());
+        const origText = copyUpiBtn.textContent;
+        copyUpiBtn.textContent = 'COPIED! ✓';
+        copyUpiBtn.style.background = '#6edb8c';
+        copyUpiBtn.style.color = '#0d0c0a';
+        setTimeout(() => {
+          copyUpiBtn.textContent = origText;
+          copyUpiBtn.style.background = '';
+          copyUpiBtn.style.color = '';
+        }, 2000);
+      } catch (e) {
+        // Fallback
+        const range = document.createRange();
+        range.selectNode(upiIdText);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        document.execCommand('copy');
+        copyUpiBtn.textContent = 'COPIED! ✓';
+        setTimeout(() => { copyUpiBtn.textContent = 'COPY'; }, 2000);
+      }
+    });
+  }
+
+  // ── Drag & Drop Screenshot Upload ─────────────────────────────────────────────
+  if (screenshotDropzone && screenshotInput) {
+    screenshotDropzone.addEventListener('click', () => {
+      screenshotInput.click();
+    });
+
+    screenshotDropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      screenshotDropzone.classList.add('dragover');
+    });
+
+    screenshotDropzone.addEventListener('dragleave', () => {
+      screenshotDropzone.classList.remove('dragover');
+    });
+
+    screenshotDropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      screenshotDropzone.classList.remove('dragover');
+      const files = e.dataTransfer.files;
+      if (files && files[0]) {
+        handleFileSelect(files[0]);
+      }
+    });
+
+    screenshotInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleFileSelect(e.target.files[0]);
+      }
+    });
+  }
+
+  function handleFileSelect(file) {
+    clearAlerts();
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      showError('Please select a valid image file (JPG, PNG, or WebP).');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError('Screenshot file size must be less than 5 MB.');
+      return;
+    }
+
+    selectedScreenshotFile = file;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      if (screenshotPreviewImg) screenshotPreviewImg.src = e.target.result;
+      if (screenshotDropzone) screenshotDropzone.style.display = 'none';
+      if (screenshotPreviewContainer) screenshotPreviewContainer.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (removeScreenshotBtn) {
+    removeScreenshotBtn.addEventListener('click', () => {
+      selectedScreenshotFile = null;
+      if (screenshotInput) screenshotInput.value = '';
+      if (screenshotPreviewContainer) screenshotPreviewContainer.style.display = 'none';
+      if (screenshotDropzone) screenshotDropzone.style.display = 'block';
+    });
+  }
+
+  // ── Step 1: Submit Details Form ───────────────────────────────────────────────
   if (regForm) {
     regForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       clearAlerts();
 
-      const fullName = document.getElementById('fullName')?.value.trim() || '';
-      const phone = (document.getElementById('phone')?.value || '').replace(/\D/g, '');
-      const email = document.getElementById('email')?.value.trim() || '';
-      const city = document.getElementById('city')?.value.trim() || '';
-      const category = document.getElementById('category')?.value || '';
-      const instagram = document.getElementById('instagram')?.value.trim() || '';
-      const performanceTitle = document.getElementById('performanceTitle')?.value.trim() || '';
-      const performanceDescription = document.getElementById('performanceDescription')?.value.trim() || '';
-      const terms = document.getElementById('terms')?.checked || false;
+      const fullName = (document.getElementById('fullName')?.value || '').trim();
+      const phone = (document.getElementById('phone')?.value || '').trim().replace(/\D/g, '');
+      const email = (document.getElementById('email')?.value || '').trim().toLowerCase();
+      const city = (document.getElementById('city')?.value || '').trim();
+      const category = (document.getElementById('category')?.value || '').trim();
+      const instagram = (document.getElementById('instagram')?.value || '').trim().replace(/^@/, '');
+      const performanceTitle = (document.getElementById('performanceTitle')?.value || '').trim();
+      const performanceDescription = (document.getElementById('performanceDescription')?.value || '').trim();
+      const terms = document.getElementById('terms')?.checked;
 
-      if (fullName.length < 2) return showError('Please enter your full name (minimum 2 characters).');
+      // Validation
+      if (fullName.length < 2) return showError('Please enter your full name.');
       if (phone.length < 10) return showError('Please enter a valid 10-digit WhatsApp/mobile number.');
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('Please enter a valid email address.');
       if (city.length < 2) return showError('Please enter your city.');
@@ -284,10 +414,10 @@
   // ── Step 2: Verify OTP ────────────────────────────────────────────────────────
   async function verifyOTP() {
     clearAlerts();
-    const otp = getOTPValue();
+    const otp = getEnteredOTP();
 
-    if (otp.length !== 6) {
-      showError('Please enter the complete 6-digit code.');
+    if (otp.length < 6) {
+      showError('Please enter the full 6-digit verification code.');
       return;
     }
 
@@ -309,13 +439,12 @@
 
       if (!res.ok || !data.success) {
         setOTPError();
-        const reason = data.reason;
-        if (reason === 'EXPIRED') {
-          showError('Your code has expired. Please click "Resend Code" to get a new one.');
-          clearOTPState();
-        } else if (reason === 'TOO_MANY_ATTEMPTS') {
-          showError('Too many incorrect attempts. Please click "Resend Code" to get a new code.');
-          clearOTPState();
+        if (data.reason === 'TOO_MANY_ATTEMPTS') {
+          showError('Too many incorrect attempts. Please click "Resend Code" for a new OTP.');
+          resendOtpBtn.disabled = false;
+        } else if (data.reason === 'EXPIRED') {
+          showError('Your code has expired. Please click "Resend Code" for a new OTP.');
+          resendOtpBtn.disabled = false;
         } else {
           showError(data.error || 'Incorrect code. Please try again.');
         }
@@ -324,13 +453,10 @@
         return;
       }
 
-      // Success
+      // Success — OTP verified
       setOTPSuccess();
 
-      if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
-      if (confirmedName) confirmedName.textContent = activeName;
-      if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
-
+      // Advance directly to Step 3: ₹79 Payment & Screenshot Submission
       goToStep(3);
 
     } catch (err) {
@@ -345,7 +471,7 @@
     verifyOtpBtn.addEventListener('click', verifyOTP);
   }
 
-  // ── Resend OTP ────────────────────────────────────────────────────────────────
+  // ── Step 2: Resend OTP ────────────────────────────────────────────────────────
   if (resendOtpBtn) {
     resendOtpBtn.addEventListener('click', async () => {
       clearAlerts();
@@ -378,25 +504,79 @@
         otpExpiresAt = data.expiresAt || new Date(Date.now() + 10 * 60 * 1000).toISOString();
         startOTPCountdown();
         startResendCooldown(60);
-        if (otpDigits[0]) otpDigits[0].focus();
-        showSuccess('A new verification code has been sent to your email.');
+        showSuccess(`New code sent to ${activeEmail}. Check your inbox.`);
 
       } catch (err) {
         console.error('[OTP] Resend error:', err);
-        showError('Network error. Please try again.');
+        showError('Network error while sending code. Please try again.');
         resendOtpBtn.disabled = false;
         resendOtpBtn.textContent = 'Resend Code';
       }
     });
   }
 
-  // ── Back to Form ──────────────────────────────────────────────────────────────
+  // ── Step 3: Submit Payment Proof ──────────────────────────────────────────────
+  if (paymentProofForm) {
+    paymentProofForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlerts();
+
+      const utr = (utrInput?.value || '').trim();
+
+      if (!utr || utr.length < 6) {
+        showError('Please enter a valid UPI Transaction ID / UTR (minimum 6 digits).');
+        return;
+      }
+
+      if (!selectedScreenshotFile) {
+        showError('Please upload your payment screenshot to verify payment.');
+        return;
+      }
+
+      submitProofBtn.disabled = true;
+      submitProofBtnText.textContent = 'UPLOADING PAYMENT PROOF…';
+
+      try {
+        const formData = new FormData();
+        formData.append('registrationId', activeRegistrationId);
+        formData.append('transactionId', utr);
+        formData.append('screenshot', selectedScreenshotFile);
+
+        const res = await fetch('/api/payments/submit-proof', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          showError(data.error || 'Failed to upload payment proof. Please try again.');
+          submitProofBtn.disabled = false;
+          submitProofBtnText.textContent = 'SUBMIT PAYMENT PROOF';
+          return;
+        }
+
+        // Successfully submitted payment proof
+        if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
+        if (confirmedName) confirmedName.textContent = activeName;
+        if (confirmedUtr) confirmedUtr.textContent = utr;
+        if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
+
+        goToStep(4);
+
+      } catch (err) {
+        console.error('[Payment Proof] Upload error:', err);
+        showError('Network error uploading payment proof. Please check your connection and try again.');
+        submitProofBtn.disabled = false;
+        submitProofBtnText.textContent = 'SUBMIT PAYMENT PROOF';
+      }
+    });
+  }
+
+  // ── Back to Step 1 ────────────────────────────────────────────────────────────
   if (backToFormBtn) {
     backToFormBtn.addEventListener('click', () => {
       clearTimers();
-      clearOTPState();
-      activeRegistrationId = null;
-      activeEmail = null;
       goToStep(1);
     });
   }

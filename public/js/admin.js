@@ -168,9 +168,14 @@
                 <th>Registration ID</th>
                 <th>Email</th>
                 <th>Category</th>
+                <th>Phone</th>
+                <th>City</th>
+                <th>Performance</th>
                 <th>Status</th>
                 <th>OTP</th>
                 <th>Registered</th>
+                <th>Transaction ID</th>
+                <th>Screenshot</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -181,9 +186,14 @@
                   <td class="id-cell">${escHtml(r.registrationId)}</td>
                   <td style="font-size:12px;">${escHtml(r.email)}</td>
                   <td style="font-size:12px;">${escHtml(r.category)}</td>
+                  <td>${escHtml(r.phone)}</td>
+                  <td>${escHtml(r.city || '—')}</td>
+                  <td>${escHtml(r.performanceTitle || '—')}</td>
                   <td><span class="status-pill status-${r.status}">${formatStatus(r.status)}</span></td>
                   <td style="text-align:center;">${r.otpVerified ? '<span style="color:#6edb8c;">✓</span>' : '<span style="color:#5a5248;">✗</span>'}</td>
                   <td style="font-size:11px; color:#8e8477;">${formatDate(r.createdAt)}</td>
+                  <td><span style="font-family:monospace; color:#e4ad57;">${escHtml(r.transactionId)}</span></td>
+                  <td>${r.paymentScreenshotUrl ? `<img src="${escHtml(r.paymentScreenshotUrl)}" alt="Screenshot" title="Click to enlarge" style="max-width:80px; border-radius:4px; cursor:zoom-in;" onclick="openLightbox('${escHtml(r.paymentScreenshotUrl)}')" />` : '—'}</td>
                   <td>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                       <button class="action-btn btn-view" onclick="openDetail('${escHtml(r.registrationId)}')">View</button>
@@ -262,7 +272,15 @@
           ${r.approvedBy ? `<div class="modal-row"><span class="modal-label">Approved By</span><span class="modal-value">${escHtml(r.approvedBy)}</span></div>` : ''}
           ${r.rejectedAt ? `<div class="modal-row"><span class="modal-label">Rejected At</span><span class="modal-value">${formatDate(r.rejectedAt)}</span></div>` : ''}
           ${r.rejectedReason ? `<div class="modal-row"><span class="modal-label">Rejection Reason</span><span class="modal-value">${escHtml(r.rejectedReason)}</span></div>` : ''}
-          ${r.transactionId ? `<div class="modal-row"><span class="modal-label">UPI Transaction ID</span><span class="modal-value" style="font-family:monospace;">${escHtml(r.transactionId)}</span></div>` : ''}
+          ${r.transactionId ? `<div class="modal-row"><span class="modal-label">UPI Transaction ID</span><span class="modal-value" style="font-family:monospace; color:#e4ad57; font-weight:700;">${escHtml(r.transactionId)}</span></div>` : '<div class="modal-row"><span class="modal-label">UPI Transaction ID</span><span class="modal-value" style="color:#8e8477;">Not submitted yet</span></div>'}
+          ${r.paymentScreenshotUrl ? `
+            <div class="modal-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
+              <span class="modal-label">Payment Screenshot (Click to enlarge)</span>
+              <a href="${escHtml(r.paymentScreenshotUrl)}" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center;">
+                <img src="${escHtml(r.paymentScreenshotUrl)}" alt="Payment Screenshot" style="max-width:100%; max-height:260px; border-radius:8px; border:1px solid #2a231c; object-fit:contain; background:#080706; padding:4px;" />
+              </a>
+            </div>
+          ` : '<div class="modal-row"><span class="modal-label">Payment Screenshot</span><span class="modal-value" style="color:#8e8477;">No screenshot uploaded</span></div>'}
           ${r.approvalEmailSentAt ? `<div class="modal-row"><span class="modal-label">Approval Email Sent</span><span class="modal-value" style="color:#6edb8c;">✓ ${formatDate(r.approvalEmailSentAt)}</span></div>` : ''}
           ${r.lastEmailError ? `<div class="modal-row"><span class="modal-label">Last Email Error</span><span class="modal-value" style="color:#e26947; font-size:11px;">${escHtml(r.lastEmailError)}</span></div>` : ''}
           <div class="modal-row"><span class="modal-label">Registered</span><span class="modal-value">${formatDate(r.createdAt)}</span></div>
@@ -416,6 +434,27 @@
       alert('Network error.');
     }
   };
+
+  // ── Lightbox ──────────────────────────────────────────────────────────────────
+  window.openLightbox = function (url) {
+    const overlay = document.getElementById('lightboxOverlay');
+    const img = document.getElementById('lightboxImg');
+    if (!overlay || !img) return;
+    img.src = url;
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
+  window.closeLightbox = function () {
+    const overlay = document.getElementById('lightboxOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') window.closeLightbox();
+  });
 
   // ── Utility ───────────────────────────────────────────────────────────────────
   function refreshCurrentTab() {

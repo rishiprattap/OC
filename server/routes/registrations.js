@@ -223,6 +223,9 @@ router.get('/:id', async (req, res) => {
         approvedAt: record.approved_at,
         rejectedAt: record.rejected_at,
         rejectedReason: record.rejected_reason,
+        transactionId: record.transaction_id,
+        paymentScreenshotUrl: record.payment_screenshot_url,
+        paymentSubmittedAt: record.payment_submitted_at,
         createdAt: record.created_at,
         qrCode,
         event: {

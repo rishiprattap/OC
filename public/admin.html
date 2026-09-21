@@ -11,6 +11,39 @@
   <link rel="stylesheet" href="/css/admin.css">
   <link rel="icon" href="/assets/logo.png" type="image/png">
   <style>
+    /* Lightbox */
+    #lightboxOverlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+      backdrop-filter: blur(8px);
+    }
+    #lightboxOverlay.open { display: flex; }
+    #lightboxImg {
+      max-width: 92vw;
+      max-height: 90vh;
+      border-radius: 10px;
+      box-shadow: 0 0 80px rgba(0,0,0,0.9);
+      object-fit: contain;
+      border: 1px solid rgba(205,164,91,0.3);
+      animation: lbIn 0.18s ease;
+    }
+    @keyframes lbIn {
+      from { opacity:0; transform: scale(0.88); }
+      to   { opacity:1; transform: scale(1); }
+    }
+    #lightboxClose {
+      position: fixed; top: 18px; right: 24px;
+      font-size: 28px; color: #e4ad57;
+      background: none; border: none;
+      cursor: pointer; line-height: 1;
+      z-index: 10000;
+    }
+    #lightboxClose:hover { color: #fff; }
     /* Login Overlay */
     .auth-overlay {
       position: fixed; inset: 0;
@@ -329,6 +362,12 @@
       <div class="modal-body" id="modalBody"></div>
       <div class="modal-actions" id="modalActions"></div>
     </div>
+  </div>
+
+  <!-- Lightbox for payment screenshots -->
+  <div id="lightboxOverlay" onclick="closeLightbox()">
+    <button id="lightboxClose" onclick="closeLightbox()" title="Close">✕</button>
+    <img id="lightboxImg" src="" alt="Payment Screenshot" onclick="event.stopPropagation()">
   </div>
 
   <script src="/js/admin.js"></script>

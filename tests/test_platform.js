@@ -16,9 +16,52 @@
  */
 const http = require('http');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const { run, get } = require('../server/db');
 const otpService = require('../server/services/otp');
+
+function postMultipart(pathUrl, fields, fileField) {
+  return new Promise((resolve, reject) => {
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+    const chunks = [];
+
+    for (const [key, val] of Object.entries(fields)) {
+      chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${val}\r\n`));
+    }
+
+    if (fileField) {
+      chunks.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${fileField.name}"; filename="${fileField.filename}"\r\nContent-Type: ${fileField.mimetype}\r\n\r\n`));
+      chunks.push(fileField.buffer);
+      chunks.push(Buffer.from('\r\n'));
+    }
+
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+    const fullBody = Buffer.concat(chunks);
+
+    const req = http.request({
+      hostname: 'localhost',
+      port: process.env.PORT || 3000,
+      path: pathUrl,
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': fullBody.length
+      }
+    }, (res) => {
+      let raw = '';
+      res.on('data', c => raw += c);
+      res.on('end', () => {
+        let json = null;
+        try { json = JSON.parse(raw); } catch (e) {}
+        resolve({ status: res.statusCode, headers: res.headers, json, raw });
+      });
+    });
+    req.on('error', reject);
+    req.write(fullBody);
+    req.end();
+  });
+}
 
 function request({ method = 'GET', path = '/', headers = {}, body = null }) {
   return new Promise((resolve, reject) => {
