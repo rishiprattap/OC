@@ -53,7 +53,7 @@ async function logEmail({ registrationId, recipient, emailType, subject, status,
   try {
     await run(
       `INSERT INTO email_logs (registration_id, recipient, email_type, subject, status, provider_message_id, error_message, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
       [registrationId || null, recipient, emailType, subject, status, messageId || null, errorMessage || null]
     );
   } catch (err) {

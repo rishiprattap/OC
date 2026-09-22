@@ -1,47 +1,38 @@
 /**
  * Offstage Creators — Database Layer
- * SQLite via sqlite3 with promise wrappers and schema migrations.
+ * Postgres via 'pg' with promise wrappers and schema migrations.
  */
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
+const { Pool } = require('pg');
+require('dotenv').config();
 
-const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
-const defaultDataDir = path.join(__dirname, '..', 'data');
-const dataDir = isVercel ? path.join('/tmp', 'data') : defaultDataDir;
-
-if (!fs.existsSync(dataDir)) {
-  try { fs.mkdirSync(dataDir, { recursive: true }); } catch (e) {}
-}
-
-const dbPath = path.join(dataDir, 'offstage.db');
-
-// On Vercel: copy seed DB from repo into writable /tmp on cold start
-if (isVercel && !fs.existsSync(dbPath)) {
-  const seedDb = path.join(defaultDataDir, 'offstage.db');
-  if (fs.existsSync(seedDb)) {
-    try { fs.copyFileSync(seedDb, dbPath); } catch (e) {}
-  }
-}
-
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) console.error('Failed to open database at:', dbPath, err);
-  else console.log('Connected to SQLite database at:', dbPath);
+// Create connection pool
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  ssl: process.env.POSTGRES_URL && process.env.POSTGRES_URL.includes('localhost') ? false : { rejectUnauthorized: false }
 });
 
-// Enable WAL mode for better concurrency
-db.run('PRAGMA journal_mode=WAL');
-db.run('PRAGMA foreign_keys=ON');
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+  process.exit(-1);
+});
+
+// Helper to convert SQLite ? to Postgres $1, $2, etc.
+const convertSql = (sql) => {
+  let i = 0;
+  return sql.replace(/\?/g, () => '$' + (++i));
+};
 
 // ─── Promise Wrappers ──────────────────────────────────────────────────────────
 
-const rawRun = (sql, params = []) =>
-  new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
-    });
-  });
+const rawRun = async (sql, params = []) => {
+  const pgSql = convertSql(sql);
+  const result = await pool.query(pgSql, params);
+  // Return something similar to what sqlite3 returned
+  return { 
+    lastID: result.rows.length ? result.rows[0].id : null, 
+    changes: result.rowCount 
+  };
+};
 
 let schemaInitPromise = null;
 function ensureSchema() {
@@ -56,30 +47,27 @@ const run = async (sql, params = []) => {
 
 const get = async (sql, params = []) => {
   await ensureSchema();
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
+  const pgSql = convertSql(sql);
+  const result = await pool.query(pgSql, params);
+  return result.rows[0];
 };
 
 const all = async (sql, params = []) => {
   await ensureSchema();
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
+  const pgSql = convertSql(sql);
+  const result = await pool.query(pgSql, params);
+  return result.rows;
 };
 
 // Safe column migration helper
 async function addColumnIfNotExists(table, columnDef) {
   try {
     await rawRun(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
-  } catch (_) {
-    // Column already exists — expected
+  } catch (err) {
+    // Expected if column exists, PG throws error 42701 "duplicate_column"
+    if (err.code !== '42701') {
+      console.warn(`Column migration notice: ${err.message}`);
+    }
   }
 }
 
@@ -90,7 +78,7 @@ const initSchema = async () => {
     // ── Registrations ──────────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS registrations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         registration_id TEXT UNIQUE NOT NULL,
         event_id TEXT NOT NULL,
         full_name TEXT NOT NULL,
@@ -105,7 +93,7 @@ const initSchema = async () => {
         -- OTP verification state
         otp_verified INTEGER NOT NULL DEFAULT 0,
         otp_verified_at TEXT,
-        -- Registration status (replaces old payment_status vocabulary)
+        -- Registration status
         reg_status TEXT NOT NULL DEFAULT 'PENDING_VERIFICATION',
         -- Admin approval
         approved_at TEXT,
@@ -128,37 +116,13 @@ const initSchema = async () => {
         rejection_email_sent_at TEXT,
         last_email_error TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        payment_status TEXT
       )
     `);
 
-    // Legacy columns (keep for backwards compat with existing rows)
-    await addColumnIfNotExists('registrations', 'payment_status TEXT');
-    await addColumnIfNotExists('registrations', 'otp_verified INTEGER NOT NULL DEFAULT 0');
-    await addColumnIfNotExists('registrations', 'otp_verified_at TEXT');
-    await addColumnIfNotExists('registrations', 'reg_status TEXT NOT NULL DEFAULT \'PENDING_VERIFICATION\'');
-    await addColumnIfNotExists('registrations', 'approved_at TEXT');
-    await addColumnIfNotExists('registrations', 'approved_by TEXT');
-    await addColumnIfNotExists('registrations', 'rejected_at TEXT');
-    await addColumnIfNotExists('registrations', 'rejected_reason TEXT');
-    await addColumnIfNotExists('registrations', 'registration_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'approval_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'rejection_email_sent_at TEXT');
-    await addColumnIfNotExists('registrations', 'last_email_error TEXT');
-
-    // Migrate existing rows: map old payment_status → new reg_status
-    await rawRun(`
-      UPDATE registrations
-      SET reg_status = CASE
-        WHEN payment_status = 'PAID' THEN 'APPROVED'
-        WHEN payment_status = 'PENDING_VERIFICATION' THEN 'VERIFIED'
-        WHEN payment_status = 'REJECTED' THEN 'REJECTED'
-        ELSE 'PENDING_VERIFICATION'
-      END
-      WHERE reg_status IS NULL OR reg_status = ''
-    `);
-
-    // Indexes
+    // Indexes (Postgres doesn't need 'IF NOT EXISTS' for indexes universally without a block, 
+    // but standard PG 9.5+ supports CREATE INDEX IF NOT EXISTS)
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email ON registrations(email)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_phone ON registrations(phone)`);
@@ -168,7 +132,7 @@ const initSchema = async () => {
     // ── OTP Sessions ────────────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS otp_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         email TEXT NOT NULL,
         registration_id TEXT NOT NULL,
         otp_hash TEXT NOT NULL,
@@ -186,7 +150,7 @@ const initSchema = async () => {
     // ── Email Audit Log ─────────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS email_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         registration_id TEXT,
         recipient TEXT NOT NULL,
         email_type TEXT NOT NULL,
@@ -200,10 +164,10 @@ const initSchema = async () => {
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_reg ON email_logs(registration_id)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_type ON email_logs(email_type)`);
 
-    // ── Legacy certificates (keep unchanged) ────────────────────────────────────
+    // ── Legacy certificates ─────────────────────────────────────────────────────
     await rawRun(`
       CREATE TABLE IF NOT EXISTS legacy_certificates (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         hash TEXT UNIQUE NOT NULL,
         event_name TEXT NOT NULL,
         created_at TEXT NOT NULL
@@ -224,12 +188,12 @@ const initSchema = async () => {
     ];
     for (const h of legacyHashes) {
       await rawRun(
-        `INSERT OR IGNORE INTO legacy_certificates (hash, event_name, created_at) VALUES (?, 'ONLINE OPEN MIC 2026 (Edition 1)', datetime('now'))`,
+        `INSERT INTO legacy_certificates (hash, event_name, created_at) VALUES (?, 'ONLINE OPEN MIC 2026 (Edition 1)', NOW()) ON CONFLICT (hash) DO NOTHING`,
         [h]
       );
     }
 
-    console.log('✓ Database schema initialized.');
+    console.log('✓ Database schema initialized (Postgres).');
   } catch (err) {
     console.error('Database schema initialization error:', err);
     throw err;
@@ -238,4 +202,4 @@ const initSchema = async () => {
 
 initSchema();
 
-module.exports = { db, run, get, all };
+module.exports = { pool, run, get, all };
