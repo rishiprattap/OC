@@ -144,27 +144,28 @@ router.post('/verify', async (req, res) => {
       [cleanRegId]
     );
 
-    // Send registration confirmation email (non-blocking)
+    // Send registration confirmation email
     if (reg) {
-      emailService.sendRegistrationConfirmationEmail({
-        registrationId: cleanRegId,
-        email: cleanEmail,
-        name: reg.full_name,
-        category: reg.category,
-        performanceTitle: reg.performance_title,
-        event: config.EVENT
-      }).then(() => {
-        run(
+      try {
+        await emailService.sendRegistrationConfirmationEmail({
+          registrationId: cleanRegId,
+          email: cleanEmail,
+          name: reg.full_name,
+          category: reg.category,
+          performanceTitle: reg.performance_title,
+          event: config.EVENT
+        });
+        await run(
           `UPDATE registrations SET registration_email_sent_at = ? WHERE registration_id = ?`,
           [new Date().toISOString(), cleanRegId]
-        ).catch(() => {});
-      }).catch((err) => {
+        );
+      } catch (err) {
         console.error('[OTP] Failed to send confirmation email:', err.message);
-        run(
+        await run(
           `UPDATE registrations SET last_email_error = ? WHERE registration_id = ?`,
           [err.message, cleanRegId]
         ).catch(() => {});
-      });
+      }
     }
 
     return res.json({

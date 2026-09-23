@@ -815,6 +815,7 @@
             return;
           }
           alert(`Success! ${data.sentCount} sent, ${data.failedCount} failed.`);
+          switchEmailSubtab('history');
         } catch (err) {
           if (btn) { btn.disabled = false; btn.textContent = '🚀 Send Email'; }
           alert('Send request failed: ' + err.message);
@@ -1059,6 +1060,7 @@
             return;
           }
           alert(`Invitations processed! ${data.sentCount} sent, ${data.failedCount} failed.`);
+          switchEmailSubtab('history');
         } catch (err) {
           if (btn) { btn.disabled = false; btn.textContent = 'Confirm & Send Meet Invitation →'; }
           alert('Meet invitation request error: ' + err.message);
@@ -1218,15 +1220,29 @@
 
     if (titleEl) titleEl.textContent = title || 'Confirmation';
     if (msgEl) msgEl.innerHTML = message || 'Are you sure?';
-    if (confirmBtn) confirmBtn.textContent = confirmText || 'Confirm';
+    if (confirmBtn) {
+      confirmBtn.textContent = confirmText || 'Confirm';
+      confirmBtn.disabled = false;
+    }
 
     confirmModalCallback = onConfirm;
 
     if (confirmBtn) {
       confirmBtn.onclick = async () => {
-        closeConfirmModal();
-        if (typeof confirmModalCallback === 'function') {
-          await confirmModalCallback();
+        const action = confirmModalCallback;
+        if (typeof action === 'function') {
+          confirmBtn.disabled = true;
+          confirmBtn.textContent = 'Processing…';
+          try {
+            await action();
+          } catch (err) {
+            console.error('[Admin] Modal action error:', err);
+            alert('Action failed: ' + err.message);
+          } finally {
+            closeConfirmModal();
+          }
+        } else {
+          closeConfirmModal();
         }
       };
     }
@@ -1238,6 +1254,8 @@
     const modal = document.getElementById('confirmDialogModal');
     if (modal) modal.style.display = 'none';
     confirmModalCallback = null;
+    const confirmBtn = document.getElementById('confirmDialogConfirmBtn');
+    if (confirmBtn) confirmBtn.disabled = false;
   };
 
   window.closeEmailPreviewModal = function () {

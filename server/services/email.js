@@ -27,9 +27,9 @@ function createTransporter() {
     return nodemailer.createTransport({
       service: 'gmail',
       auth: { user, pass: password },
-      connectionTimeout: 8000,
-      greetingTimeout: 8000,
-      socketTimeout: 8000
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000
     });
   }
 
@@ -39,9 +39,9 @@ function createTransporter() {
     secure: port === 465 || secure,
     auth: { user, pass: password },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 8000
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000
   });
 }
 
@@ -64,6 +64,9 @@ async function logEmail({ registrationId, recipient, emailType, subject, status,
 // ─── Core Send Function ───────────────────────────────────────────────────────
 
 async function sendEmail({ registrationId, to, subject, html, emailType }) {
+  if (!transporter) {
+    transporter = createTransporter();
+  }
   if (!transporter) {
     const errMsg = 'SMTP not configured — missing MAIL_USER or MAIL_PASSWORD';
     console.error('[Email]', errMsg);
