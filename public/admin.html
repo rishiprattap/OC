@@ -169,6 +169,7 @@
     .status-VERIFIED { background: rgba(228,173,87,0.12); color: #e4ad57; border: 1px solid rgba(228,173,87,0.3); }
     .status-APPROVED { background: rgba(110,219,140,0.12); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
     .status-REJECTED { background: rgba(226,105,71,0.12); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
+    .status-REVOKED, .status-CANCELLED { background: rgba(226,71,71,0.15); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
 
     .action-btn {
       padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 800;
@@ -178,6 +179,8 @@
     .btn-approve:hover { background: rgba(110,219,140,0.25); }
     .btn-reject { background: rgba(226,105,71,0.15); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
     .btn-reject:hover { background: rgba(226,105,71,0.25); }
+    .btn-revoke { background: rgba(226,71,71,0.15); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
+    .btn-revoke:hover { background: rgba(226,71,71,0.28); }
     .btn-view { background: #1a1612; color: #8e8477; border: 1px solid #2a231c; }
     .btn-view:hover { color: #f7eee1; border-color: #3a3228; }
 
@@ -317,6 +320,7 @@
             <option value="VERIFIED">Verified</option>
             <option value="APPROVED">Approved</option>
             <option value="REJECTED">Rejected</option>
+            <option value="REVOKED">Revoked / Cancelled</option>
           </select>
           <button class="cta cta-secondary" onclick="loadRegistrations()">⟳ Refresh</button>
         </div>

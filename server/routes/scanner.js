@@ -57,17 +57,21 @@ router.post('/lookup', async (req, res) => {
       });
     }
 
-    const isPaid = record.payment_status === 'PAID';
+    const isRevoked = ['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED';
+    const isPaid = (record.payment_status === 'PAID' || record.reg_status === 'APPROVED') && !isRevoked;
     const isCheckedIn = Boolean(record.checked_in);
 
     let statusText = 'READY FOR ENTRY';
     let canCheckIn = false;
 
-    if (record.payment_status === 'PENDING') {
+    if (isRevoked) {
+      statusText = 'REGISTRATION REVOKED — ENTRY DENIED';
+      canCheckIn = false;
+    } else if (record.payment_status === 'PENDING' && record.reg_status !== 'APPROVED') {
       statusText = 'PAYMENT NOT SUBMITTED';
-    } else if (record.payment_status === 'PENDING_VERIFICATION') {
+    } else if (record.payment_status === 'PENDING_VERIFICATION' && record.reg_status !== 'APPROVED') {
       statusText = 'PAYMENT UNDER VERIFICATION';
-    } else if (record.payment_status === 'REJECTED') {
+    } else if (record.payment_status === 'REJECTED' || record.reg_status === 'REJECTED') {
       statusText = 'PAYMENT REJECTED';
     } else if (isPaid) {
       if (isCheckedIn) {
@@ -87,7 +91,9 @@ router.post('/lookup', async (req, res) => {
         category: record.category,
         performanceTitle: record.performance_title,
         city: record.city,
+        status: record.reg_status || record.payment_status,
         paymentStatus: record.payment_status,
+        isRevoked,
         transactionId: record.transaction_id,
         amount: record.amount,
         checkedIn: isCheckedIn,
@@ -131,10 +137,17 @@ router.post('/check-in', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Registration record not found.' });
     }
 
-    if (record.payment_status !== 'PAID') {
+    if (['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED') {
+      return res.status(403).json({
+        success: false,
+        error: `REGISTRATION REVOKED / CANCELLED. Entry is strictly denied.`
+      });
+    }
+
+    if (record.reg_status !== 'APPROVED' && record.payment_status !== 'PAID') {
       return res.status(400).json({
         success: false,
-        error: `PAYMENT NOT VERIFIED (Status: ${record.payment_status}). Cannot check in.`
+        error: `PAYMENT NOT VERIFIED (Status: ${record.reg_status || record.payment_status}). Cannot check in.`
       });
     }
 

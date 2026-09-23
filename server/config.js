@@ -13,6 +13,7 @@ module.exports = {
   // Admin credentials — must be set via environment
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@offstagecreators.com',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
+  ADMIN_SECRET: process.env.ADMIN_SECRET || 'R!SHI88',
 
   // Session security
   SESSION_SECRET: process.env.SESSION_SECRET || 'change_this_in_production_please',

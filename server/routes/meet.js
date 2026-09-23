@@ -107,7 +107,7 @@ router.get('/eligible-recipients', async (req, res) => {
   try {
     const { eventId, mode, sessionId, search } = req.query;
 
-    let query = `SELECT id, registration_id, full_name, email, phone, category, event_id, payment_status, created_at FROM registrations WHERE payment_status = 'PAID'`;
+    let query = `SELECT id, registration_id, full_name, email, phone, category, event_id, payment_status, created_at FROM registrations WHERE (payment_status = 'PAID' OR reg_status = 'APPROVED') AND reg_status NOT IN ('REVOKED', 'CANCELLED', 'REJECTED') AND payment_status NOT IN ('REVOKED', 'CANCELLED', 'REJECTED')`;
     const params = [];
 
     if (eventId && eventId !== 'all') {
@@ -271,7 +271,7 @@ router.post('/send', async (req, res) => {
     }
 
     // Resolve target participants
-    let query = `SELECT id, registration_id, full_name, email, phone, category, event_id FROM registrations WHERE payment_status = 'PAID'`;
+    let query = `SELECT id, registration_id, full_name, email, phone, category, event_id FROM registrations WHERE (payment_status = 'PAID' OR reg_status = 'APPROVED') AND reg_status NOT IN ('REVOKED', 'CANCELLED', 'REJECTED') AND payment_status NOT IN ('REVOKED', 'CANCELLED', 'REJECTED')`;
     const params = [];
 
     if (eventId && eventId !== 'all') {

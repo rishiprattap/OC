@@ -30,7 +30,14 @@ router.post('/verify', async (req, res) => {
       );
 
       if (record) {
-        if (record.payment_status !== 'PAID') {
+        if (['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED') {
+          return res.status(403).json({
+            success: false,
+            error: 'Registration has been revoked/cancelled. Certificate cannot be issued.'
+          });
+        }
+
+        if (record.reg_status !== 'APPROVED' && record.payment_status !== 'PAID') {
           return res.status(403).json({
             success: false,
             error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.'
@@ -105,7 +112,14 @@ router.post('/verify', async (req, res) => {
         return rName === cleanName || rName.includes(cleanName) || cleanName.includes(rName);
       }) || matchingRecords[0];
 
-      if (match.payment_status !== 'PAID') {
+      if (['REVOKED', 'CANCELLED'].includes(match.reg_status) || match.payment_status === 'REVOKED') {
+        return res.status(403).json({
+          success: false,
+          error: 'Registration has been revoked/cancelled. Certificate cannot be issued.'
+        });
+      }
+
+      if (match.reg_status !== 'APPROVED' && match.payment_status !== 'PAID') {
         return res.status(403).json({
           success: false,
           error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.'

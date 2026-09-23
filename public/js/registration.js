@@ -122,6 +122,20 @@
       subheading: 'Your registration was not approved. Please see the notice below.',
       statusLabel: 'Rejected',
       notice: 'rejectedNotice'
+    },
+    REVOKED: {
+      badge: '<span class="badge" style="background:rgba(226,71,71,0.2); border:1px solid #e24747; color:#ff7b7b;">✕ REGISTRATION REVOKED / CANCELLED</span>',
+      heading: 'Registration Revoked',
+      subheading: 'This registration has been revoked. Entry pass and privileges are cancelled.',
+      statusLabel: 'Revoked/Cancelled',
+      notice: 'revokedNotice'
+    },
+    CANCELLED: {
+      badge: '<span class="badge" style="background:rgba(226,71,71,0.2); border:1px solid #e24747; color:#ff7b7b;">✕ REGISTRATION REVOKED / CANCELLED</span>',
+      heading: 'Registration Cancelled',
+      subheading: 'This registration has been cancelled. Entry pass and privileges are invalidated.',
+      statusLabel: 'Revoked/Cancelled',
+      notice: 'revokedNotice'
     }
   };
 
@@ -189,7 +203,8 @@
 
       // Show status-specific notice
       const noticeId = cfg.notice;
-      [pendingVerifNotice, verifiedNotice, approvedNotice, rejectedNotice].forEach(el => {
+      const revokedNoticeEl = document.getElementById('revokedNotice');
+      [pendingVerifNotice, verifiedNotice, approvedNotice, rejectedNotice, revokedNoticeEl].forEach(el => {
         if (el) el.style.display = 'none';
       });
       const noticeEl = document.getElementById(noticeId);
@@ -200,26 +215,29 @@
         rejectedReasonText.textContent = ` Reason: ${reg.rejectedReason}`;
       }
 
+      // Show revocation reason / admin notes
+      if (['REVOKED', 'CANCELLED'].includes(status)) {
+        const revokedReasonEl = document.getElementById('revokedReasonText');
+        if (revokedReasonEl) {
+          revokedReasonEl.textContent = reg.adminNotes || reg.rejectedReason || 'Approval revoked after payment verification.';
+        }
+        if (paymentSubmissionBox) paymentSubmissionBox.style.display = 'none';
+      }
+
       // Show performer guidelines if approved
       if (status === 'APPROVED' && performerGuidelines) {
         performerGuidelines.style.display = 'block';
       }
 
-      // Render QR code — always uses registration ID (never PII)
-      if (qrCaption) qrCaption.textContent = reg.registrationId;
-
-      if (reg.qrCode) {
-        renderQR(reg.registrationId, reg.qrCode);
-      } else {
-        // QRCode lib may still be loading via defer
-        function tryRenderQR() {
-          if (window.QRCode) {
-            renderQR(reg.registrationId);
-          } else {
-            setTimeout(tryRenderQR, 100);
-          }
+      // Render QR code — strictly disabled for revoked passes
+      if (['REVOKED', 'CANCELLED'].includes(status) || !reg.qrCode) {
+        if (qrCaption) qrCaption.textContent = `${reg.registrationId} (INVALIDATED)`;
+        if (qrContainer) {
+          qrContainer.innerHTML = '<div style="color:#ff8585; font-size:11px; font-weight:700; text-align:center; padding:16px; border:1px dashed #e24747; border-radius:8px;">⛔ PASS REVOKED<br><span style="font-weight:400; opacity:0.8;">QR Code Inactive</span></div>';
         }
-        tryRenderQR();
+      } else {
+        if (qrCaption) qrCaption.textContent = reg.registrationId;
+        renderQR(reg.registrationId, reg.qrCode);
       }
 
       // Update page title

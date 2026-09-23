@@ -272,6 +272,7 @@
           ${r.approvedBy ? `<div class="modal-row"><span class="modal-label">Approved By</span><span class="modal-value">${escHtml(r.approvedBy)}</span></div>` : ''}
           ${r.rejectedAt ? `<div class="modal-row"><span class="modal-label">Rejected At</span><span class="modal-value">${formatDate(r.rejectedAt)}</span></div>` : ''}
           ${r.rejectedReason ? `<div class="modal-row"><span class="modal-label">Rejection Reason</span><span class="modal-value">${escHtml(r.rejectedReason)}</span></div>` : ''}
+          ${r.adminNotes ? `<div class="modal-row" style="background:rgba(226,71,71,0.08); border-radius:6px; padding:10px; margin:4px 0;"><span class="modal-label" style="color:#ff8585; font-weight:700;">Admin Note</span><span class="modal-value" style="color:#ffb0b0;">${escHtml(r.adminNotes)}</span></div>` : ''}
           ${r.transactionId ? `<div class="modal-row"><span class="modal-label">UPI Transaction ID</span><span class="modal-value" style="font-family:monospace; color:#e4ad57; font-weight:700;">${escHtml(r.transactionId)}</span></div>` : '<div class="modal-row"><span class="modal-label">UPI Transaction ID</span><span class="modal-value" style="color:#8e8477;">Not submitted yet</span></div>'}
           ${r.paymentScreenshotUrl ? `
             <div class="modal-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
@@ -296,8 +297,12 @@
           actionsHtml += `<button class="cta" onclick="approveReg('${escHtml(r.registrationId)}', null, true)" style="padding:12px 24px;">✓ APPROVE &amp; SEND EMAIL</button>`;
         }
         if (r.status === 'APPROVED') {
-          actionsHtml += `<button class="cta" style="padding:12px 24px; opacity:0.5; cursor:not-allowed;" disabled>✓ ALREADY APPROVED</button>`;
-          actionsHtml += `<button class="action-btn btn-view" onclick="resendApprovalEmail('${escHtml(r.registrationId)}')" style="padding:12px 24px;">Resend Approval Email</button>`;
+          actionsHtml += `<button class="cta" style="padding:12px 24px; opacity:0.5; cursor:not-allowed;" disabled>✓ APPROVED</button>`;
+          actionsHtml += `<button class="action-btn btn-revoke" onclick="revokeReg('${escHtml(r.registrationId)}')" style="padding:12px 24px; font-weight:700;">⛔ REVOKE APPROVAL</button>`;
+          actionsHtml += `<button class="action-btn btn-view" onclick="resendApprovalEmail('${escHtml(r.registrationId)}')" style="padding:12px 24px;">Resend Email</button>`;
+        }
+        if (['REVOKED', 'CANCELLED'].includes(r.status)) {
+          actionsHtml += `<span style="color:#ff8585; font-size:13px; font-weight:700; padding:10px 16px; background:rgba(226,71,71,0.1); border-radius:6px; border:1px solid rgba(226,71,71,0.3);">✕ REGISTRATION REVOKED / CANCELLED</span>`;
         }
         if (r.status === 'VERIFIED' || r.status === 'PENDING_VERIFICATION') {
           actionsHtml += `
@@ -399,6 +404,32 @@
     }
   };
 
+  // ── Revoke Registration ───────────────────────────────────────────────────────
+  window.revokeReg = async function (regId) {
+    const defaultNote = 'Approval revoked after payment verification. Submitted payment proof identified as a demo/non-real transaction. Initial approval email was sent before verification.';
+    const note = prompt(`Enter reason / admin note to revoke registration ${regId}:`, defaultNote);
+    if (note === null) return; // cancelled prompt
+
+    try {
+      const res = await fetch(`/api/admin/revoke/${encodeURIComponent(regId)}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ note: note.trim() })
+      });
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+      if (!data.success) { alert(`Error: ${data.error}`); return; }
+
+      alert(data.message);
+      window.closeModal();
+      refreshCurrentTab();
+      loadOverview();
+    } catch (err) {
+      alert('Network error while revoking registration.');
+    }
+  };
+
   // ── Check-in ──────────────────────────────────────────────────────────────────
   window.checkinReg = async function (regId) {
     if (!confirm(`Check in ${regId}?`)) return;
@@ -474,7 +505,9 @@
       PENDING_VERIFICATION: 'Pending Verif.',
       VERIFIED: 'Verified',
       APPROVED: 'Approved',
-      REJECTED: 'Rejected'
+      REJECTED: 'Rejected',
+      REVOKED: 'Revoked/Cancelled',
+      CANCELLED: 'Revoked/Cancelled'
     };
     return map[status] || status;
   }

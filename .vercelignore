@@ -1,0 +1,6 @@
+data/
+scratch/
+uploads/
+tests/
+.env*
+node_modules/

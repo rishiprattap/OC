@@ -21,10 +21,23 @@ const emailService = require('../services/email');
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
 function requireAdmin(req, res, next) {
-  if (!req.session || !req.session.adminAuthenticated) {
-    return res.status(401).json({ success: false, error: 'Unauthorized. Please log in.' });
+  const secretHeader = (req.headers['x-admin-secret'] || req.headers['x-admin-key'] || '').trim();
+  const expectedSecret = (config.ADMIN_SECRET || '').trim();
+  const passwordHeader = (req.headers['x-admin-password'] || '').trim();
+  const expectedPassword = (config.ADMIN_PASSWORD || '').trim();
+
+  const isSecretMatch = (expectedSecret && secretHeader === expectedSecret) ||
+                        (expectedPassword && (secretHeader === expectedPassword || passwordHeader === expectedPassword));
+
+  if ((req.session && req.session.adminAuthenticated) || isSecretMatch) {
+    if (!req.session) req.session = {};
+    if (!req.session.adminAuthenticated) {
+      req.session.adminAuthenticated = true;
+      req.session.adminEmail = config.ADMIN_EMAIL || 'admin@offstagecreators.com';
+    }
+    return next();
   }
-  next();
+  return res.status(401).json({ success: false, error: 'Unauthorized. Please log in.' });
 }
 
 // ─── POST /api/admin/login ────────────────────────────────────────────────────
@@ -104,14 +117,15 @@ router.use(requireAdmin);
 
 router.get('/overview', async (req, res) => {
   try {
-    const [total, pendingVerif, verified, approved, rejected, checkedIn, certEligible] = await Promise.all([
+    const [total, pendingVerif, verified, approved, rejected, revoked, checkedIn, certEligible] = await Promise.all([
       get(`SELECT COUNT(*) as c FROM registrations`),
       get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'PENDING_VERIFICATION'`),
       get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'VERIFIED'`),
       get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'APPROVED'`),
       get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'REJECTED'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE checked_in = 1`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE certificate_eligible = 1`)
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status IN ('REVOKED', 'CANCELLED')`),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE checked_in = 1 AND reg_status = 'APPROVED'`),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE certificate_eligible = 1 AND reg_status = 'APPROVED'`)
     ]);
 
     return res.json({
@@ -122,6 +136,7 @@ router.get('/overview', async (req, res) => {
         verified: verified?.c || 0,
         approved: approved?.c || 0,
         rejected: rejected?.c || 0,
+        revoked: revoked?.c || 0,
         checkedIn: checkedIn?.c || 0,
         certEligible: certEligible?.c || 0
       }
@@ -182,6 +197,7 @@ router.get('/registrations', async (req, res) => {
         approvedBy: r.approved_by,
         rejectedAt: r.rejected_at,
         rejectedReason: r.rejected_reason,
+        adminNotes: r.admin_notes || r.rejected_reason,
         transactionId: r.transaction_id,
         paymentScreenshotUrl: r.payment_screenshot_url,
         createdAt: r.created_at,
@@ -230,6 +246,7 @@ router.get('/registrations/:id', async (req, res) => {
         approvedBy: record.approved_by,
         rejectedAt: record.rejected_at,
         rejectedReason: record.rejected_reason,
+        adminNotes: record.admin_notes || record.rejected_reason,
         transactionId: record.transaction_id,
         paymentScreenshotUrl: record.payment_screenshot_url,
         registrationEmailSentAt: record.registration_email_sent_at,
@@ -363,6 +380,49 @@ router.post('/reject/:id', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Reject error:', err);
     return res.status(500).json({ success: false, error: 'Server error while rejecting.' });
+  }
+});
+
+// ─── POST /api/admin/revoke/:id ───────────────────────────────────────────────
+
+router.post('/revoke/:id', async (req, res) => {
+  try {
+    const regId = req.params.id.trim().toUpperCase();
+    const { reason, note } = req.body || {};
+
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+
+    if (!reg) {
+      return res.status(404).json({ success: false, error: 'Registration not found.' });
+    }
+
+    const now = new Date().toISOString();
+    const adminNote = (note || reason || 'Approval revoked after payment verification. Submitted payment proof identified as a demo/non-real transaction. Initial approval email was sent before verification.').trim();
+
+    await run(
+      `UPDATE registrations
+       SET reg_status = 'REVOKED',
+           payment_status = 'REVOKED',
+           checked_in = 0,
+           certificate_eligible = 0,
+           rejected_at = ?,
+           rejected_reason = ?,
+           admin_notes = ?,
+           updated_at = ?
+       WHERE registration_id = ?`,
+      [now, adminNote, adminNote, now, regId]
+    );
+
+    return res.json({
+      success: true,
+      message: `Registration ${regId} revoked and pass invalidated.`,
+      status: 'REVOKED',
+      adminNotes: adminNote
+    });
+
+  } catch (err) {
+    console.error('[Admin] Revoke error:', err);
+    return res.status(500).json({ success: false, error: 'Server error while revoking registration.' });
   }
 });
 

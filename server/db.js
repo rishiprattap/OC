@@ -118,9 +118,13 @@ const initSchema = async () => {
         last_email_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        payment_status TEXT
+        payment_status TEXT,
+        admin_notes TEXT
       )
     `);
+
+    // Safe migration for admin_notes
+    await addColumnIfNotExists('registrations', 'admin_notes TEXT');
 
     // Indexes (Postgres doesn't need 'IF NOT EXISTS' for indexes universally without a block, 
     // but standard PG 9.5+ supports CREATE INDEX IF NOT EXISTS)

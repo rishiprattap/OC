@@ -89,9 +89,15 @@
   function applyRegistrationData(reg) {
     hideAllStates();
 
-    const status = reg.paymentStatus || reg.payment_status;
+    const status = reg.status || reg.paymentStatus || reg.payment_status;
 
-    if (status === 'PAID') {
+    if (['REVOKED', 'CANCELLED', 'REJECTED'].includes(status)) {
+      if (stateRejected) stateRejected.style.display = 'block';
+      const reason = reg.adminNotes || reg.rejectedReason || reg.rejectionReason || reg.rejection_reason || 'Registration has been revoked/cancelled.';
+      if (rejectReasonText) {
+        rejectReasonText.textContent = `Status: ${status} — Reason: ${reason}`;
+      }
+    } else if (status === 'APPROVED' || status === 'PAID') {
       if (stateConfirmed) stateConfirmed.style.display = 'block';
       if (typeof window.trackEvent === 'function') {
         window.trackEvent('registration_approved');
@@ -107,7 +113,7 @@
 
       renderQR(id);
 
-    } else if (status === 'PENDING_VERIFICATION') {
+    } else if (status === 'PENDING_VERIFICATION' || status === 'VERIFIED') {
       if (stateVerification) stateVerification.style.display = 'block';
       if (verifName) verifName.textContent = reg.fullName || reg.full_name || 'Participant';
       const id = reg.registrationId || reg.registration_id || '—';
@@ -118,13 +124,6 @@
       renderVerifQR(id);
       if (typeof window.trackEvent === 'function') {
         window.trackEvent('qr_pass_viewed');
-      }
-
-    } else if (status === 'REJECTED') {
-      if (stateRejected) stateRejected.style.display = 'block';
-      const reason = reg.rejectionReason || reg.rejection_reason || 'Screenshot was unclear or transaction ID could not be matched with bank record.';
-      if (rejectReasonText) {
-        rejectReasonText.textContent = `Reason: ${reason}`;
       }
 
     } else {

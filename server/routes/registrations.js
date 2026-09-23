@@ -191,18 +191,26 @@ router.get('/:id', async (req, res) => {
       PENDING_VERIFICATION: 'Pending Email Verification',
       VERIFIED: 'Registered — Pending Approval',
       APPROVED: 'Approved',
-      REJECTED: 'Rejected'
+      REJECTED: 'Rejected',
+      REVOKED: 'Revoked/Cancelled',
+      CANCELLED: 'Revoked/Cancelled'
     };
 
+    const isRevoked = ['REVOKED', 'CANCELLED'].includes(record.reg_status);
+    const isApproved = record.reg_status === 'APPROVED';
+
     let qrCode = null;
-    try {
-      qrCode = await QRCode.toDataURL(record.registration_id, {
-        width: 240,
-        margin: 1,
-        color: { dark: '#000000', light: '#ffffff' }
-      });
-    } catch (qrErr) {
-      console.warn('[Registration] Could not generate QR code:', qrErr.message);
+    // Strictly invalidate QR codes for revoked or rejected registrations
+    if (!isRevoked && record.reg_status !== 'REJECTED') {
+      try {
+        qrCode = await QRCode.toDataURL(record.registration_id, {
+          width: 240,
+          margin: 1,
+          color: { dark: '#000000', light: '#ffffff' }
+        });
+      } catch (qrErr) {
+        console.warn('[Registration] Could not generate QR code:', qrErr.message);
+      }
     }
 
     return res.json({
@@ -217,12 +225,15 @@ router.get('/:id', async (req, res) => {
         instagram: record.instagram,
         status: record.reg_status || 'PENDING_VERIFICATION',
         statusLabel: statusLabels[record.reg_status] || 'Unknown',
+        isValidPass: isApproved,
+        isRevoked,
         otpVerified: Boolean(record.otp_verified),
         checkedIn: Boolean(record.checked_in),
         certificateEligible: Boolean(record.certificate_eligible),
         approvedAt: record.approved_at,
         rejectedAt: record.rejected_at,
-        rejectedReason: record.rejected_reason,
+        rejectedReason: record.rejected_reason || record.admin_notes,
+        adminNotes: record.admin_notes || record.rejected_reason,
         transactionId: record.transaction_id,
         paymentSubmittedAt: record.payment_submitted_at,
         createdAt: record.created_at,

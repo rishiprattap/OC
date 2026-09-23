@@ -31,6 +31,7 @@
     .status-badge-VERIFIED { background: rgba(228,173,87,0.12); border: 1px solid rgba(228,173,87,0.4); color: #e4ad57; }
     .status-badge-APPROVED { background: rgba(110,219,140,0.12); border: 1px solid rgba(110,219,140,0.4); color: #88f0a4; }
     .status-badge-REJECTED { background: rgba(226,105,71,0.12); border: 1px solid rgba(226,105,71,0.4); color: #ff9e85; }
+    .status-badge-REVOKED, .status-badge-CANCELLED { background: rgba(226,71,71,0.16); border: 1px solid rgba(226,71,71,0.5); color: #ff7b7b; }
 
     .info-row {
       display: flex;
@@ -216,6 +217,13 @@
           ✕ <strong>Registration not approved.</strong>
           <span id="rejectedReasonText"></span>
           <br><a href="/register" style="color:#e26947; font-weight:700; margin-top:8px; display:inline-block;">→ Re-register</a>
+        </div>
+      </div>
+
+      <div id="revokedNotice" style="display:none; max-width:580px; margin:0 auto 24px;">
+        <div style="background:rgba(226,71,71,0.12); border:1px solid rgba(226,71,71,0.4); border-radius:8px; padding:18px 22px; font-size:13px; color:#ff8585; line-height:1.6;">
+          ⛔ <strong>Registration Revoked &amp; Cancelled.</strong> This registration pass has been invalidated and entry is denied.
+          <div id="revokedReasonText" style="margin-top:8px; padding:10px 14px; background:rgba(0,0,0,0.3); border-radius:6px; color:#ffb0b0; font-size:12px;"></div>
         </div>
       </div>
 
