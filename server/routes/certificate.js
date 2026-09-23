@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const QRCode = require('qrcode');
 const { get, all } = require('../db');
 const config = require('../config');
 
@@ -16,10 +17,32 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-// POST /api/certificate/verify
-router.post('/verify', async (req, res) => {
+async function generateQr(url) {
   try {
-    const { name, phone, registrationId } = req.body;
+    return await QRCode.toDataURL(url, {
+      margin: 1,
+      width: 280,
+      color: {
+        dark: '#1c1712',
+        light: '#ffffff'
+      }
+    });
+  } catch (err) {
+    console.warn('Failed to generate certificate QR code:', err.message);
+    return null;
+  }
+}
+
+// Verification handler for POST and GET
+async function handleVerify(req, res) {
+  try {
+    const body = req.method === 'GET' ? req.query : req.body;
+    const { name, phone } = body;
+    const registrationId = body.registrationId || body.regId || body.id;
+
+    const host = req.get('host') || 'offstagecreators.com';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
 
     // Check if looking up directly by registrationId
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
@@ -51,24 +74,33 @@ router.post('/verify', async (req, res) => {
           });
         }
 
-        // Dispatch certificate email if not sent recently
-        const { sendCertificateAvailableEmail } = require('../services/email');
-        try {
-          await sendCertificateAvailableEmail({
-            to: record.email,
-            registration: record
-          });
-        } catch (err) {
-          console.error('Failed to dispatch certificate email:', err);
+        // Dispatch certificate email if function exists
+        const emailService = require('../services/email');
+        if (typeof emailService.sendCertificateAvailableEmail === 'function') {
+          try {
+            await emailService.sendCertificateAvailableEmail({
+              to: record.email,
+              registration: record
+            });
+          } catch (err) {
+            console.warn('Failed to dispatch certificate email:', err.message);
+          }
         }
+
+        const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(record.registration_id)}`;
+        const qrCode = await generateQr(verificationUrl);
 
         return res.json({
           success: true,
           verifiedName: record.full_name,
           registrationId: record.registration_id,
+          certificateId: record.registration_id,
           event: config.EVENT.title,
-          category: record.category,
-          date: config.EVENT.date
+          category: record.category || 'Performer',
+          performanceTitle: record.performance_title || null,
+          date: config.EVENT.date,
+          verificationUrl,
+          qrCode
         });
       }
     }
@@ -92,11 +124,21 @@ router.post('/verify', async (req, res) => {
     );
 
     if (legacy) {
+      const legacyCertId = `OC-LEGACY-${combinedHash.slice(0, 8).toUpperCase()}`;
+      const verificationUrl = `${baseUrl}/certificate?id=${legacyCertId}`;
+      const qrCode = await generateQr(verificationUrl);
+
       return res.json({
         success: true,
         verifiedName: name.trim(),
+        registrationId: legacyCertId,
+        certificateId: legacyCertId,
         event: legacy.event_name,
-        isLegacy: true
+        category: 'Performer',
+        date: config.EVENT.date,
+        isLegacy: true,
+        verificationUrl,
+        qrCode
       });
     }
 
@@ -133,13 +175,20 @@ router.post('/verify', async (req, res) => {
         });
       }
 
+      const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(match.registration_id)}`;
+      const qrCode = await generateQr(verificationUrl);
+
       return res.json({
         success: true,
         verifiedName: match.full_name,
         registrationId: match.registration_id,
+        certificateId: match.registration_id,
         event: config.EVENT.title,
-        category: match.category,
-        date: config.EVENT.date
+        category: match.category || 'Performer',
+        performanceTitle: match.performance_title || null,
+        date: config.EVENT.date,
+        verificationUrl,
+        qrCode
       });
     }
 
@@ -152,6 +201,10 @@ router.post('/verify', async (req, res) => {
     console.error('Error in /api/certificate/verify:', err);
     return res.status(500).json({ success: false, error: 'Certificate verification failed.' });
   }
-});
+}
+
+// POST and GET /api/certificate/verify
+router.post('/verify', handleVerify);
+router.get('/verify', handleVerify);
 
 module.exports = router;

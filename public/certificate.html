@@ -8,6 +8,12 @@
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/forms.css">
   <link rel="icon" href="/assets/logo.png" type="image/png">
+  
+  <!-- Premium Certificate Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Montserrat:wght@400;500;600;700;800&family=Pinyon+Script&display=swap" rel="stylesheet">
+
   <!-- Vercel Web Analytics & Speed Insights -->
   <script>
     window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
@@ -96,6 +102,7 @@
       border: 1px solid #6c5c43;
       box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
       border-radius: 4px;
+      background: #ffffff;
     }
     .downloads-bar {
       display: none;
@@ -107,15 +114,41 @@
     .downloads-bar.show {
       display: flex;
     }
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      body::before, .grain-layer, .nav-header, .site-footer, .back-link, .cert-head, .verify-box, .downloads-bar, .preview-box p {
+        display: none !important;
+      }
+      .cert-page {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .preview-box {
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .preview-box canvas {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        border: none !important;
+        box-shadow: none !important;
+        page-break-inside: avoid !important;
+      }
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+    }
   </style>
-  <!-- Vercel Web Analytics & Speed Insights -->
-  <script>
-    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-  </script>
-  <script defer src="/_vercel/insights/script.js"></script>
-  <script defer src="/_vercel/speed-insights/script.js"></script>
-  <script src="/js/analytics.js"></script>
 </head>
 <body>
   <div class="grain-layer"></div>
@@ -207,6 +240,9 @@
         <button class="cta cta-gold" id="pdfBtn" type="button">
           📄 DOWNLOAD PRINT-READY PDF
         </button>
+        <button class="cta" id="printBtn" type="button" style="background: rgba(35, 30, 24, 0.95); border: 1px solid var(--line-strong);">
+          🖨️ PRINT CERTIFICATE
+        </button>
       </div>
     </section>
   </main>
@@ -224,6 +260,8 @@
 
   <!-- jsPDF Library for PDF Export -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="/js/certificate.js"></script>
+  <!-- QRCode.js client fallback -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="/js/certificate.js?v=2.0.0"></script>
 </body>
 </html>
