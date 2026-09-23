@@ -113,14 +113,22 @@ app.use('/api/email', emailRouter);
 if (meetRouter) app.use('/api/admin/meet', meetRouter);
 
 // Public config endpoint
-app.get('/api/config', (req, res) => {
+app.get('/api/config', async (req, res) => {
+  let registrationStatus = 'OPEN';
+  try {
+    const { getSetting } = require('./db');
+    registrationStatus = await getSetting('registration_status', 'OPEN');
+  } catch (_) {}
+
   res.json({
     success: true,
     event: config.EVENT,
     delhiEvent: config.DELHI_EVENT,
     upi: config.UPI,
     fee: config.OPEN_MIC_FEE_INR,
-    amount: config.OPEN_MIC_FEE_INR
+    amount: config.OPEN_MIC_FEE_INR,
+    registrationStatus,
+    registrationOpen: registrationStatus === 'OPEN'
   });
 });
 

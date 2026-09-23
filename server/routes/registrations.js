@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { run, get } = require('../db');
+const { run, get, getSetting } = require('../db');
 const config = require('../config');
 const otpService = require('../services/otp');
 const emailService = require('../services/email');
@@ -32,6 +32,12 @@ function validateEmail(email) {
 
 router.post('/', async (req, res) => {
   try {
+    // ── Check if registration is open ─────────────────────────────────────────
+    const regSetting = await getSetting('registration_status', 'OPEN');
+    if (regSetting === 'CLOSED') {
+      return res.status(403).json({ success: false, error: 'Registration is currently closed.' });
+    }
+
     const {
       fullName, phone, email, city, category,
       instagram, performanceTitle, performanceDescription, terms

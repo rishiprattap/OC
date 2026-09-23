@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { run, get, all } = require('../db');
+const { run, get, all, getSetting, setSetting } = require('../db');
 const config = require('../config');
 const emailService = require('../services/email');
 
@@ -161,10 +161,17 @@ router.get('/registrations', async (req, res) => {
       params.push(status);
     }
 
-    if (search) {
-      const q = `%${search}%`;
-      sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ?)`;
-      params.push(q, q, q, q);
+    if (search && search.trim()) {
+      const trimmed = search.trim();
+      const q = `%${trimmed}%`;
+      const num = parseInt(trimmed.replace(/^0+/, ''), 10);
+      if (!isNaN(num) && num > 0) {
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR id = ?)`;
+        params.push(q, q, q, q, q, num);
+      } else {
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ?)`;
+        params.push(q, q, q, q, q);
+      }
     }
 
     sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
@@ -476,6 +483,441 @@ router.post('/certificate/:id', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Certificate error:', err);
     return res.status(500).json({ success: false, error: 'Server error.' });
+  }
+});
+
+// ─── Email Helpers & Placeholders ─────────────────────────────────────────────
+
+function replacePlaceholders(templateText, reg = {}) {
+  if (!templateText) return '';
+  const name = reg.full_name || reg.fullName || 'Participant';
+  const regId = reg.registration_id || reg.registrationId || '';
+  const rawId = reg.id || '';
+  const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
+  const category = reg.category || '';
+  const entry = reg.performance_title || reg.performanceTitle || reg.category || '';
+  const city = reg.city || '';
+
+  return templateText
+    .replace(/\{name\}/gi, name)
+    .replace(/\{registration_id\}/gi, regId)
+    .replace(/\{serial_no\}/gi, serialNo)
+    .replace(/\{category\}/gi, category)
+    .replace(/\{entry\}/gi, entry)
+    .replace(/\{city\}/gi, city);
+}
+
+function generateMeetHtml({ meetingTitle, meetLink, date, startTime, endTime, timeZone, additionalMessage, name }) {
+  const greeting = name ? `Hi ${name},` : 'Hello,';
+  const safeTitle = meetingTitle || 'Online Open Mic 2026 — Meeting';
+  const safeDate = date || 'To be announced';
+  const timeStr = `${startTime || ''} – ${endTime || ''} ${timeZone || ''}`.trim() || 'Scheduled Time';
+  const safeLink = meetLink || '#';
+
+  return `
+    <h2>Google Meet Invitation</h2>
+    <p>${greeting}</p>
+    <p>You have been invited to attend the following session with <strong>Offstage Creators</strong>:</p>
+
+    <div style="background:#110f0d; border: 1px solid #2a231c; border-radius:10px; padding:20px 24px; margin:20px 0;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
+        <span style="color:#8e8477; font-size:13px;">Meeting:</span>
+        <span style="color:#f7eee1; font-weight:700; font-size:14px; text-align:right;">${safeTitle}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
+        <span style="color:#8e8477; font-size:13px;">Date:</span>
+        <span style="color:#f7eee1; font-weight:600; font-size:13px; text-align:right;">${safeDate}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
+        <span style="color:#8e8477; font-size:13px;">Time:</span>
+        <span style="color:#f7eee1; font-weight:600; font-size:13px; text-align:right;">${timeStr}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; padding-top:4px;">
+        <span style="color:#8e8477; font-size:13px;">Google Meet:</span>
+        <span style="text-align:right;"><a href="${safeLink}" style="color:#e4ad57; font-weight:700; text-decoration:underline;">${safeLink}</a></span>
+      </div>
+    </div>
+
+    ${additionalMessage ? `
+      <div style="margin:20px 0; padding:16px 20px; background:#181410; border-left:3px solid #e4ad57; border-radius:4px; font-size:13px; color:#d6cbbe; line-height:1.6;">
+        ${additionalMessage.replace(/\n/g, '<br>')}
+      </div>
+    ` : ''}
+
+    <div style="text-align:center; margin:28px 0 16px;">
+      <a href="${safeLink}" class="cta-btn" style="background:#e4ad57; color:#0d0c0a; font-weight:800; padding:14px 28px; text-decoration:none; border-radius:6px; display:inline-block;">JOIN GOOGLE MEET →</a>
+    </div>
+
+    <p class="muted" style="margin-top:24px;">
+      Please ensure you join with your camera and microphone working. If you have questions or difficulty joining, please reach out to us on Instagram
+      <a href="https://www.instagram.com/offstagecreators/" style="color:#e4ad57;">@offstagecreators</a>.
+    </p>
+  `;
+}
+
+// ─── Registration Settings ───────────────────────────────────────────────────
+
+router.get('/settings', async (req, res) => {
+  try {
+    const status = await getSetting('registration_status', 'OPEN');
+    return res.json({ success: true, settings: { registration_status: status } });
+  } catch (err) {
+    console.error('[Admin] Get settings error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load settings.' });
+  }
+});
+
+router.post('/settings/registration-status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['OPEN', 'CLOSED'].includes(status)) {
+      return res.status(400).json({ success: false, error: "Invalid status. Must be 'OPEN' or 'CLOSED'." });
+    }
+    await setSetting('registration_status', status);
+    console.log(`[Admin] Registration status updated to: ${status}`);
+    return res.json({ success: true, message: `Registration status updated to ${status}.`, registration_status: status });
+  } catch (err) {
+    console.error('[Admin] Set registration status error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to update registration status.' });
+  }
+});
+
+// ─── Email Center Routes ──────────────────────────────────────────────────────
+
+router.get('/email-history', async (req, res) => {
+  try {
+    const { limit = 100, offset = 0, search, type, status } = req.query;
+    let sql = `SELECT * FROM email_logs WHERE 1=1`;
+    const params = [];
+
+    if (type && type !== 'ALL') {
+      sql += ` AND email_type = ?`;
+      params.push(type);
+    }
+    if (status && status !== 'ALL') {
+      sql += ` AND status = ?`;
+      params.push(status);
+    }
+    if (search && search.trim()) {
+      const q = `%${search.trim()}%`;
+      sql += ` AND (recipient LIKE ? OR subject LIKE ? OR registration_id LIKE ?)`;
+      params.push(q, q, q);
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(parseInt(limit, 10) || 100, parseInt(offset, 10) || 0);
+
+    const rows = await all(sql, params);
+    return res.json({
+      success: true,
+      logs: rows.map(r => ({
+        id: r.id,
+        registrationId: r.registration_id,
+        recipient: r.recipient,
+        emailType: r.email_type,
+        subject: r.subject,
+        status: r.status,
+        providerMessageId: r.provider_message_id,
+        errorMessage: r.error_message,
+        createdAt: r.created_at
+      }))
+    });
+  } catch (err) {
+    console.error('[Admin] Email history error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load email history.' });
+  }
+});
+
+router.post('/email/preview', async (req, res) => {
+  try {
+    const { type, subject, bodyContent, meetData, registrationId, manualEmail } = req.body;
+    let reg = null;
+    if (registrationId) {
+      reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
+    }
+    if (!reg) {
+      reg = {
+        full_name: 'John Doe',
+        registration_id: 'OC-OM-SAMPLE79',
+        id: 79,
+        category: 'Music / Singing',
+        performance_title: 'Acoustic Melody',
+        city: 'Mumbai',
+        email: manualEmail || 'creator@example.com'
+      };
+    }
+
+    let finalSubject = subject || '';
+    let renderedBodyHtml = '';
+
+    if (type === 'meet') {
+      finalSubject = replacePlaceholders(subject || `Google Meet Invitation: ${meetData?.meetingTitle || 'Online Open Mic'}`, reg);
+      renderedBodyHtml = meetData?.customHtml
+        ? replacePlaceholders(meetData.customHtml, reg)
+        : generateMeetHtml({
+            meetingTitle: meetData?.meetingTitle,
+            meetLink: meetData?.meetLink,
+            date: meetData?.date,
+            startTime: meetData?.startTime,
+            endTime: meetData?.endTime,
+            timeZone: meetData?.timeZone,
+            additionalMessage: meetData?.additionalMessage,
+            name: reg.full_name
+          });
+    } else {
+      finalSubject = replacePlaceholders(subject || 'Message from Offstage Creators', reg);
+      const formattedBody = (bodyContent || '').includes('<p>') || (bodyContent || '').includes('<div>')
+        ? bodyContent
+        : (bodyContent || '').split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+      renderedBodyHtml = replacePlaceholders(formattedBody, reg);
+    }
+
+    const fullHtml = emailService.emailWrapper({
+      title: finalSubject,
+      preheader: finalSubject,
+      bodyContent: renderedBodyHtml
+    });
+
+    return res.json({ success: true, subject: finalSubject, html: fullHtml });
+  } catch (err) {
+    console.error('[Admin] Email preview error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate preview.' });
+  }
+});
+
+router.post('/email/custom-send', async (req, res) => {
+  try {
+    const { registrationIds = [], manualEmails = [], subject, bodyContent } = req.body;
+
+    if (!subject || !subject.trim()) {
+      return res.status(400).json({ success: false, error: 'Subject is required.' });
+    }
+    if (!bodyContent || !bodyContent.trim()) {
+      return res.status(400).json({ success: false, error: 'Email body content is required.' });
+    }
+    if (registrationIds.length === 0 && manualEmails.length === 0) {
+      return res.status(400).json({ success: false, error: 'Please select at least one recipient.' });
+    }
+
+    const results = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    // Send to selected registrations
+    for (const regId of registrationIds) {
+      try {
+        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        if (!reg) {
+          results.push({ recipient: regId, status: 'FAILED', error: 'Registration not found' });
+          failedCount++;
+          continue;
+        }
+
+        const substitutedSubject = replacePlaceholders(subject, reg);
+        const formattedBody = bodyContent.includes('<p>') || bodyContent.includes('<div>')
+          ? bodyContent
+          : bodyContent.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+        const substitutedBody = replacePlaceholders(formattedBody, reg);
+
+        const html = emailService.emailWrapper({
+          title: substitutedSubject,
+          preheader: substitutedSubject,
+          bodyContent: substitutedBody
+        });
+
+        await emailService.sendEmail({
+          registrationId: reg.registration_id,
+          to: reg.email,
+          subject: substitutedSubject,
+          html,
+          emailType: 'CUSTOM_EMAIL'
+        });
+
+        results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
+        sentCount++;
+      } catch (sendErr) {
+        console.error(`[Admin] Failed custom email to ${regId}:`, sendErr.message);
+        results.push({ recipient: regId, status: 'FAILED', error: sendErr.message });
+        failedCount++;
+      }
+    }
+
+    // Send to manual emails
+    for (const email of manualEmails) {
+      const trimmed = email.trim();
+      if (!trimmed) continue;
+      try {
+        const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
+        const substitutedSubject = replacePlaceholders(subject, dummyReg);
+        const formattedBody = bodyContent.includes('<p>') || bodyContent.includes('<div>')
+          ? bodyContent
+          : bodyContent.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+        const substitutedBody = replacePlaceholders(formattedBody, dummyReg);
+
+        const html = emailService.emailWrapper({
+          title: substitutedSubject,
+          preheader: substitutedSubject,
+          bodyContent: substitutedBody
+        });
+
+        await emailService.sendEmail({
+          registrationId: null,
+          to: trimmed,
+          subject: substitutedSubject,
+          html,
+          emailType: 'CUSTOM_EMAIL'
+        });
+
+        results.push({ recipient: trimmed, status: 'SENT' });
+        sentCount++;
+      } catch (sendErr) {
+        console.error(`[Admin] Failed custom email to ${trimmed}:`, sendErr.message);
+        results.push({ recipient: trimmed, status: 'FAILED', error: sendErr.message });
+        failedCount++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Processed: ${sentCount} sent, ${failedCount} failed.`,
+      sentCount,
+      failedCount,
+      results
+    });
+
+  } catch (err) {
+    console.error('[Admin] Custom email send error:', err);
+    return res.status(500).json({ success: false, error: 'Server error while sending emails.' });
+  }
+});
+
+router.post('/email/meet-send', async (req, res) => {
+  try {
+    const {
+      registrationIds = [],
+      manualEmails = [],
+      meetingTitle,
+      meetLink,
+      date,
+      startTime,
+      endTime,
+      timeZone,
+      additionalMessage,
+      customHtml,
+      customSubject
+    } = req.body;
+
+    if (!meetLink || !meetLink.trim()) {
+      return res.status(400).json({ success: false, error: 'Google Meet link is required.' });
+    }
+    if (registrationIds.length === 0 && manualEmails.length === 0) {
+      return res.status(400).json({ success: false, error: 'Please select at least one recipient.' });
+    }
+
+    const baseSubject = customSubject || `Google Meet Invitation: ${meetingTitle || 'Online Open Mic'}`;
+    const results = [];
+    let sentCount = 0;
+    let failedCount = 0;
+
+    for (const regId of registrationIds) {
+      try {
+        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        if (!reg) {
+          results.push({ recipient: regId, status: 'FAILED', error: 'Registration not found' });
+          failedCount++;
+          continue;
+        }
+
+        const substitutedSubject = replacePlaceholders(baseSubject, reg);
+        const bodyContent = customHtml
+          ? replacePlaceholders(customHtml, reg)
+          : generateMeetHtml({
+              meetingTitle,
+              meetLink,
+              date,
+              startTime,
+              endTime,
+              timeZone,
+              additionalMessage,
+              name: reg.full_name
+            });
+
+        const html = emailService.emailWrapper({
+          title: substitutedSubject,
+          preheader: substitutedSubject,
+          bodyContent
+        });
+
+        await emailService.sendEmail({
+          registrationId: reg.registration_id,
+          to: reg.email,
+          subject: substitutedSubject,
+          html,
+          emailType: 'MEET_INVITE'
+        });
+
+        results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
+        sentCount++;
+      } catch (sendErr) {
+        console.error(`[Admin] Meet invitation send error to ${regId}:`, sendErr.message);
+        results.push({ recipient: regId, status: 'FAILED', error: sendErr.message });
+        failedCount++;
+      }
+    }
+
+    for (const email of manualEmails) {
+      const trimmed = email.trim();
+      if (!trimmed) continue;
+      try {
+        const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
+        const substitutedSubject = replacePlaceholders(baseSubject, dummyReg);
+        const bodyContent = customHtml
+          ? replacePlaceholders(customHtml, dummyReg)
+          : generateMeetHtml({
+              meetingTitle,
+              meetLink,
+              date,
+              startTime,
+              endTime,
+              timeZone,
+              additionalMessage,
+              name: 'Creator'
+            });
+
+        const html = emailService.emailWrapper({
+          title: substitutedSubject,
+          preheader: substitutedSubject,
+          bodyContent
+        });
+
+        await emailService.sendEmail({
+          registrationId: null,
+          to: trimmed,
+          subject: substitutedSubject,
+          html,
+          emailType: 'MEET_INVITE'
+        });
+
+        results.push({ recipient: trimmed, status: 'SENT' });
+        sentCount++;
+      } catch (sendErr) {
+        console.error(`[Admin] Meet invitation send error to ${trimmed}:`, sendErr.message);
+        results.push({ recipient: trimmed, status: 'FAILED', error: sendErr.message });
+        failedCount++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Meet invitations processed: ${sentCount} sent, ${failedCount} failed.`,
+      sentCount,
+      failedCount,
+      results
+    });
+
+  } catch (err) {
+    console.error('[Admin] Meet send error:', err);
+    return res.status(500).json({ success: false, error: 'Server error while sending Meet invitations.' });
   }
 });
 

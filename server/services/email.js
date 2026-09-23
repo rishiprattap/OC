@@ -332,5 +332,6 @@ module.exports = {
   sendRegistrationConfirmationEmail,
   sendApprovalEmail,
   sendRejectionEmail,
-  sendEmail
+  sendEmail,
+  emailWrapper
 };

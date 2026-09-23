@@ -227,6 +227,84 @@
     .empty-state { text-align: center; padding: 60px 20px; color: #5a5248; }
     .empty-state p { font-size: 15px; margin-top: 12px; }
 
+    /* Subnav Tabs */
+    .subnav-bar {
+      display: flex; gap: 8px; border-bottom: 1px solid #2a231c;
+      margin-bottom: 24px; padding-bottom: 8px; flex-wrap: wrap;
+    }
+    .subnav-btn {
+      background: none; border: 1px solid #2a231c; border-radius: 8px;
+      color: #8e8477; padding: 8px 16px; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: all 0.2s ease;
+    }
+    .subnav-btn:hover { color: #f7eee1; border-color: #4a3e30; }
+    .subnav-btn.active {
+      background: rgba(228, 173, 87, 0.12); color: #e4ad57;
+      border-color: #e4ad57;
+    }
+
+    /* Cards & Form controls for Email Center & Settings */
+    .panel-card {
+      background: #141210; border: 1px solid #2a231c; border-radius: 12px;
+      padding: 24px; margin-bottom: 24px;
+    }
+    .panel-title {
+      font-size: 16px; font-weight: 800; color: #f7eee1; margin: 0 0 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .admin-input, .admin-textarea, .admin-select {
+      width: 100%; box-sizing: border-box; background: #0d0c0a;
+      border: 1px solid #2a231c; color: #f7eee1; padding: 12px 14px;
+      border-radius: 8px; font-size: 13px; outline: none; margin-bottom: 14px;
+      font-family: inherit; transition: border-color 0.2s ease;
+    }
+    .admin-input:focus, .admin-textarea:focus, .admin-select:focus {
+      border-color: #e4ad57;
+    }
+    .admin-textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+    .admin-label {
+      display: block; font-size: 11px; font-weight: 800; color: #8e8477;
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;
+    }
+
+    /* Placeholder Chips */
+    .placeholder-chips {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center;
+    }
+    .placeholder-chip {
+      background: #1b1713; border: 1px dashed rgba(228, 173, 87, 0.5);
+      color: #e4ad57; padding: 4px 10px; border-radius: 6px; font-size: 12px;
+      font-family: monospace; font-weight: 700; cursor: pointer; transition: all 0.2s ease;
+    }
+    .placeholder-chip:hover {
+      background: #e4ad57; color: #0d0c0a; border-style: solid;
+    }
+
+    /* Recipient Selector Table Container */
+    .recipient-table-wrap {
+      max-height: 280px; overflow-y: auto; border: 1px solid #2a231c;
+      border-radius: 8px; background: #0d0c0a; margin-bottom: 16px;
+    }
+    .badge-pill {
+      display: inline-block; padding: 3px 8px; border-radius: 100px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .badge-sent { background: rgba(110,219,140,0.15); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
+    .badge-failed { background: rgba(226,105,71,0.15); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
+
+    /* Settings Card */
+    .status-badge-lg {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 100px; font-size: 15px; font-weight: 800;
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .status-badge-lg.open {
+      background: rgba(110,219,140,0.15); color: #6edb8c; border: 2px solid rgba(110,219,140,0.4);
+    }
+    .status-badge-lg.closed {
+      background: rgba(226,105,71,0.15); color: #e26947; border: 2px solid rgba(226,105,71,0.4);
+    }
+
     @media (max-width: 768px) {
       .admin-layout { flex-direction: column; }
       .admin-sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
@@ -277,6 +355,12 @@
         </button>
         <button class="admin-nav-item" data-tab="approved" onclick="showTab('approved')">
           <span class="nav-icon">✓</span> Approved
+        </button>
+        <button class="admin-nav-item" data-tab="emailCenter" onclick="showTab('emailCenter')">
+          <span class="nav-icon">✉️</span> Email Center
+        </button>
+        <button class="admin-nav-item" data-tab="settings" onclick="showTab('settings')">
+          <span class="nav-icon">⚙️</span> Registration Settings
         </button>
       </nav>
       <button class="logout-btn" id="logoutBtn">⟵ Logout</button>
@@ -350,7 +434,264 @@
         </div>
       </div>
 
+      <!-- ── EMAIL CENTER TAB ───────────────────────────── -->
+      <div id="tabEmailCenter" style="display:none;">
+        <div style="margin-bottom:20px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Email Center</h1>
+          <p style="color:#8e8477; font-size:13px; margin:0;">Compose custom emails with dynamic participant data, invite creators to Google Meet sessions, and inspect communication audit history.</p>
+        </div>
+
+        <div class="subnav-bar">
+          <button class="subnav-btn active" id="subnavBtnCustom" onclick="switchEmailSubtab('custom')">✉️ Custom Email</button>
+          <button class="subnav-btn" id="subnavBtnMeet" onclick="switchEmailSubtab('meet')">📹 Google Meet Invitation</button>
+          <button class="subnav-btn" id="subnavBtnHistory" onclick="switchEmailSubtab('history')">📜 Email History</button>
+        </div>
+
+        <!-- SUBTAB 1: CUSTOM EMAIL -->
+        <div id="emailSubtabCustom">
+          <div class="panel-card">
+            <div class="panel-title">
+              <span>1. Select Recipients</span>
+              <span style="color:#e4ad57; font-size:12px; font-weight:700;" id="customEmailSelectedCount">0 recipients selected</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+              <input type="search" class="admin-input" id="customEmailSearch" placeholder="Search name, ID, email, serial number..." style="margin-bottom:0;" oninput="filterCustomEmailList()">
+              <select class="admin-select" id="customEmailCategoryFilter" style="margin-bottom:0;" onchange="filterCustomEmailList()">
+                <option value="ALL">All Categories</option>
+              </select>
+              <select class="admin-select" id="customEmailStatusFilter" style="margin-bottom:0;" onchange="filterCustomEmailList()">
+                <option value="ALL">All Statuses</option>
+                <option value="APPROVED">Approved</option>
+                <option value="VERIFIED">Verified</option>
+                <option value="PENDING_VERIFICATION">Pending Verification</option>
+                <option value="REJECTED">Rejected</option>
+                <option value="REVOKED">Revoked</option>
+              </select>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="action-btn btn-view" onclick="selectAllCustomEmail(true)">Select All Filtered</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCustomEmail(false)">Deselect All</button>
+              </div>
+              <small style="color:#8e8477; font-size:11px;">Select single or multiple participants</small>
+            </div>
+
+            <div class="recipient-table-wrap" id="customEmailTableWrapper">
+              <div class="empty-state"><p>Loading participants…</p></div>
+            </div>
+
+            <label class="admin-label">Or Manually Enter Email Address(es)</label>
+            <input type="text" class="admin-input" id="customEmailManual" placeholder="e.g. creator@example.com, artist@gmail.com (comma-separated)">
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-title">2. Compose Email</div>
+
+            <label class="admin-label">Subject</label>
+            <input type="text" class="admin-input" id="customEmailSubject" placeholder="e.g. Important Update for {name} regarding {category}">
+
+            <label class="admin-label">Dynamic Placeholders (Click to insert):</label>
+            <div class="placeholder-chips">
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{name}')">{name}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{registration_id}')">{registration_id}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{serial_no}')">{serial_no}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{category}')">{category}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{entry}')">{entry}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{city}')">{city}</button>
+            </div>
+
+            <label class="admin-label">Email Message</label>
+            <textarea class="admin-textarea" id="customEmailBody" rows="8" placeholder="Dear {name},&#10;&#10;Your registration ID is {registration_id}. We are excited to announce your {category} performance slot..."></textarea>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
+              <button type="button" class="cta cta-secondary" onclick="openPreviewCustomEmail()">👁️ Preview Email</button>
+              <button type="button" class="cta" id="btnSendCustomEmail" onclick="sendCustomEmail()">🚀 Send Email</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: GOOGLE MEET INVITATION -->
+        <div id="emailSubtabMeet" style="display:none;">
+          <div class="panel-card">
+            <div class="panel-title">1. Meeting Details</div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+              <div>
+                <label class="admin-label">Meeting Title <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="meetTitle" value="Offstage Creators — Online Open Mic 2026 Performer Briefing" oninput="updateMeetPreviewTemplate()">
+              </div>
+              <div>
+                <label class="admin-label">Google Meet Link <span style="color:#e4ad57;">*</span></label>
+                <input type="url" class="admin-input" id="meetLink" placeholder="https://meet.google.com/xxx-yyyy-zzz" oninput="updateMeetPreviewTemplate()">
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 14px;">
+              <div>
+                <label class="admin-label">Date <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="meetDate" placeholder="e.g. 23 September 2026" oninput="updateMeetPreviewTemplate()">
+              </div>
+              <div>
+                <label class="admin-label">Start Time <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="meetStartTime" placeholder="e.g. 7:30 PM" oninput="updateMeetPreviewTemplate()">
+              </div>
+              <div>
+                <label class="admin-label">End Time <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="meetEndTime" placeholder="e.g. 9:00 PM" oninput="updateMeetPreviewTemplate()">
+              </div>
+              <div>
+                <label class="admin-label">Time Zone <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="meetTimeZone" value="IST (GMT+5:30)" oninput="updateMeetPreviewTemplate()">
+              </div>
+            </div>
+
+            <label class="admin-label">Additional Message / Performer Instructions</label>
+            <textarea class="admin-textarea" id="meetAdditionalMessage" rows="2" placeholder="e.g. Please join 5 minutes early with your camera and mic tested." oninput="updateMeetPreviewTemplate()"></textarea>
+
+            <div style="margin-top:16px;">
+              <label class="admin-label">Editable Invitation Email (Admin can review and edit before sending):</label>
+              <textarea class="admin-textarea" id="meetCustomBody" rows="7" style="font-family:monospace; font-size:12px;"></textarea>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-title">
+              <span>2. Select Recipients</span>
+              <span style="color:#e4ad57; font-size:12px; font-weight:700;" id="meetEmailSelectedCount">0 recipients selected</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+              <input type="search" class="admin-input" id="meetEmailSearch" placeholder="Search name, ID, email, serial number..." style="margin-bottom:0;" oninput="filterMeetEmailList()">
+              <select class="admin-select" id="meetEmailCategoryFilter" style="margin-bottom:0;" onchange="filterMeetEmailList()">
+                <option value="ALL">All Categories</option>
+              </select>
+              <select class="admin-select" id="meetEmailStatusFilter" style="margin-bottom:0;" onchange="filterMeetEmailList()">
+                <option value="ALL">All Statuses</option>
+                <option value="APPROVED" selected>Approved</option>
+                <option value="VERIFIED">Verified</option>
+                <option value="PENDING_VERIFICATION">Pending Verification</option>
+              </select>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+              <div style="display:flex; gap:8px;">
+                <button type="button" class="action-btn btn-view" onclick="selectAllMeetEmail(true)">Select All Filtered</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllMeetEmail(false)">Deselect All</button>
+              </div>
+              <small style="color:#8e8477; font-size:11px;">Select recipients from existing registrations</small>
+            </div>
+
+            <div class="recipient-table-wrap" id="meetEmailTableWrapper">
+              <div class="empty-state"><p>Loading participants…</p></div>
+            </div>
+
+            <label class="admin-label">Or Manually Enter Email Address(es)</label>
+            <input type="text" class="admin-input" id="meetEmailManual" placeholder="e.g. specialguest@example.com">
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
+              <button type="button" class="cta cta-secondary" onclick="openPreviewMeetEmail()">👁️ Preview Invitation</button>
+              <button type="button" class="cta" id="btnSendMeetEmail" onclick="promptSendMeetEmail()">Confirm &amp; Send Meet Invitation →</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 3: EMAIL HISTORY -->
+        <div id="emailSubtabHistory" style="display:none;">
+          <div class="panel-card">
+            <div class="panel-title">Email Communication Audit Log</div>
+            <div class="controls-bar" style="margin-bottom:16px;">
+              <input type="search" class="search-input" id="historySearchInput" placeholder="Search recipient, subject, registration ID..." oninput="loadEmailHistory()">
+              <select class="filter-select" id="historyTypeFilter" onchange="loadEmailHistory()">
+                <option value="ALL">All Email Types</option>
+                <option value="CUSTOM_EMAIL">Custom Email</option>
+                <option value="MEET_INVITE">Meet Invitation</option>
+                <option value="REGISTRATION_APPROVED">Approval</option>
+                <option value="REGISTRATION_CONFIRMATION">Confirmation</option>
+                <option value="REGISTRATION_REJECTED">Rejection</option>
+                <option value="OTP_VERIFICATION">OTP</option>
+              </select>
+              <select class="filter-select" id="historyStatusFilter" onchange="loadEmailHistory()">
+                <option value="ALL">All Statuses</option>
+                <option value="SENT">Sent</option>
+                <option value="FAILED">Failed</option>
+              </select>
+              <button class="cta cta-secondary" onclick="loadEmailHistory()">⟳ Refresh History</button>
+            </div>
+            <div id="historyTableWrapper">
+              <div class="empty-state"><p>Loading email history…</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── REGISTRATION SETTINGS TAB ───────────────────── -->
+      <div id="tabSettings" style="display:none;">
+        <div style="margin-bottom:24px;">
+          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Registration Settings</h1>
+          <p style="color:#8e8477; font-size:13px; margin:0;">Control public performer registration intake and submission availability.</p>
+        </div>
+
+        <div class="panel-card" style="max-width: 640px;">
+          <div class="panel-title">Registration Status</div>
+          <div style="display:flex; align-items:center; gap: 16px; margin: 20px 0;">
+            <div id="settingsStatusBadge" class="status-badge-lg open">🟢 OPEN</div>
+            <span style="font-size:14px; color:#d5cbbd;" id="settingsStatusText">Registrations are currently open for participants.</span>
+          </div>
+
+          <div style="background:#0d0c0a; border: 1px solid #2a231c; border-radius: 8px; padding: 16px; margin-bottom: 24px; font-size: 13px; color: #8e8477; line-height: 1.6;">
+            <strong style="color:#f7eee1;">When Registration is Closed:</strong><br>
+            • Public registration submissions on <code>/register</code> are immediately blocked.<br>
+            • Visitors will see: <em>“Registration is currently closed.”</em><br>
+            • All existing participant registrations, approvals, and data remain 100% safe, readable, and intact in the Admin Panel.<br>
+            • Reopening instantly restores the registration form.
+          </div>
+
+          <button type="button" class="cta" id="btnToggleRegStatus" onclick="promptToggleRegistrationStatus()">🔴 Close Registrations</button>
+        </div>
+      </div>
+
     </main>
+  </div>
+
+  <!-- Email Preview Modal -->
+  <div class="modal-overlay" id="emailPreviewModal" style="display:none;">
+    <div class="modal-card" style="width: min(720px, 95vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">EMAIL PREVIEW</div>
+          <div style="font-size:16px; font-weight:700; color:#f7eee1; margin-top:2px;" id="previewSubject">—</div>
+        </div>
+        <button class="modal-close" onclick="closeEmailPreviewModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px;">
+        <div style="background:#0a0908; border:1px solid #2a231c; border-radius:8px; overflow:hidden;">
+          <iframe id="previewIframe" style="width:100%; height:480px; border:none; background:#0d0c0a;"></iframe>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between; align-items:center;">
+        <span style="color:#8e8477; font-size:12px;" id="previewNote">Rendered with sample participant data</span>
+        <div style="display:flex; gap:10px;">
+          <button type="button" class="cta cta-secondary" onclick="closeEmailPreviewModal()">Close Preview</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirmDialogModal" style="display:none;">
+    <div class="modal-card" style="width: min(460px, 92vw);">
+      <div class="modal-header">
+        <div style="font-size:16px; font-weight:800; color:#f7eee1;" id="confirmDialogTitle">Confirmation Required</div>
+        <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+      </div>
+      <div class="modal-body" id="confirmDialogMessage" style="font-size:14px; color:#d5cbbd; line-height:1.6; padding: 24px;"></div>
+      <div class="modal-actions" style="justify-content: flex-end; gap: 10px;">
+        <button type="button" class="action-btn btn-view" onclick="closeConfirmModal()">Cancel</button>
+        <button type="button" class="cta" id="confirmDialogConfirmBtn">Confirm</button>
+      </div>
+    </div>
   </div>
 
   <!-- Detail Modal -->

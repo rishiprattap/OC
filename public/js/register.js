@@ -58,6 +58,24 @@
   const confirmedUtr = document.getElementById('confirmedUtr');
   const viewPassLink = document.getElementById('viewPassLink');
 
+  const registrationClosedBox = document.getElementById('registrationClosedBox');
+  const stepsBar = document.querySelector('.steps-bar');
+
+  async function checkRegistrationStatus() {
+    try {
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.registrationOpen === false || data.registrationStatus === 'CLOSED') {
+          if (step1Card) step1Card.style.display = 'none';
+          if (stepsBar) stepsBar.style.display = 'none';
+          if (registrationClosedBox) registrationClosedBox.style.display = 'block';
+        }
+      }
+    } catch (_) {}
+  }
+  checkRegistrationStatus();
+
   const errorAlert = document.getElementById('errorAlert');
   const successAlert = document.getElementById('successAlert');
 
@@ -377,6 +395,15 @@
         const data = await res.json();
 
         if (!res.ok || !data.success) {
+          if (res.status === 403 || (data.error && data.error.toLowerCase().includes('closed'))) {
+            if (step1Card) step1Card.style.display = 'none';
+            if (stepsBar) stepsBar.style.display = 'none';
+            if (registrationClosedBox) registrationClosedBox.style.display = 'block';
+            showError(data.error || 'Registration is currently closed.');
+            submitBtn.disabled = false;
+            submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
+            return;
+          }
           if (data.status === 'VERIFIED' || data.status === 'APPROVED') {
             showError(`A verified registration already exists for ${email}. Registration ID: ${data.registrationId}`);
           } else {

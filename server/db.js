@@ -198,6 +198,15 @@ const initSchema = async () => {
       );
     }
 
+    // ── App Settings ────────────────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
     console.log('✓ Database schema initialized (Postgres).');
   } catch (err) {
     console.error('Database schema initialization error:', err);
@@ -207,4 +216,24 @@ const initSchema = async () => {
 
 initSchema();
 
-module.exports = { pool, run, get, all };
+async function getSetting(key, defaultValue = null) {
+  try {
+    const row = await get(`SELECT value FROM app_settings WHERE key = ?`, [key]);
+    return row ? row.value : defaultValue;
+  } catch (err) {
+    console.warn(`[DB] Failed to get setting ${key}:`, err.message);
+    return defaultValue;
+  }
+}
+
+async function setSetting(key, value) {
+  const now = new Date().toISOString();
+  await run(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+    [key, String(value), now]
+  );
+  return value;
+}
+
+module.exports = { pool, run, get, all, getSetting, setSetting };
