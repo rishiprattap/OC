@@ -498,60 +498,211 @@ function replacePlaceholders(templateText, reg = {}) {
   const entry = reg.performance_title || reg.performanceTitle || reg.category || '';
   const city = reg.city || '';
 
-  return templateText
+  let out = templateText
     .replace(/\{name\}/gi, name)
     .replace(/\{registration_id\}/gi, regId)
     .replace(/\{serial_no\}/gi, serialNo)
     .replace(/\{category\}/gi, category)
     .replace(/\{entry\}/gi, entry)
     .replace(/\{city\}/gi, city);
+
+  if (!regId) {
+    out = out.replace(/^[ \t]*Registration ID:[ \t]*\n?/gim, '');
+  }
+  if (!category) {
+    out = out.replace(/^[ \t]*Performance Category:[ \t]*\n?/gim, '');
+  }
+
+  return out;
 }
 
-function generateMeetHtml({ meetingTitle, meetLink, date, startTime, endTime, timeZone, additionalMessage, name }) {
-  const greeting = name ? `Hi ${name},` : 'Hello,';
-  const safeTitle = meetingTitle || 'Online Open Mic 2026 — Meeting';
+function formatRichEmailContent(rawText) {
+  if (!rawText || !rawText.trim()) return '';
+
+  let text = rawText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Convert markdown headings:
+  text = text.replace(/^###[ \t]+(.+)$/gm, '<h3 style="color:#e4ad57; font-size:15px; font-weight:700; margin:20px 0 10px; letter-spacing:0.02em; text-transform:uppercase;">$1</h3>');
+  text = text.replace(/^##[ \t]+(.+)$/gm, '<h2 style="color:#f7eee1; font-size:17px; font-weight:700; margin:24px 0 12px; letter-spacing:0.02em;">$1</h2>');
+
+  // Convert bold: **text** -> <strong style="color:#f7eee1;">text</strong>
+  text = text.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#f7eee1;">$1</strong>');
+
+  // Convert italic: *text* (when not a bullet list or bold)
+  text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em style="color:#e4ad57;">$2</em>');
+
+  // Convert bullet lists (lines starting with * or - or •)
+  const lines = text.split('\n');
+  const processedLines = [];
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const bulletMatch = line.match(/^[ \t]*[*•-][ \t]+(.+)$/);
+
+    if (bulletMatch) {
+      if (!inList) {
+        processedLines.push('<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 16px;">');
+        inList = true;
+      }
+      processedLines.push(`  <tr><td width="20" valign="top" style="color:#e4ad57; font-size:15px; line-height:1.6; padding-right:8px; vertical-align:top;">•</td><td style="color:#eee4d5; font-size:13px; line-height:1.6; padding-bottom:8px; vertical-align:top;">${bulletMatch[1]}</td></tr>`);
+    } else {
+      if (inList) {
+        processedLines.push('</table>');
+        inList = false;
+      }
+      processedLines.push(line);
+    }
+  }
+  if (inList) {
+    processedLines.push('</table>');
+  }
+
+  text = processedLines.join('\n');
+
+  // Auto-convert URLs to clickable links if not already wrapped in <a>
+  text = text.replace(/(^|[^"'>])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" style="color:#e4ad57; text-decoration:underline;">$2</a>');
+
+  // Paragraphs
+  const blocks = text.split(/\n{2,}/);
+  const formattedBlocks = blocks.map(block => {
+    block = block.trim();
+    if (!block) return '';
+    if (/^<(table|h2|h3|h4|div|p|ul|ol)/i.test(block)) {
+      return block;
+    }
+    const inner = block.replace(/\n/g, '<br>');
+    return `<p style="margin:0 0 14px; line-height:1.7; font-size:14px; color:#eee4d5;">${inner}</p>`;
+  });
+
+  return formattedBlocks.filter(Boolean).join('\n');
+}
+
+function generateMeetHtml({ meetingTitle, meetLink, date, startTime, endTime, timeZone, additionalMessage, name, regId, serialNo, category }) {
+  const greeting = name ? `Dear ${name},` : 'Dear Creator,';
+  const safeTitle = meetingTitle || 'Online Open Mic 2026 — Performer Briefing';
   const safeDate = date || 'To be announced';
-  const timeStr = `${startTime || ''} – ${endTime || ''} ${timeZone || ''}`.trim() || 'Scheduled Time';
+  const timeStr = `${startTime || ''} – ${endTime || ''} ${timeZone ? `(${timeZone})` : ''}`.trim() || 'Scheduled Time';
   const safeLink = meetLink || '#';
+  const hasReg = Boolean(regId || category);
+
+  let formattedInstructions = '';
+  if (additionalMessage && additionalMessage.trim()) {
+    formattedInstructions = `
+      <div style="background:#181410; border:1px solid #2a231c; border-left:3px solid #e4ad57; border-radius:8px; padding:18px 22px; margin:22px 0 20px;">
+        ${formatRichEmailContent(additionalMessage)}
+      </div>
+    `;
+  }
 
   return `
-    <h2>Google Meet Invitation</h2>
-    <p>${greeting}</p>
-    <p>You have been invited to attend the following session with <strong>Offstage Creators</strong>:</p>
-
-    <div style="background:#110f0d; border: 1px solid #2a231c; border-radius:10px; padding:20px 24px; margin:20px 0;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
-        <span style="color:#8e8477; font-size:13px;">Meeting:</span>
-        <span style="color:#f7eee1; font-weight:700; font-size:14px; text-align:right;">${safeTitle}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
-        <span style="color:#8e8477; font-size:13px;">Date:</span>
-        <span style="color:#f7eee1; font-weight:600; font-size:13px; text-align:right;">${safeDate}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; margin-bottom:12px; border-bottom:1px solid #1e1a16; padding-bottom:8px;">
-        <span style="color:#8e8477; font-size:13px;">Time:</span>
-        <span style="color:#f7eee1; font-weight:600; font-size:13px; text-align:right;">${timeStr}</span>
-      </div>
-      <div style="display:flex; justify-content:space-between; padding-top:4px;">
-        <span style="color:#8e8477; font-size:13px;">Google Meet:</span>
-        <span style="text-align:right;"><a href="${safeLink}" style="color:#e4ad57; font-weight:700; text-decoration:underline;">${safeLink}</a></span>
-      </div>
-    </div>
-
-    ${additionalMessage ? `
-      <div style="margin:20px 0; padding:16px 20px; background:#181410; border-left:3px solid #e4ad57; border-radius:4px; font-size:13px; color:#d6cbbe; line-height:1.6;">
-        ${additionalMessage.replace(/\n/g, '<br>')}
-      </div>
-    ` : ''}
-
-    <div style="text-align:center; margin:28px 0 16px;">
-      <a href="${safeLink}" class="cta-btn" style="background:#e4ad57; color:#0d0c0a; font-weight:800; padding:14px 28px; text-decoration:none; border-radius:6px; display:inline-block;">JOIN GOOGLE MEET →</a>
-    </div>
-
-    <p class="muted" style="margin-top:24px;">
-      Please ensure you join with your camera and microphone working. If you have questions or difficulty joining, please reach out to us on Instagram
-      <a href="https://www.instagram.com/offstagecreators/" style="color:#e4ad57;">@offstagecreators</a>.
+    <h2 style="color:#f7eee1; font-size:22px; margin:0 0 14px; font-weight:800; letter-spacing:0.02em;">Google Meet Invitation</h2>
+    <p style="color:#eee4d5; font-size:15px; line-height:1.7; margin:0 0 14px;">${greeting}</p>
+    <p style="color:#eee4d5; font-size:14px; line-height:1.7; margin:0 0 20px;">
+      You are invited to join the upcoming <strong>Offstage Creators</strong> performer session. Please find the session schedule, joining link, and instructions below:
     </p>
+
+    <!-- SESSION DETAILS TABLE (100% email-client compatible) -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#110f0d; border:1px solid #2a231c; border-radius:10px; margin:0 0 24px;">
+      <tr>
+        <td style="padding:14px 18px; border-bottom:1px solid #1e1a16;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Session</td>
+              <td width="70%" valign="top" align="right" style="color:#f7eee1; font-size:13px; font-weight:700;">${safeTitle}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 18px; border-bottom:1px solid #1e1a16;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Date</td>
+              <td width="70%" valign="top" align="right" style="color:#f7eee1; font-size:13px; font-weight:600;">📅 ${safeDate}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 18px; border-bottom:1px solid #1e1a16;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Time</td>
+              <td width="70%" valign="top" align="right" style="color:#f7eee1; font-size:13px; font-weight:600;">⏰ ${timeStr}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      ${hasReg ? `
+      <tr>
+        <td style="padding:14px 18px; border-bottom:1px solid #1e1a16;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Performer</td>
+              <td width="70%" valign="top" align="right" style="color:#e4ad57; font-size:13px; font-weight:700; font-family:monospace;">
+                ${regId || 'Registered Creator'} ${serialNo ? `<span style="color:#8e8477; font-family:sans-serif; font-size:11px;">(#${serialNo})</span>` : ''}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      ${category ? `
+      <tr>
+        <td style="padding:14px 18px; border-bottom:1px solid #1e1a16;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Category</td>
+              <td width="70%" valign="top" align="right" style="color:#f7eee1; font-size:13px; font-weight:600;">🎭 ${category}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+      ` : ''}
+      ` : ''}
+      <tr>
+        <td style="padding:14px 18px;">
+          <table width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="30%" valign="top" style="color:#8e8477; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;">Platform</td>
+              <td width="70%" valign="top" align="right" style="color:#6edb8c; font-size:13px; font-weight:700;">Google Meet</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <!-- BIG PROMINENT GOLD CTA BUTTON -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;">
+      <tr>
+        <td align="center">
+          <a href="${safeLink}" target="_blank" style="background:#e4ad57; color:#0d0c0a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13px; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; text-decoration:none; padding:15px 36px; border-radius:6px; display:inline-block;">
+            🎥 JOIN GOOGLE MEET →
+          </a>
+          <div style="margin-top:12px; font-size:12px; color:#8e8477;">
+            Direct URL: <a href="${safeLink}" target="_blank" style="color:#e4ad57; text-decoration:underline;">${safeLink}</a>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <!-- INSTRUCTIONS / GUIDELINES -->
+    ${formattedInstructions}
+
+    <!-- FOOTER / JOINING ADVICE -->
+    <div style="margin-top:24px; padding-top:16px; border-top:1px solid #1e1a16; font-size:12px; color:#8e8477; line-height:1.6;">
+      <p style="margin:0 0 6px;">
+        Please join <strong>5 minutes early</strong> with your camera and microphone working.
+      </p>
+      <p style="margin:0;">
+        If you have any difficulty joining, please reach out to us on Instagram
+        <a href="https://www.instagram.com/offstagecreators/" target="_blank" style="color:#e4ad57; text-decoration:none; font-weight:600;">@offstagecreators</a>.
+      </p>
+      <p style="margin:16px 0 0; color:#eee4d5;">
+        Warm regards,<br>
+        <strong style="color:#e4ad57;">Offstage Creators Team</strong>
+      </p>
+    </div>
   `;
 }
 
@@ -652,24 +803,26 @@ router.post('/email/preview', async (req, res) => {
 
     if (type === 'meet') {
       finalSubject = replacePlaceholders(subject || `Google Meet Invitation: ${meetData?.meetingTitle || 'Online Open Mic'}`, reg);
-      renderedBodyHtml = meetData?.customHtml
-        ? replacePlaceholders(meetData.customHtml, reg)
-        : generateMeetHtml({
-            meetingTitle: meetData?.meetingTitle,
-            meetLink: meetData?.meetLink,
-            date: meetData?.date,
-            startTime: meetData?.startTime,
-            endTime: meetData?.endTime,
-            timeZone: meetData?.timeZone,
-            additionalMessage: meetData?.additionalMessage,
-            name: reg.full_name
-          });
+      const rawId = reg.id || '';
+      const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
+      const substitutedInstructions = replacePlaceholders(meetData?.additionalMessage || meetData?.customHtml || '', reg);
+      renderedBodyHtml = generateMeetHtml({
+        meetingTitle: meetData?.meetingTitle,
+        meetLink: meetData?.meetLink,
+        date: meetData?.date,
+        startTime: meetData?.startTime,
+        endTime: meetData?.endTime,
+        timeZone: meetData?.timeZone,
+        additionalMessage: substitutedInstructions,
+        name: reg.full_name,
+        regId: reg.registration_id,
+        serialNo,
+        category: reg.category
+      });
     } else {
       finalSubject = replacePlaceholders(subject || 'Message from Offstage Creators', reg);
-      const formattedBody = (bodyContent || '').includes('<p>') || (bodyContent || '').includes('<div>')
-        ? bodyContent
-        : (bodyContent || '').split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-      renderedBodyHtml = replacePlaceholders(formattedBody, reg);
+      const substitutedBody = replacePlaceholders(bodyContent || '', reg);
+      renderedBodyHtml = formatRichEmailContent(substitutedBody);
     }
 
     const fullHtml = emailService.emailWrapper({
@@ -714,15 +867,12 @@ router.post('/email/custom-send', async (req, res) => {
         }
 
         const substitutedSubject = replacePlaceholders(subject, reg);
-        const formattedBody = bodyContent.includes('<p>') || bodyContent.includes('<div>')
-          ? bodyContent
-          : bodyContent.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-        const substitutedBody = replacePlaceholders(formattedBody, reg);
+        const substitutedBody = replacePlaceholders(bodyContent, reg);
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,
           preheader: substitutedSubject,
-          bodyContent: substitutedBody
+          bodyContent: formatRichEmailContent(substitutedBody)
         });
 
         await emailService.sendEmail({
@@ -749,15 +899,12 @@ router.post('/email/custom-send', async (req, res) => {
       try {
         const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
         const substitutedSubject = replacePlaceholders(subject, dummyReg);
-        const formattedBody = bodyContent.includes('<p>') || bodyContent.includes('<div>')
-          ? bodyContent
-          : bodyContent.split('\n\n').map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-        const substitutedBody = replacePlaceholders(formattedBody, dummyReg);
+        const substitutedBody = replacePlaceholders(bodyContent, dummyReg);
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,
           preheader: substitutedSubject,
-          bodyContent: substitutedBody
+          bodyContent: formatRichEmailContent(substitutedBody)
         });
 
         await emailService.sendEmail({
@@ -828,19 +975,24 @@ router.post('/email/meet-send', async (req, res) => {
           continue;
         }
 
+        const rawId = reg.id || '';
+        const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
         const substitutedSubject = replacePlaceholders(baseSubject, reg);
-        const bodyContent = customHtml
-          ? replacePlaceholders(customHtml, reg)
-          : generateMeetHtml({
-              meetingTitle,
-              meetLink,
-              date,
-              startTime,
-              endTime,
-              timeZone,
-              additionalMessage,
-              name: reg.full_name
-            });
+        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', reg);
+
+        const bodyContent = generateMeetHtml({
+          meetingTitle,
+          meetLink,
+          date,
+          startTime,
+          endTime,
+          timeZone,
+          additionalMessage: substitutedInstructions,
+          name: reg.full_name,
+          regId: reg.registration_id,
+          serialNo,
+          category: reg.category
+        });
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,
@@ -871,18 +1023,21 @@ router.post('/email/meet-send', async (req, res) => {
       try {
         const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
         const substitutedSubject = replacePlaceholders(baseSubject, dummyReg);
-        const bodyContent = customHtml
-          ? replacePlaceholders(customHtml, dummyReg)
-          : generateMeetHtml({
-              meetingTitle,
-              meetLink,
-              date,
-              startTime,
-              endTime,
-              timeZone,
-              additionalMessage,
-              name: 'Creator'
-            });
+        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', dummyReg);
+
+        const bodyContent = generateMeetHtml({
+          meetingTitle,
+          meetLink,
+          date,
+          startTime,
+          endTime,
+          timeZone,
+          additionalMessage: substitutedInstructions,
+          name: 'Creator',
+          regId: null,
+          serialNo: null,
+          category: null
+        });
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,

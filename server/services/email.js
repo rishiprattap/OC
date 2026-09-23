@@ -125,23 +125,33 @@ function emailWrapper({ title, preheader, bodyContent }) {
     h3 { margin: 0 0 16px; font-size: 16px; font-weight: 700; color: #f7eee1; }
   </style>
 </head>
-<body>
-  <div class="wrapper">
-    ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;color:#0d0c0a;">${preheader}</div>` : ''}
-    <div class="card">
-      <div class="header">
-        <div class="logo-text">Offstage Creators</div>
-        <div class="logo-sub">Online Open Mic ${year}</div>
-      </div>
-      <div class="body">
-        ${bodyContent}
-      </div>
-      <div class="footer">
-        © ${year} Offstage Creators · Built with ♡ for the creative community<br>
-        <a href="https://www.instagram.com/offstagecreators/" style="color:#e4ad57; text-decoration:none;">@offstagecreators</a>
-      </div>
-    </div>
-  </div>
+<body style="margin:0; padding:0; background-color:#0d0c0a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#eee4d5; -webkit-font-smoothing:antialiased;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;color:#0d0c0a;">${preheader}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0d0c0a; width:100%; margin:0; padding:0;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:580px; width:100%; background-color:#141210; border:1px solid #2a231c; border-radius:12px; overflow:hidden;">
+          <tr>
+            <td style="background-color:#181410; border-bottom:1px solid #2a231c; padding:28px 32px; text-align:center;">
+              <div style="font-size:11px; font-weight:800; letter-spacing:0.2em; color:#e4ad57; text-transform:uppercase;">Offstage Creators</div>
+              <div style="font-size:20px; font-weight:700; color:#f7eee1; margin-top:4px;">Online Open Mic ${year}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px; background-color:#141210; color:#eee4d5; font-size:14px; line-height:1.7;">
+              ${bodyContent}
+            </td>
+          </tr>
+          <tr>
+            <td style="text-align:center; padding:20px 32px; border-top:1px solid #1e1a16; color:#706659; font-size:11px; background-color:#141210; line-height:1.6;">
+              © ${year} Offstage Creators · Built with ♡ for the creative community<br>
+              <a href="https://www.instagram.com/offstagecreators/" target="_blank" style="color:#e4ad57; text-decoration:none; font-weight:600;">@offstagecreators</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }

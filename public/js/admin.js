@@ -827,18 +827,7 @@
   // ── Google Meet Methods ───────────────────────────────────────────────────────
 
   window.updateMeetPreviewTemplate = function () {
-    const title = document.getElementById('meetTitle')?.value || 'Online Open Mic 2026 Performer Briefing';
-    const link = document.getElementById('meetLink')?.value || 'https://meet.google.com/xxx-yyyy-zzz';
-    const date = document.getElementById('meetDate')?.value || '23 September 2026';
-    const startTime = document.getElementById('meetStartTime')?.value || '7:30 PM';
-    const endTime = document.getElementById('meetEndTime')?.value || '9:00 PM';
-    const tz = document.getElementById('meetTimeZone')?.value || 'IST (GMT+5:30)';
-    const extra = document.getElementById('meetAdditionalMessage')?.value || '';
-
-    const textarea = document.getElementById('meetCustomBody');
-    if (textarea && (!textarea.dataset.userEdited || textarea.dataset.userEdited === 'false')) {
-      textarea.value = `Dear {name},\n\nYou are invited to join the upcoming Offstage Creators performer session.\n\nMeeting: ${title}\nDate: ${date}\nTime: ${startTime} – ${endTime} (${tz})\nGoogle Meet: ${link}\n\n${extra ? extra + '\n\n' : ''}Registration ID: {registration_id}\nPerformance Category: {category}\n\nPlease join 5 minutes early with your camera and microphone working.\n\nWarm regards,\nOffstage Creators Team`;
-    }
+    // Template updates dynamically via Preview Invitation modal
   };
 
   window.filterMeetEmailList = function () {

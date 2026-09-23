@@ -548,12 +548,12 @@
             </div>
 
             <label class="admin-label">Additional Message / Performer Instructions</label>
-            <textarea class="admin-textarea" id="meetAdditionalMessage" rows="2" placeholder="e.g. Please join 5 minutes early with your camera and mic tested." oninput="updateMeetPreviewTemplate()"></textarea>
+            <textarea class="admin-textarea" id="meetAdditionalMessage" rows="6" placeholder="e.g. Please join 5 minutes early with your camera and mic tested.&#10;&#10;Supports bold (**text**), headings (### Heading), and bullet points (* item)." oninput="updateMeetPreviewTemplate()"></textarea>
 
-            <div style="margin-top:16px;">
-              <label class="admin-label">Editable Invitation Email (Admin can review and edit before sending):</label>
-              <textarea class="admin-textarea" id="meetCustomBody" rows="7" style="font-family:monospace; font-size:12px;"></textarea>
+            <div style="margin-top:14px; background:#181410; border:1px solid #2a231c; border-left:3px solid #e4ad57; border-radius:6px; padding:12px 16px; font-size:12px; color:#8e8477; line-height:1.6;">
+              ✨ <strong>Branded Template Active</strong>: Your meeting details, date, time, and Google Meet button are automatically rendered into a high-contrast email template. Any performer instructions entered above are automatically formatted with bullet points and bold styling. Click <strong>"👁️ Preview Invitation"</strong> below to preview the exact design.
             </div>
+            <input type="hidden" id="meetCustomBody" value="">
           </div>
 
           <div class="panel-card">
