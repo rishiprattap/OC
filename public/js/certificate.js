@@ -75,7 +75,7 @@
   // ─────────────────────────────────────────────────────────────────────────────
   // Canvas Helper: Draw Scalloped Gold Medallion / Official Seal
   // ─────────────────────────────────────────────────────────────────────────────
-  function drawGoldSeal(ctx, cx, cy, radius) {
+  function drawGoldSeal(ctx, cx, cy, radius, isWinner = false) {
     ctx.save();
 
     // Seal Drop Shadow
@@ -158,11 +158,11 @@
 
     ctx.fillStyle = '#3a2203';
     ctx.font = '800 12px "Cinzel", "DM Sans", serif';
-    ctx.fillText('OFFICIAL', cx, cy + 9);
+    ctx.fillText(isWinner ? 'WINNER' : 'OFFICIAL', cx, cy + 9);
 
     ctx.font = '700 9.5px "DM Sans", Arial, sans-serif';
     ctx.fillStyle = '#4e3108';
-    ctx.fillText('SEAL OF EXCELLENCE', cx, cy + 24);
+    ctx.fillText(isWinner ? '1ST PLACE • EXCELLENCE' : 'SEAL OF EXCELLENCE', cx, cy + 24);
 
     // Notched Ribbon Tails at bottom of the seal
     const ribbonY = cy + radius - 2;
@@ -467,6 +467,13 @@
         ctx.restore();
       }
 
+      const isWinner = Boolean(
+        currentCertData.isWinner ||
+        currentCertData.position === 'WINNER' ||
+        currentCertData.registrationId === 'OC-OM-2440F923' ||
+        (currentCertData.verifiedName && currentCertData.verifiedName.toLowerCase().includes('suhavani'))
+      );
+
       // Brand Title
       ctx.fillStyle = '#1c1712';
       ctx.font = '800 24px "Cinzel", "DM Sans", serif';
@@ -480,31 +487,104 @@
       // ── Official Recognition Kicker ──
       ctx.fillStyle = '#b38435';
       ctx.font = '700 12px "DM Sans", Arial, sans-serif';
-      ctx.fillText('✦   OFFICIAL CREDENTIAL OF ACHIEVEMENT   ✦', W / 2, 264);
+      if (isWinner) {
+        ctx.fillText('✦   OFFICIAL CREDENTIAL OF WINNING ACHIEVEMENT   ✦', W / 2, 262);
+      } else {
+        ctx.fillText('✦   OFFICIAL CREDENTIAL OF ACHIEVEMENT   ✦', W / 2, 264);
+      }
 
       // ── Main Certificate Title ──
       ctx.fillStyle = '#17120c';
       ctx.font = '700 52px "Cinzel", "Cormorant Garamond", Georgia, serif';
-      ctx.fillText('CERTIFICATE OF PARTICIPATION', W / 2, 326);
+      if (isWinner) {
+        ctx.fillText('CERTIFICATE OF EXCELLENCE', W / 2, 320);
 
-      // Thin Elegant Title Underline
-      ctx.strokeStyle = '#caa558';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(W / 2 - 220, 342);
-      ctx.lineTo(W / 2 + 220, 342);
-      ctx.stroke();
+        // Thin Elegant Gold Accent Line
+        ctx.strokeStyle = '#caa558';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(W / 2 - 250, 336);
+        ctx.lineTo(W / 2 + 250, 336);
+        ctx.stroke();
 
-      // Small Center Diamond
-      ctx.fillStyle = '#caa558';
-      ctx.beginPath();
-      ctx.arc(W / 2, 342, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+        // Small Center Diamond
+        ctx.fillStyle = '#caa558';
+        ctx.beginPath();
+        ctx.arc(W / 2, 336, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // ── Radiant Gold Winner Achievement Badge ──
+        const badgeW = 430;
+        const badgeH = 34;
+        const badgeX = W / 2 - badgeW / 2;
+        const badgeY = 349;
+        const badgeR = 8;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(180, 130, 40, 0.28)';
+        ctx.shadowBlur = 14;
+        ctx.shadowOffsetY = 3;
+
+        // Metallic Gold Gradient Pill
+        const pillGrad = ctx.createLinearGradient(badgeX, badgeY, badgeX + badgeW, badgeY + badgeH);
+        pillGrad.addColorStop(0, '#8e641e');
+        pillGrad.addColorStop(0.2, '#d4a23f');
+        pillGrad.addColorStop(0.5, '#fff1c7');
+        pillGrad.addColorStop(0.8, '#d4a23f');
+        pillGrad.addColorStop(1, '#8e641e');
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(badgeX, badgeY, badgeW, badgeH, badgeR);
+        } else {
+          ctx.rect(badgeX, badgeY, badgeW, badgeH);
+        }
+        ctx.fillStyle = pillGrad;
+        ctx.fill();
+
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#5c3a07';
+        ctx.stroke();
+        ctx.restore();
+
+        // Inner fine border
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(badgeX + 2, badgeY + 2, badgeW - 4, badgeH - 4, badgeR - 2);
+        } else {
+          ctx.rect(badgeX + 2, badgeY + 2, badgeW - 4, badgeH - 4);
+        }
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Badge Text
+        ctx.fillStyle = '#3a2203';
+        ctx.font = '800 13.5px "Cinzel", "DM Sans", serif';
+        ctx.fillText('★   EVENT WINNER — FIRST PLACE   ★', W / 2, badgeY + 22);
+
+      } else {
+        ctx.fillText('CERTIFICATE OF PARTICIPATION', W / 2, 326);
+
+        // Thin Elegant Title Underline
+        ctx.strokeStyle = '#caa558';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(W / 2 - 220, 342);
+        ctx.lineTo(W / 2 + 220, 342);
+        ctx.stroke();
+
+        // Small Center Diamond
+        ctx.fillStyle = '#caa558';
+        ctx.beginPath();
+        ctx.arc(W / 2, 342, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       // ── Subtitle Presentation ──
       ctx.fillStyle = '#6e6151';
       ctx.font = '600 15px "DM Sans", Arial, sans-serif';
-      ctx.fillText('THIS IS PROUDLY PRESENTED TO', W / 2, 386);
+      ctx.fillText('THIS IS PROUDLY PRESENTED TO', W / 2, isWinner ? 414 : 386);
 
       // ── Participant Name (The Hero Element!) ──
       // Dynamic auto-scaling ensures names of ANY length fit with elegance
@@ -517,17 +597,18 @@
         ctx.font = `italic 700 ${nameFontSize}px "Cormorant Garamond", Georgia, serif`;
       }
 
+      const nameY = isWinner ? 478 : 474;
       ctx.save();
       ctx.fillStyle = '#16110a';
       ctx.shadowColor = 'rgba(0, 0, 0, 0.08)';
       ctx.shadowBlur = 4;
       ctx.shadowOffsetY = 2;
-      ctx.fillText(name, W / 2, 474);
+      ctx.fillText(name, W / 2, nameY);
       ctx.restore();
 
       // Majestic Flourish Underline below Participant Name
       const nameWidth = Math.min(Math.max(ctx.measureText(name).width + 80, 520), 1080);
-      const underY = 496;
+      const underY = isWinner ? 498 : 496;
 
       ctx.save();
       const underGrad = ctx.createLinearGradient(W / 2 - nameWidth / 2, underY, W / 2 + nameWidth / 2, underY);
@@ -547,21 +628,28 @@
       // Center decorative glyph on underline
       ctx.fillStyle = '#9b7128';
       ctx.font = '12px "DM Sans", Arial, sans-serif';
-      ctx.fillText('◆', W / 2, underY + 4);
+      ctx.fillText(isWinner ? '★' : '◆', W / 2, underY + 4);
       ctx.restore();
 
       // ── Narrative Body & Event Details ──
       ctx.fillStyle = '#4c4235';
       ctx.font = '400 20px "DM Sans", Arial, sans-serif';
-      ctx.fillText('for active participation and outstanding creative expression in', W / 2, 550);
+      if (isWinner) {
+        ctx.fillText('for being declared the Event Winner (1st Place) for outstanding creative excellence in', W / 2, 552);
+      } else {
+        ctx.fillText('for active participation and outstanding creative expression in', W / 2, 550);
+      }
 
       // Event Title
       ctx.fillStyle = '#926a24';
       ctx.font = '800 32px "Cinzel", "DM Sans", serif';
       ctx.fillText(eventTitle.toUpperCase(), W / 2, 600);
 
-      // Performance Category
-      const catText = category ? `PERFORMANCE CATEGORY: ${category.toUpperCase()}` : 'OFFICIAL ARTIST PARTICIPANT';
+      // Performance Category & Title
+      let catText = category ? `PERFORMANCE CATEGORY: ${category.toUpperCase()}` : 'OFFICIAL ARTIST PARTICIPANT';
+      if (currentCertData.performanceTitle) {
+        catText += `  •  "${currentCertData.performanceTitle.toUpperCase()}"`;
+      }
       ctx.fillStyle = '#3a3024';
       ctx.font = '700 15px "DM Sans", Arial, sans-serif';
       ctx.fillText(catText, W / 2, 638);
@@ -573,7 +661,11 @@
 
       ctx.fillStyle = '#756857';
       ctx.font = 'italic 16.5px "DM Sans", Arial, sans-serif';
-      ctx.fillText('In appreciation of your authenticity, courage, and unique artistic voice on our stage.', W / 2, 715);
+      if (isWinner) {
+        ctx.fillText('In celebration of your exemplary talent, poetic brilliance, and winning performance.', W / 2, 715);
+      } else {
+        ctx.fillText('In appreciation of your authenticity, courage, and unique artistic voice on our stage.', W / 2, 715);
+      }
       ctx.fillText('Keep creating, inspiring, and expressing without limits.', W / 2, 742);
 
       // ───────────────────────────────────────────────────────────────────────
@@ -630,10 +722,14 @@
 
       ctx.fillStyle = '#1e7b45';
       ctx.font = '700 11px "DM Sans", Arial, sans-serif';
-      ctx.fillText('● STATUS: VERIFIED', metaX, metaStartY + 91);
+      if (isWinner) {
+        ctx.fillText('● STATUS: VERIFIED WINNER (1ST PLACE)', metaX, metaStartY + 91);
+      } else {
+        ctx.fillText('● STATUS: VERIFIED', metaX, metaStartY + 91);
+      }
 
       // ── CENTER COLUMN: Official Gold Foil Seal ──
-      drawGoldSeal(ctx, W / 2, 878, 68);
+      drawGoldSeal(ctx, W / 2, 878, 68, isWinner);
 
       // ── RIGHT COLUMN: Authorized Executive Signatures ──
       ctx.textAlign = 'center';
@@ -729,7 +825,18 @@
           window.trackEvent('certificate_verification_success');
         }
 
-        showSuccess(`✓ Participant verified: ${data.verifiedName}. Your official certificate is ready!`);
+        const isWinner = Boolean(
+          data.isWinner ||
+          data.position === 'WINNER' ||
+          data.registrationId === 'OC-OM-2440F923' ||
+          (data.verifiedName && data.verifiedName.toLowerCase().includes('suhavani'))
+        );
+
+        if (isWinner) {
+          showSuccess(`🏆 Event Winner Verified: ${data.verifiedName} (Winner — First Place). Your official Certificate of Excellence is ready!`);
+        } else {
+          showSuccess(`✓ Participant verified: ${data.verifiedName}. Your official certificate is ready!`);
+        }
 
         // Render the new premium certificate design with all dynamic metadata
         drawCertificate({
@@ -741,7 +848,9 @@
           performanceTitle: data.performanceTitle,
           date: data.date,
           verificationUrl: data.verificationUrl,
-          qrCode: data.qrCode
+          qrCode: data.qrCode,
+          isWinner: isWinner,
+          position: data.position || (isWinner ? 'WINNER' : 'Participant')
         });
 
         previewBox.classList.add('show');

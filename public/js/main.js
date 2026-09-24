@@ -113,4 +113,53 @@
     }
   }
 
+  // 5. Dynamic Home Gallery Preview
+  async function initHomeGallery() {
+    const container = document.getElementById('homeGalleryContainer');
+    if (!container) return;
+
+    try {
+      const res = await fetch('/api/gallery');
+      const data = await res.json();
+
+      if (res.ok && data.success && Array.isArray(data.images) && data.images.length > 0) {
+        const previewImages = data.images.slice(0, 4);
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))';
+        grid.style.gap = '16px';
+
+        previewImages.forEach(img => {
+          const a = document.createElement('a');
+          a.href = '/gallery';
+          a.style.display = 'block';
+          a.style.position = 'relative';
+          a.style.borderRadius = '10px';
+          a.style.overflow = 'hidden';
+          a.style.aspectRatio = '4/3';
+          a.style.border = '1px solid var(--line)';
+          a.style.background = '#141210';
+          a.style.transition = 'transform 0.3s ease, border-color 0.3s ease';
+
+          a.onmouseenter = () => { a.style.transform = 'translateY(-4px)'; a.style.borderColor = '#e4ad57'; };
+          a.onmouseleave = () => { a.style.transform = 'none'; a.style.borderColor = 'var(--line)'; };
+
+          a.innerHTML = `
+            <img src="${img.imageUrl}" alt="${img.caption || 'Event Moment'}" style="width:100%; height:100%; object-fit:cover; display:block;" loading="lazy">
+            <div style="position:absolute; inset:0; background:linear-gradient(to top, rgba(10,8,7,0.85) 0%, transparent 60%); display:flex; align-items:flex-end; padding:12px;">
+              <span style="color:#f7eee1; font-size:12.5px; font-weight:600; text-shadow:0 1px 3px rgba(0,0,0,0.8);">${img.caption || 'Event Moment'}</span>
+            </div>
+          `;
+          grid.appendChild(a);
+        });
+
+        container.innerHTML = '';
+        container.appendChild(grid);
+      }
+    } catch (_) {}
+  }
+
+  initHomeGallery();
+
 })();
+

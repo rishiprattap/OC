@@ -17,6 +17,31 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
+// ─── Event Winners System ─────────────────────────────────────────────────────
+const WINNER_REGISTRATIONS = {
+  'OC-OM-2440F923': {
+    isWinner: true,
+    position: 'WINNER',
+    achievement: 'Winner — First Place',
+    certificateTitle: 'CERTIFICATE OF EXCELLENCE',
+    badgeText: '★ EVENT WINNER ★',
+    citation: 'for securing 1st Place as the Event Winner with an exceptional and captivating performance in'
+  }
+};
+
+function getWinnerInfo(record) {
+  if (!record) return null;
+  const regId = String(record.registration_id || '').trim().toUpperCase();
+  if (WINNER_REGISTRATIONS[regId]) {
+    return WINNER_REGISTRATIONS[regId];
+  }
+  const cleanName = normalizeName(record.full_name);
+  if (cleanName === 'suhavani kaur' || cleanName.includes('suhavani')) {
+    return WINNER_REGISTRATIONS['OC-OM-2440F923'];
+  }
+  return null;
+}
+
 async function generateQr(url) {
   try {
     return await QRCode.toDataURL(url, {
@@ -89,6 +114,7 @@ async function handleVerify(req, res) {
 
         const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(record.registration_id)}`;
         const qrCode = await generateQr(verificationUrl);
+        const winnerInfo = getWinnerInfo(record);
 
         return res.json({
           success: true,
@@ -98,9 +124,16 @@ async function handleVerify(req, res) {
           event: config.EVENT.title,
           category: record.category || 'Performer',
           performanceTitle: record.performance_title || null,
+          city: record.city || null,
           date: config.EVENT.date,
           verificationUrl,
-          qrCode
+          qrCode,
+          isWinner: Boolean(winnerInfo),
+          position: winnerInfo ? winnerInfo.position : 'Participant',
+          achievement: winnerInfo ? winnerInfo.achievement : null,
+          certificateTitle: winnerInfo ? winnerInfo.certificateTitle : 'CERTIFICATE OF PARTICIPATION',
+          badgeText: winnerInfo ? winnerInfo.badgeText : null,
+          citation: winnerInfo ? winnerInfo.citation : null
         });
       }
     }
@@ -116,33 +149,7 @@ async function handleVerify(req, res) {
       });
     }
 
-    // 1. Check legacy certificates hash (preserves previous participants from certificate.html)
-    const combinedHash = sha256(cleanName + '|' + cleanPhone);
-    const legacy = await get(
-      `SELECT * FROM legacy_certificates WHERE hash = ?`,
-      [combinedHash]
-    );
-
-    if (legacy) {
-      const legacyCertId = `OC-LEGACY-${combinedHash.slice(0, 8).toUpperCase()}`;
-      const verificationUrl = `${baseUrl}/certificate?id=${legacyCertId}`;
-      const qrCode = await generateQr(verificationUrl);
-
-      return res.json({
-        success: true,
-        verifiedName: name.trim(),
-        registrationId: legacyCertId,
-        certificateId: legacyCertId,
-        event: legacy.event_name,
-        category: 'Performer',
-        date: config.EVENT.date,
-        isLegacy: true,
-        verificationUrl,
-        qrCode
-      });
-    }
-
-    // 2. Check active registrations database
+    // 1. Check active registrations database first
     const matchingRecords = await all(
       `SELECT * FROM registrations WHERE phone = ?`,
       [cleanPhone]
@@ -177,6 +184,7 @@ async function handleVerify(req, res) {
 
       const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(match.registration_id)}`;
       const qrCode = await generateQr(verificationUrl);
+      const winnerInfo = getWinnerInfo(match);
 
       return res.json({
         success: true,
@@ -186,9 +194,44 @@ async function handleVerify(req, res) {
         event: config.EVENT.title,
         category: match.category || 'Performer',
         performanceTitle: match.performance_title || null,
+        city: match.city || null,
         date: config.EVENT.date,
         verificationUrl,
-        qrCode
+        qrCode,
+        isWinner: Boolean(winnerInfo),
+        position: winnerInfo ? winnerInfo.position : 'Participant',
+        achievement: winnerInfo ? winnerInfo.achievement : null,
+        certificateTitle: winnerInfo ? winnerInfo.certificateTitle : 'CERTIFICATE OF PARTICIPATION',
+        badgeText: winnerInfo ? winnerInfo.badgeText : null,
+        citation: winnerInfo ? winnerInfo.citation : null
+      });
+    }
+
+    // 2. Check legacy certificates hash (preserves previous participants from certificate.html)
+    const combinedHash = sha256(cleanName + '|' + cleanPhone);
+    const legacy = await get(
+      `SELECT * FROM legacy_certificates WHERE hash = ?`,
+      [combinedHash]
+    );
+
+    if (legacy) {
+      const legacyCertId = `OC-LEGACY-${combinedHash.slice(0, 8).toUpperCase()}`;
+      const verificationUrl = `${baseUrl}/certificate?id=${legacyCertId}`;
+      const qrCode = await generateQr(verificationUrl);
+
+      return res.json({
+        success: true,
+        verifiedName: name.trim(),
+        registrationId: legacyCertId,
+        certificateId: legacyCertId,
+        event: legacy.event_name,
+        category: 'Performer',
+        date: config.EVENT.date,
+        isLegacy: true,
+        verificationUrl,
+        qrCode,
+        isWinner: false,
+        certificateTitle: 'CERTIFICATE OF PARTICIPATION'
       });
     }
 

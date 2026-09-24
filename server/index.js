@@ -18,6 +18,7 @@ const scannerRouter = require('./routes/scanner');
 const certificateRouter = require('./routes/certificate');
 const adminRouter = require('./routes/admin');
 const emailRouter = require('./routes/email');
+const galleryRouter = require('./routes/gallery');
 
 // Load meet router conditionally (may not exist in all deployments)
 let meetRouter;
@@ -110,14 +111,16 @@ app.use('/api/certificate', certificateRouter);
 app.use('/api/admin/login', adminLoginLimiter);  // rate limit login specifically
 app.use('/api/admin', adminRouter);
 app.use('/api/email', emailRouter);
+app.use('/api/gallery', galleryRouter);
+app.use('/api/admin/gallery', galleryRouter);
 if (meetRouter) app.use('/api/admin/meet', meetRouter);
 
 // Public config endpoint
 app.get('/api/config', async (req, res) => {
-  let registrationStatus = 'OPEN';
+  let registrationStatus = 'CLOSED';
   try {
     const { getSetting } = require('./db');
-    registrationStatus = await getSetting('registration_status', 'OPEN');
+    registrationStatus = await getSetting('registration_status', 'CLOSED');
   } catch (_) {}
 
   res.json({
@@ -128,7 +131,8 @@ app.get('/api/config', async (req, res) => {
     fee: config.OPEN_MIC_FEE_INR,
     amount: config.OPEN_MIC_FEE_INR,
     registrationStatus,
-    registrationOpen: registrationStatus === 'OPEN'
+    registrationOpen: registrationStatus === 'OPEN',
+    eventCompleted: true
   });
 });
 
@@ -139,6 +143,7 @@ app.get(['/register', '/registration'], (req, res) => res.sendFile(path.join(pub
 app.get('/registration/:id', (req, res) => res.sendFile(path.join(publicDir, 'registration.html')));
 app.get(['/registration/success', '/success'], (req, res) => res.sendFile(path.join(publicDir, 'success.html')));
 app.get('/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certificate.html')));
+app.get(['/gallery', '/event-gallery'], (req, res) => res.sendFile(path.join(publicDir, 'gallery.html')));
 app.get('/scanner', (req, res) => res.sendFile(path.join(publicDir, 'scanner.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 

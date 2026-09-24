@@ -29,10 +29,10 @@
 
       <nav class="nav-links">
         <a class="active" href="/">Home</a>
-        <a href="#openmic">Open Mic</a>
-        <a href="#delhi-event">Delhi Show</a>
-        <a href="/register">Register</a>
+        <a href="#openmic">Open Mic (Completed)</a>
+        <a href="/gallery">Event Gallery</a>
         <a href="/certificate">Certificate</a>
+        <a href="#delhi-event">Delhi Show</a>
         <a href="#about">About</a>
       </nav>
 
@@ -40,8 +40,8 @@
         <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
           ◎
         </a>
-        <a class="cta nav-reg-btn" href="/register">
-          REGISTER NOW — ₹79
+        <a class="cta nav-reg-btn" href="/certificate">
+          GET CERTIFICATE
         </a>
         <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle navigation menu">
           ☰
@@ -53,10 +53,10 @@
   <!-- MOBILE DRAWER -->
   <div class="mobile-drawer" id="mobileDrawer">
     <a href="/">Home</a>
-    <a href="#openmic">Online Open Mic (₹79)</a>
+    <a href="#openmic">Online Open Mic (Completed)</a>
+    <a href="/gallery" style="color: #e4ad57; font-weight: 700;">Event Gallery ↗</a>
+    <a href="/certificate" style="color: #e26947; font-weight: 700;">Download Certificate ↗</a>
     <a href="#delhi-event">Delhi Event (Adhure Musafir)</a>
-    <a href="/register" style="color: #e26947; font-weight: 700;">Register for Open Mic ↗</a>
-    <a href="/certificate">Participation Certificate</a>
     <a href="#about">About Us</a>
     <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Follow on Instagram ↗</a>
   </div>
@@ -65,8 +65,8 @@
     <!-- HERO / EVENT #1: ONLINE OPEN MIC (MAIN / FIRST EVENT) -->
     <section class="hero-section" id="openmic">
       <div class="hero-poster-box">
-        <div class="hero-poster-badge badge badge-live">
-          REGISTRATIONS OPEN
+        <div class="hero-poster-badge badge" style="background:#1b4d2e; color:#7ef5a7; border:1px solid #2e8b57; font-weight:800; letter-spacing:0.08em;">
+          ✓ EVENT COMPLETED
         </div>
         <img src="./assets/event-poster.png" alt="Offstage Creators Presents Online Open Mic — Tonight's Voice: Tomboy">
       </div>
@@ -77,7 +77,7 @@
           <h1>Online<br><span>Open Mic</span></h1>
           <p class="hero-quote">“ek lafz. ek awaaz. aur ek shaam.”</p>
           <p class="badge badge-gold" style="margin-top: 6px;">
-            ✦ 60K Little Reasons to Celebrate
+            ✦ Event Concluded • Congratulations to Winner Suhavani Kaur!
           </p>
         </div>
 
@@ -86,7 +86,7 @@
             <div class="meta-icon">📅</div>
             <div class="meta-texts">
               <span class="meta-label">Date</span>
-              <span class="meta-val">23 September</span>
+              <span class="meta-val">23 September (Completed)</span>
             </div>
           </div>
           <div class="meta-item">
@@ -97,33 +97,34 @@
             </div>
           </div>
           <div class="meta-item">
-            <div class="meta-icon">🎟️</div>
+            <div class="meta-icon">🏆</div>
             <div class="meta-texts">
-              <span class="meta-label">Registration Fee</span>
-              <span class="meta-val price">₹79 only</span>
+              <span class="meta-label">Event Winner</span>
+              <span class="meta-val price" style="font-size:16px;">Suhavani Kaur</span>
             </div>
           </div>
           <div class="meta-item">
             <div class="meta-icon">🎙️</div>
             <div class="meta-texts">
-              <span class="meta-label">Tonight's Voice</span>
+              <span class="meta-label">Host Voice</span>
               <span class="meta-val">Tomboy</span>
             </div>
           </div>
         </div>
 
         <div class="hero-actions">
-          <a class="cta" href="/register">
-            <span>REGISTER NOW — ₹79</span>
+          <a class="cta" href="/certificate">
+            <span>DOWNLOAD CERTIFICATE</span>
             <b>→</b>
           </a>
-          <a class="cta cta-secondary" href="#details">
-            <span>VIEW EVENT DETAILS</span>
+          <a class="cta cta-secondary" href="/gallery">
+            <span>VIEW EVENT GALLERY</span>
+            <b>↗</b>
           </a>
         </div>
 
         <div class="hero-note">
-          “COME, TAKE THE MIC.” ♡
+          “THANK YOU TO EVERY CREATOR WHO TOOK THE MIC.” ♡
         </div>
       </div>
     </section>
@@ -164,14 +165,41 @@
 
         <div class="openmic-perks-box">
           <div class="perks-list">
-            <div class="perk-item"><span class="tick">✓</span> Live Online Audience</div>
-            <div class="perk-item"><span class="tick">✓</span> 5-7 Minutes Slot per Performer</div>
-            <div class="perk-item"><span class="tick">✓</span> Verified Participation Certificate</div>
-            <div class="perk-item"><span class="tick">✓</span> Safe & Respectful Atmosphere</div>
+            <div class="perk-item"><span class="tick">✓</span> 18 Exceptional Performer Sets</div>
+            <div class="perk-item"><span class="tick">✓</span> Event Winner: <b>Suhavani Kaur</b></div>
+            <div class="perk-item"><span class="tick">✓</span> Official Verifiable Certificates Issued</div>
+            <div class="perk-item"><span class="tick">✓</span> Safe & Respectful Community Stage</div>
           </div>
-          <a class="cta cta-gold" href="/register">
-            CLAIM YOUR SLOT (₹79) →
+          <a class="cta cta-gold" href="/certificate">
+            GET YOUR CERTIFICATE →
           </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- EVENT GALLERY PREVIEW SECTION -->
+    <section class="gallery-section" id="gallery" style="padding: 70px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(18, 15, 12, 0.65);">
+      <div style="width: min(1200px, calc(100% - 32px)); margin: 0 auto;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <p class="kicker orange" style="margin-bottom: 8px;">MEMORIES &amp; HIGHLIGHTS</p>
+            <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: clamp(36px, 5vw, 54px); margin: 0; line-height: 1;">Event <em>Gallery</em></h2>
+            <p style="color: #a8a096; margin: 8px 0 0; font-size: 15px;">Moments from Offstage Creators — Capturing the voices, expressions, and memories from our stage.</p>
+          </div>
+          <div>
+            <a href="/gallery" class="cta cta-secondary">VIEW FULL GALLERY →</a>
+          </div>
+        </div>
+
+        <div id="homeGalleryContainer">
+          <div style="text-align: center; padding: 48px 20px; background: #141210; border: 1px dashed var(--line); border-radius: 12px; color: #8e8477;">
+            <span style="font-size: 40px; display: block; margin-bottom: 10px;">📷</span>
+            <strong style="color: #f7eee1; font-size: 18px; display: block; margin-bottom: 6px;">Moments from Offstage Creators</strong>
+            <p style="margin: 0 0 20px; font-size: 14px; max-width: 480px; margin-left: auto; margin-right: auto;">
+              Explore moments from our completed Online Open Mic edition. Relive the performances and creative energy.
+            </p>
+            <a href="/gallery" class="cta" style="display: inline-block;">Open Event Gallery ↗</a>
+          </div>
         </div>
       </div>
     </section>
@@ -324,11 +352,12 @@
       <span>Built with ♡ for the creative community.</span>
     </div>
     <div class="footer-nav">
-      <a href="/register">Register (₹79)</a>
+      <a href="/">Home</a>
+      <a href="/gallery">Event Gallery</a>
       <a href="/certificate">Certificate</a>
       <a href="/scanner">Event Scanner</a>
       <a href="/admin">Admin</a>
-      <a href="https://www.instagram.com/channel/AbYo-rnNYvLIuucS/" target="_blank" rel="noopener">Join Community Broadcast ↗</a>
+      <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Instagram ↗</a>
     </div>
   </footer>
 

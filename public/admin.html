@@ -362,6 +362,9 @@
         <button class="admin-nav-item" data-tab="settings" onclick="showTab('settings')">
           <span class="nav-icon">⚙️</span> Registration Settings
         </button>
+        <button class="admin-nav-item" data-tab="gallery" onclick="showTab('gallery')">
+          <span class="nav-icon">🖼️</span> Event Gallery
+        </button>
       </nav>
       <button class="logout-btn" id="logoutBtn">⟵ Logout</button>
     </aside>
@@ -649,6 +652,105 @@
           </div>
 
           <button type="button" class="cta" id="btnToggleRegStatus" onclick="promptToggleRegistrationStatus()">🔴 Close Registrations</button>
+        </div>
+      </div>
+
+      <!-- ── EVENT GALLERY TAB ──────────────────────────── -->
+      <div id="tabGallery" style="display:none;">
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Event Gallery Management</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Upload, reorder, caption, and publish photos for the public Event Gallery.</p>
+          </div>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a href="/gallery" target="_blank" class="cta cta-secondary" style="font-size:12px; padding:10px 16px;">
+              👁️ View Public Gallery ↗
+            </a>
+            <button type="button" class="cta" onclick="loadAdminGallery()" style="font-size:12px; padding:10px 16px;">
+              ⟳ Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Gallery Overview Stats -->
+        <div class="stats-grid" style="margin-bottom:24px;">
+          <div class="stat-card">
+            <div class="stat-label">Total Photos</div>
+            <div class="stat-value" id="galleryTotalCount">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Published Photos</div>
+            <div class="stat-value green" id="galleryPublishedCount">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Draft / Unpublished</div>
+            <div class="stat-value orange" id="galleryDraftCount">0</div>
+          </div>
+        </div>
+
+        <!-- Upload Card -->
+        <div class="panel-card">
+          <div class="panel-title">
+            <span>📤 Upload Event Photos</span>
+            <span style="font-size:12px; color:#8e8477; font-weight:normal;">Supports multiple images (JPG, PNG, WebP)</span>
+          </div>
+
+          <form id="adminGalleryUploadForm">
+            <!-- Dropzone / File Picker -->
+            <div id="galleryDropzone" style="border: 2px dashed #2a231c; border-radius: 12px; padding: 28px 20px; text-align: center; background: #0d0c0a; cursor: pointer; transition: all 0.2s ease; margin-bottom: 16px;">
+              <span style="font-size: 36px; display: block; margin-bottom: 8px;">📸</span>
+              <p style="color: #f7eee1; font-weight: 700; margin: 0 0 4px; font-size: 14px;">
+                Drag &amp; drop photos here, or <span style="color: #e4ad57; text-decoration: underline;">browse files</span>
+              </p>
+              <p style="color: #8e8477; font-size: 12px; margin: 0;">Select one or multiple images from your computer</p>
+              <input type="file" id="adminGalleryFileInput" multiple accept="image/*" style="display: none;">
+            </div>
+
+            <!-- Selected Files Preview Container -->
+            <div id="galleryFilePreviewTray" style="display:none; margin-bottom: 16px; background:#110f0d; border: 1px solid #2a231c; border-radius: 8px; padding: 12px;">
+              <div style="font-size:12px; font-weight:700; color:#e4ad57; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+                <span id="galleryFileCountLabel">0 photos selected</span>
+                <button type="button" onclick="clearSelectedGalleryFiles()" style="background:none; border:none; color:#e26947; font-size:11px; cursor:pointer;">Clear Selection ✕</button>
+              </div>
+              <div id="galleryThumbnailsContainer" style="display:flex; gap:10px; overflow-x:auto; padding-bottom:6px;"></div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-bottom: 16px;">
+              <div>
+                <label class="admin-label" for="adminGalleryCaptionInput">Caption (Optional)</label>
+                <input type="text" id="adminGalleryCaptionInput" class="admin-input" placeholder="e.g. Suhavani Kaur performing 'Sabse tanha rang' at Online Open Mic 2026" style="margin-bottom:0;">
+              </div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+              <button type="submit" class="cta" id="btnUploadGallery">
+                ✓ Upload Selected Photos
+              </button>
+              <button type="button" class="cta cta-secondary" style="font-size:12px; padding:10px 14px;" onclick="promptAddImageUrl()">
+                + Add by Image URL
+              </button>
+            </div>
+            <div class="auth-error" id="galleryUploadError" style="margin-top:10px; text-align:left;"></div>
+            <div style="color:#6edb8c; font-size:13px; margin-top:10px; display:none;" id="galleryUploadSuccess"></div>
+          </form>
+        </div>
+
+        <!-- Existing Photos Grid / Management -->
+        <div class="panel-card">
+          <div class="panel-title" style="margin-bottom:20px;">
+            <span>Existing Gallery Photos</span>
+            <div style="display:flex; gap:8px;">
+              <select id="galleryFilterStatus" class="filter-select" style="padding:6px 10px; font-size:12px;" onchange="filterAdminGallery()">
+                <option value="ALL">All Photos</option>
+                <option value="PUBLISHED">Published Only</option>
+                <option value="DRAFT">Drafts Only</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="adminGalleryGridWrapper">
+            <div class="empty-state"><p>Loading gallery items…</p></div>
+          </div>
         </div>
       </div>
 
