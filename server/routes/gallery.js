@@ -116,7 +116,7 @@ async function handleUpload(req, res) {
 
         const result = await run(
           `INSERT INTO gallery_images (image_url, caption, display_order, is_published, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
           [imageUrl, defaultCaption, 0, 1, now, now]
         );
 
@@ -140,7 +140,7 @@ async function handleUpload(req, res) {
 
       const result = await run(
         `INSERT INTO gallery_images (image_url, caption, display_order, is_published, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
         [url, caption, 0, 1, now, now]
       );
 
