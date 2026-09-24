@@ -31,10 +31,31 @@ function formatEventPublic(evt) {
       : (evt.other_links || {});
   } catch (_) {}
 
-  const isRegistrationOpen = Boolean(
-    evt.reg_enabled &&
-    (evt.status === 'registration_open' || evt.status === 'OPEN')
-  );
+  const normalizedStatus = String(evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+  const isOpenStatus = normalizedStatus === 'registrationopen' || normalizedStatus === 'open';
+  const isComingSoon = normalizedStatus === 'comingsoon' || normalizedStatus === 'draft';
+  const isRegistrationOpen = Boolean(evt.reg_enabled && isOpenStatus);
+
+  const provider = String(evt.registration_provider || 'internal').toLowerCase();
+  const registrationProvider = ['internal', 'external', 'disabled'].includes(provider) ? provider : 'internal';
+  const externalRegistrationUrl = String(evt.external_registration_url || '').trim();
+  const externalPlatformName = String(evt.external_platform_name || '').trim();
+  const externalPlatformNotes = String(evt.external_platform_notes || '').trim();
+  const externalOpenNewTab = evt.external_open_new_tab !== 0 && evt.external_open_new_tab !== false;
+
+  let registrationButtonText = evt.reg_button_text || 'REGISTER NOW';
+  if (!isRegistrationOpen || registrationProvider === 'disabled') {
+    registrationButtonText = isComingSoon ? 'REGISTRATION OPENS SOON' : 'REGISTRATION CLOSED';
+  } else if (registrationProvider === 'external') {
+    const baseBtn = (evt.reg_button_text || 'REGISTER NOW').trim();
+    registrationButtonText = baseBtn.includes('↗') ? baseBtn : `${baseBtn} ↗`;
+  }
+
+  const registrationMethodNotice = registrationProvider === 'external'
+    ? `Tickets / Registration available on ${externalPlatformName || 'External Platform'}`
+    : (registrationProvider === 'disabled'
+      ? 'Registration is currently disabled'
+      : 'Register directly with Offstage Creators');
 
   return {
     id: evt.id,
@@ -81,10 +102,20 @@ function formatEventPublic(evt) {
     bannerUrl: evt.banner_url || evt.poster_url || '/assets/event-poster.png',
     logoUrl: evt.logo_url || '/assets/logo.png',
     promoVideoUrl: evt.promo_video_url || '',
+    registrationProvider,
+    isExternalRegistration: registrationProvider === 'external',
+    isInternalRegistration: registrationProvider === 'internal',
+    isRegistrationDisabled: registrationProvider === 'disabled',
+    externalRegistrationUrl,
+    externalPlatformName,
+    externalPlatformNotes,
+    externalOpenNewTab,
+    registrationMethodNotice,
     registrationEnabled: Boolean(evt.reg_enabled),
-    registrationOpen: isRegistrationOpen,
-    registrationStatus: isRegistrationOpen ? 'OPEN' : 'CLOSED',
-    registrationButtonText: evt.reg_button_text || (isRegistrationOpen ? 'REGISTER AS PERFORMER' : 'REGISTRATION CLOSED'),
+    registrationOpen: isRegistrationOpen && registrationProvider !== 'disabled',
+    isRegistrationOpen: isRegistrationOpen && registrationProvider !== 'disabled',
+    registrationStatus: (isRegistrationOpen && registrationProvider !== 'disabled') ? 'OPEN' : 'CLOSED',
+    registrationButtonText,
     maxRegistrations: Number(evt.max_registrations || 0),
     confirmationMessage: evt.confirmation_message || '',
     allowedCategories,

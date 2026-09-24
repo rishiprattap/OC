@@ -144,6 +144,18 @@
         metaFeeVal.textContent = evt.isPaid ? `₹${evt.fee}` : 'FREE';
       }
 
+      // Registration Provider Notice
+      const regNoticeEl = document.getElementById('heroRegProviderNotice');
+      const regNoticeTextEl = document.getElementById('heroRegProviderNoticeText');
+      if (regNoticeEl && regNoticeTextEl) {
+        if (evt.registrationMethodNotice && !evt.isCompleted) {
+          regNoticeTextEl.textContent = evt.registrationMethodNotice;
+          regNoticeEl.style.display = 'block';
+        } else {
+          regNoticeEl.style.display = 'none';
+        }
+      }
+
       // 4. Hero Action CTAs
       const ctaPrimary = document.getElementById('heroCtaPrimary');
       const ctaPrimaryText = document.getElementById('heroCtaPrimaryText');
@@ -151,9 +163,22 @@
       const ctaSecondaryText = document.getElementById('heroCtaSecondaryText');
 
       if (ctaPrimary && ctaPrimaryText) {
+        ctaPrimary.removeAttribute('target');
+        ctaPrimary.removeAttribute('rel');
+        ctaPrimary.style.opacity = '1';
+
         if (evt.registrationOpen) {
-          ctaPrimary.href = `/register?event=${encodeURIComponent(evt.slug)}`;
-          ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER AS PERFORMER';
+          if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
+            ctaPrimary.href = evt.externalRegistrationUrl;
+            if (evt.externalOpenNewTab !== false) {
+              ctaPrimary.setAttribute('target', '_blank');
+              ctaPrimary.setAttribute('rel', 'noopener noreferrer');
+            }
+            ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW ↗';
+          } else {
+            ctaPrimary.href = `/register?event=${encodeURIComponent(evt.slug)}`;
+            ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW';
+          }
           ctaPrimary.style.display = 'inline-flex';
         } else if (evt.isCompleted) {
           ctaPrimary.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
@@ -174,9 +199,20 @@
       // 5. Update nav bar CTA button if registration open
       const navRegBtn = document.querySelector('.nav-reg-btn');
       if (navRegBtn) {
+        navRegBtn.removeAttribute('target');
+        navRegBtn.removeAttribute('rel');
         if (evt.registrationOpen) {
-          navRegBtn.href = `/register?event=${encodeURIComponent(evt.slug)}`;
-          navRegBtn.textContent = 'REGISTER';
+          if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
+            navRegBtn.href = evt.externalRegistrationUrl;
+            if (evt.externalOpenNewTab !== false) {
+              navRegBtn.setAttribute('target', '_blank');
+              navRegBtn.setAttribute('rel', 'noopener noreferrer');
+            }
+            navRegBtn.textContent = 'REGISTER ↗';
+          } else {
+            navRegBtn.href = `/register?event=${encodeURIComponent(evt.slug)}`;
+            navRegBtn.textContent = 'REGISTER';
+          }
         } else if (evt.isCompleted) {
           navRegBtn.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
           navRegBtn.textContent = 'GET CERTIFICATE';

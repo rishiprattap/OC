@@ -39,6 +39,18 @@ function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
+function validateExternalUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!/^https?:\/\/[^\s$.?#].[^\s]*$/i.test(trimmed)) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch (_) {
+    return false;
+  }
+}
+
 // GET /api/admin/events — List all events with registration count & breakdown
 router.get('/', async (req, res) => {
   try {
@@ -87,6 +99,11 @@ router.get('/', async (req, res) => {
         regEnabled: Boolean(evt.reg_enabled),
         regButtonText: evt.reg_button_text || 'REGISTER AS PERFORMER',
         maxRegistrations: Number(evt.max_registrations || 0),
+        registrationProvider: evt.registration_provider || 'internal',
+        externalRegistrationUrl: evt.external_registration_url || '',
+        externalPlatformName: evt.external_platform_name || '',
+        externalPlatformNotes: evt.external_platform_notes || '',
+        externalOpenNewTab: evt.external_open_new_tab !== 0,
         allowedCategories,
         stats: {
           total: totalReg?.c || 0,
@@ -153,6 +170,11 @@ router.get('/:slug', async (req, res) => {
         isPaid: Boolean(evt.is_paid),
         regEnabled: Boolean(evt.reg_enabled),
         isRegistrationOpen: Boolean(evt.reg_enabled),
+        registrationProvider: evt.registration_provider || 'internal',
+        externalRegistrationUrl: evt.external_registration_url || '',
+        externalPlatformName: evt.external_platform_name || '',
+        externalPlatformNotes: evt.external_platform_notes || '',
+        externalOpenNewTab: evt.external_open_new_tab !== 0,
         certificateEnabled: Boolean(evt.certificate_enabled),
         allowedCategories,
         pricingTiers,
@@ -215,6 +237,23 @@ router.post('/', async (req, res) => {
     const status = b.status || (isActive ? 'Registration Open' : 'Draft');
     const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : 1);
 
+    const registrationProvider = ['internal', 'external', 'disabled'].includes(b.registrationProvider)
+      ? b.registrationProvider
+      : 'internal';
+    const externalRegistrationUrl = (b.externalRegistrationUrl || '').trim();
+    const externalPlatformName = (b.externalPlatformName || '').trim();
+    const externalPlatformNotes = (b.externalPlatformNotes || '').trim();
+    const externalOpenNewTab = b.externalOpenNewTab !== undefined ? (b.externalOpenNewTab ? 1 : 0) : 1;
+
+    if (registrationProvider === 'external') {
+      if (!externalRegistrationUrl) {
+        return res.status(400).json({ success: false, error: 'External Registration URL is required when External Website is selected.' });
+      }
+      if (!validateExternalUrl(externalRegistrationUrl)) {
+        return res.status(400).json({ success: false, error: 'Please enter a valid HTTP or HTTPS external registration URL.' });
+      }
+    }
+
     await run(
       `INSERT INTO events (
         slug, name, title, subtitle, description, short_description,
@@ -229,6 +268,7 @@ router.post('/', async (req, res) => {
         allowed_categories, contact_email, contact_phone,
         instagram_url, youtube_url, whatsapp_url, meet_link, other_links,
         certificate_enabled, certificate_title, certificate_bg_url,
+        registration_provider, external_registration_url, external_platform_name, external_platform_notes, external_open_new_tab,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
@@ -243,6 +283,7 @@ router.post('/', async (req, res) => {
         ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
+        ?, ?, ?, ?, ?,
         ?, ?
       )`,
       [
@@ -255,10 +296,11 @@ router.post('/', async (req, res) => {
         b.upiId || 'preetiyadav15071985@okaxis', b.payeeName || 'Preeti Yadav / Offstage Creators', b.qrAssetPath || '/assets/payment-qr.jpeg',
         b.paymentInstructions || 'Pay registration fee via UPI and upload proof.',
         posterUrl, b.bannerUrl || posterUrl, b.logoUrl || '/assets/logo.png', b.promoVideoUrl || '',
-        regEnabled, b.regButtonText || 'REGISTER AS PERFORMER', Number(b.maxRegistrations || 0), b.confirmationMessage || 'Thank you for registering!',
+        regEnabled, b.registrationButtonText || b.regButtonText || 'REGISTER AS PERFORMER', Number(b.maxRegistrations || 0), b.confirmationMessage || 'Thank you for registering!',
         categoriesJson, b.contactEmail || 'offstagecreators77@gmail.com', b.contactPhone || '',
         b.instagramUrl || 'https://www.instagram.com/offstagecreators/', b.youtubeUrl || '', b.whatsappUrl || '', b.meetLink || '', otherLinksJson,
         b.certificateEnabled !== undefined ? (b.certificateEnabled ? 1 : 0) : 1, b.certificateTitle || 'CERTIFICATE OF PARTICIPATION', b.certificateBgUrl || '',
+        registrationProvider, externalRegistrationUrl, externalPlatformName, externalPlatformNotes, externalOpenNewTab,
         now, now
       ]
     );
@@ -312,6 +354,23 @@ router.put('/:slug', async (req, res) => {
     const status = b.status !== undefined ? b.status : existing.status;
     const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : existing.reg_enabled);
 
+    const registrationProvider = b.registrationProvider !== undefined
+      ? (['internal', 'external', 'disabled'].includes(b.registrationProvider) ? b.registrationProvider : 'internal')
+      : (existing.registration_provider || 'internal');
+    const externalRegistrationUrl = b.externalRegistrationUrl !== undefined ? b.externalRegistrationUrl.trim() : (existing.external_registration_url || '');
+    const externalPlatformName = b.externalPlatformName !== undefined ? b.externalPlatformName.trim() : (existing.external_platform_name || '');
+    const externalPlatformNotes = b.externalPlatformNotes !== undefined ? b.externalPlatformNotes.trim() : (existing.external_platform_notes || '');
+    const externalOpenNewTab = b.externalOpenNewTab !== undefined ? (b.externalOpenNewTab ? 1 : 0) : (existing.external_open_new_tab !== undefined ? existing.external_open_new_tab : 1);
+
+    if (registrationProvider === 'external') {
+      if (!externalRegistrationUrl) {
+        return res.status(400).json({ success: false, error: 'External Registration URL is required when External Website is selected.' });
+      }
+      if (!validateExternalUrl(externalRegistrationUrl)) {
+        return res.status(400).json({ success: false, error: 'Please enter a valid HTTP or HTTPS external registration URL.' });
+      }
+    }
+
     await run(
       `UPDATE events SET
         name = ?, title = ?, subtitle = ?, description = ?, short_description = ?,
@@ -326,6 +385,7 @@ router.put('/:slug', async (req, res) => {
         allowed_categories = ?, contact_email = ?, contact_phone = ?,
         instagram_url = ?, youtube_url = ?, whatsapp_url = ?, meet_link = ?, other_links = ?,
         certificate_enabled = ?, certificate_title = ?, certificate_bg_url = ?,
+        registration_provider = ?, external_registration_url = ?, external_platform_name = ?, external_platform_notes = ?, external_open_new_tab = ?,
         updated_at = ?
       WHERE id = ?`,
       [
@@ -364,7 +424,7 @@ router.put('/:slug', async (req, res) => {
         b.logoUrl !== undefined ? b.logoUrl : existing.logo_url,
         b.promoVideoUrl !== undefined ? b.promoVideoUrl : existing.promo_video_url,
         regEnabled,
-        b.regButtonText !== undefined ? b.regButtonText : existing.reg_button_text,
+        b.registrationButtonText !== undefined ? b.registrationButtonText : (b.regButtonText !== undefined ? b.regButtonText : existing.reg_button_text),
         b.maxRegistrations !== undefined ? Number(b.maxRegistrations) : existing.max_registrations,
         b.confirmationMessage !== undefined ? b.confirmationMessage : existing.confirmation_message,
         categoriesJson,
@@ -378,6 +438,11 @@ router.put('/:slug', async (req, res) => {
         b.certificateEnabled !== undefined ? (b.certificateEnabled ? 1 : 0) : existing.certificate_enabled,
         b.certificateTitle !== undefined ? b.certificateTitle : existing.certificate_title,
         b.certificateBgUrl !== undefined ? b.certificateBgUrl : existing.certificate_bg_url,
+        registrationProvider,
+        externalRegistrationUrl,
+        externalPlatformName,
+        externalPlatformNotes,
+        externalOpenNewTab,
         now,
         existing.id
       ]
@@ -427,10 +492,11 @@ router.post('/:slug/duplicate', async (req, res) => {
         allowed_categories, contact_email, contact_phone,
         instagram_url, youtube_url, whatsapp_url, meet_link, other_links,
         certificate_enabled, certificate_title, certificate_bg_url,
+        registration_provider, external_registration_url, external_platform_name, external_platform_notes, external_open_new_tab,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
-        ?, 'draft', 0, 1,
+        ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
@@ -441,11 +507,12 @@ router.post('/:slug/duplicate', async (req, res) => {
         ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?,
+        ?, ?, ?, ?, ?,
         ?, ?
       )`,
       [
         newSlug, newName, newTitle, src.subtitle || '', src.description || '', src.short_description || '',
-        src.event_type || 'ONLINE',
+        src.event_type || 'ONLINE', 'draft', 0, 1,
         newDate, src.start_time || '', src.end_time || '', src.timezone || 'IST (GMT+5:30)',
         '', '', src.venue_name || '', src.venue_address || '',
         src.city || '', src.state || '', src.maps_url || '', src.venue_image_url || '',
@@ -456,6 +523,7 @@ router.post('/:slug/duplicate', async (req, res) => {
         src.allowed_categories, src.contact_email, src.contact_phone,
         src.instagram_url, src.youtube_url, src.whatsapp_url, src.meet_link, src.other_links,
         src.certificate_enabled, src.certificate_title, src.certificate_bg_url,
+        src.registration_provider || 'internal', src.external_registration_url || '', src.external_platform_name || '', src.external_platform_notes || '', src.external_open_new_tab !== undefined ? src.external_open_new_tab : 1,
         now, now
       ]
     );
@@ -514,12 +582,12 @@ router.post('/:slug/status', async (req, res) => {
 });
 
 // DELETE /api/admin/events/:slug — Delete event with safety checks
-router.post('/:slug/delete', async (req, res) => {
+async function handleDeleteEvent(req, res) {
   try {
     const evt = await getEventBySlug(req.params.slug);
     if (!evt) return res.status(404).json({ success: false, error: 'Event not found.' });
 
-    const { confirmName, force } = req.body;
+    const { confirmName, force } = req.body || {};
 
     // Check if registrations exist
     const regCountRow = await get(`SELECT COUNT(*) as c FROM registrations WHERE event_id = ?`, [evt.slug]);
@@ -539,7 +607,7 @@ router.post('/:slug/delete', async (req, res) => {
     }
 
     // Do NOT delete participant registrations unless explicitly asked
-    if (req.body.deleteRegistrations) {
+    if (req.body && req.body.deleteRegistrations) {
       await run(`DELETE FROM registrations WHERE event_id = ?`, [evt.slug]);
     } else if (regCount > 0) {
       // Reassign to archive tag
@@ -557,12 +625,9 @@ router.post('/:slug/delete', async (req, res) => {
     console.error('[Admin Events] Delete error:', err);
     return res.status(500).json({ success: false, error: 'Failed to delete event.' });
   }
-});
+}
 
-// Keep DELETE HTTP method as well
-router.delete('/:slug', async (req, res) => {
-  req.body = req.body || {};
-  return router.handle({ ...req, method: 'POST', url: `/${req.params.slug}/delete` }, res);
-});
+router.post('/:slug/delete', handleDeleteEvent);
+router.delete('/:slug', handleDeleteEvent);
 
 module.exports = router;

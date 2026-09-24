@@ -79,6 +79,11 @@ const DEFAULT_EVENTS = [
     certificate_enabled: 1,
     certificate_title: 'CERTIFICATE OF PARTICIPATION',
     certificate_bg_url: '',
+    registration_provider: 'internal',
+    external_registration_url: '',
+    external_platform_name: '',
+    external_platform_notes: '',
+    external_open_new_tab: 1,
     created_at: '2026-09-01T00:00:00.000Z',
     updated_at: '2026-09-24T00:00:00.000Z'
   },
@@ -134,6 +139,11 @@ const DEFAULT_EVENTS = [
     certificate_enabled: 1,
     certificate_title: 'CERTIFICATE OF ATTENDANCE',
     certificate_bg_url: '',
+    registration_provider: 'external',
+    external_registration_url: 'https://in.bookmyshow.com/events/adhure-musafir/ET00515735',
+    external_platform_name: 'BookMyShow',
+    external_platform_notes: 'BookMyShow official ticketing partner',
+    external_open_new_tab: 1,
     created_at: '2026-09-10T00:00:00.000Z',
     updated_at: '2026-09-24T00:00:00.000Z'
   }
@@ -238,7 +248,14 @@ function loadLocalStore() {
       return {
         ...defaultStore,
         ...parsed,
-        events: parsed.events && parsed.events.length > 0 ? parsed.events : defaultStore.events,
+        events: (parsed.events && parsed.events.length > 0 ? parsed.events : defaultStore.events).map(e => ({
+          registration_provider: 'internal',
+          external_registration_url: '',
+          external_platform_name: '',
+          external_platform_notes: '',
+          external_open_new_tab: 1,
+          ...e
+        })),
         registrations: parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations,
         settings: { ...defaultStore.settings, ...(parsed.settings || {}) }
       };
@@ -530,8 +547,13 @@ function handleLocalRun(sql, params = []) {
       certificate_enabled: Number(params[47] !== undefined ? params[47] : 1),
       certificate_title: params[48] || 'CERTIFICATE OF PARTICIPATION',
       certificate_bg_url: params[49],
-      created_at: params[50] || new Date().toISOString(),
-      updated_at: params[51] || new Date().toISOString()
+      registration_provider: params[50] || 'internal',
+      external_registration_url: params[51] || '',
+      external_platform_name: params[52] || '',
+      external_platform_notes: params[53] || '',
+      external_open_new_tab: Number(params[54] !== undefined ? params[54] : 1),
+      created_at: params[55] || new Date().toISOString(),
+      updated_at: params[56] || new Date().toISOString()
     };
 
     if (existingIdx !== -1) {
@@ -625,15 +647,20 @@ function handleLocalRun(sql, params = []) {
       evt.certificate_enabled = Number(params[46]);
       evt.certificate_title = params[47];
       evt.certificate_bg_url = params[48];
-      evt.updated_at = params[49] || new Date().toISOString();
+      evt.registration_provider = params[49] || 'internal';
+      evt.external_registration_url = params[50] || '';
+      evt.external_platform_name = params[51] || '';
+      evt.external_platform_notes = params[52] || '';
+      evt.external_open_new_tab = Number(params[53] !== undefined ? params[53] : 1);
+      evt.updated_at = params[54] || new Date().toISOString();
       saveLocalStore();
     }
     return { lastID: null, changes: evt ? 1 : 0 };
   }
 
-  if (sqlLower.includes('delete from events where slug = ?')) {
-    const slug = params[0];
-    const idx = localStore.events.findIndex(e => e.slug === slug);
+  if (sqlLower.includes('delete from events')) {
+    const target = params[0];
+    const idx = localStore.events.findIndex(e => e.id === target || String(e.id) === String(target) || e.slug === target);
     if (idx !== -1) {
       localStore.events.splice(idx, 1);
       saveLocalStore();
@@ -910,6 +937,11 @@ const initSchema = async () => {
         certificate_enabled INTEGER NOT NULL DEFAULT 1,
         certificate_title TEXT DEFAULT 'CERTIFICATE OF PARTICIPATION',
         certificate_bg_url TEXT,
+        registration_provider TEXT DEFAULT 'internal',
+        external_registration_url TEXT DEFAULT '',
+        external_platform_name TEXT DEFAULT '',
+        external_platform_notes TEXT DEFAULT '',
+        external_open_new_tab INTEGER DEFAULT 1,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -917,6 +949,12 @@ const initSchema = async () => {
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_events_slug ON events(slug)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_events_active ON events(is_active)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_events_status ON events(status)`);
+
+    try { await rawRun(`ALTER TABLE events ADD COLUMN registration_provider TEXT DEFAULT 'internal'`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN external_registration_url TEXT DEFAULT ''`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN external_platform_name TEXT DEFAULT ''`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN external_platform_notes TEXT DEFAULT ''`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN external_open_new_tab INTEGER DEFAULT 1`); } catch (_) {}
 
     // Seed default events if events table is empty
     for (const evt of DEFAULT_EVENTS) {

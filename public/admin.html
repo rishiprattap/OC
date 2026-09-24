@@ -453,7 +453,16 @@
       <div id="tabOverview">
         <div style="margin-bottom:28px;">
           <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:36px; margin:0 0 4px;">Dashboard</h1>
-          <p style="color:#8e8477; font-size:13px; margin:0;" id="overviewEventSubtitle">Online Open Mic — Event Overview</p>
+        <div id="overviewExternalNotice" style="display:none; background:rgba(228,173,87,0.1); border:1px solid rgba(228,173,87,0.3); border-radius:10px; padding:16px 20px; margin-bottom:24px; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div>
+            <div style="font-size:14px; font-weight:800; color:#e4ad57; display:flex; align-items:center; gap:8px;">
+              <span>🔗</span> Registrations are being handled by an external platform.
+            </div>
+            <div style="font-size:12.5px; color:#d5cbbd; margin-top:4px;" id="overviewExternalDetails">
+              Registrations for this event are handled externally. Internal participant records are not collected on this website for external events.
+            </div>
+          </div>
+          <a id="overviewExternalLink" href="#" target="_blank" rel="noopener noreferrer" class="cta" style="font-size:12px; padding:8px 16px; text-decoration:none;">Open External Ticket Page ↗</a>
         </div>
 
         <div class="stats-grid" id="statsGrid">
@@ -1195,29 +1204,112 @@
 
           <!-- TAB 6: REGISTRATION SETTINGS -->
           <div id="evtTabContentReg" style="display:none;">
-            <div style="margin-bottom:16px;">
-              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px;">
-                <input type="checkbox" id="evtIsRegistrationOpen" checked>
-                <span style="font-weight:700;">Accepting Registrations (Enable / Disable registration form)</span>
-              </label>
+            <!-- Registration Method Selection -->
+            <div style="background:#110f0d; border:1px solid #2a231c; border-radius:10px; padding:18px; margin-bottom:20px;">
+              <label class="admin-label" style="font-size:12px; color:#e4ad57; margin-bottom:12px;">REGISTRATION METHOD</label>
+              
+              <div style="display:flex; flex-direction:column; gap:12px;">
+                <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; color:#f7eee1; font-size:13.5px;">
+                  <input type="radio" name="evtRegistrationMethod" value="internal" id="regMethodInternal" onchange="onRegistrationProviderChange('internal')" checked style="margin-top:3px; accent-color:#e4ad57;">
+                  <div>
+                    <span style="font-weight:700;">Registration on Offstage Creators Website</span>
+                    <div style="font-size:12px; color:#8e8477; margin-top:2px;">The normal registration button opens our existing registration form on this website.</div>
+                  </div>
+                </label>
+
+                <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; color:#f7eee1; font-size:13.5px;">
+                  <input type="radio" name="evtRegistrationMethod" value="external" id="regMethodExternal" onchange="onRegistrationProviderChange('external')" style="margin-top:3px; accent-color:#e4ad57;">
+                  <div>
+                    <span style="font-weight:700;">External Registration Website</span>
+                    <div style="font-size:12px; color:#8e8477; margin-top:2px;">Direct users to BookMyShow, Google Forms, another ticketing platform, or any custom URL.</div>
+                  </div>
+                </label>
+
+                <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; color:#f7eee1; font-size:13.5px;">
+                  <input type="radio" name="evtRegistrationMethod" value="disabled" id="regMethodDisabled" onchange="onRegistrationProviderChange('disabled')" style="margin-top:3px; accent-color:#e4ad57;">
+                  <div>
+                    <span style="font-weight:700;">Registration Disabled</span>
+                    <div style="font-size:12px; color:#8e8477; margin-top:2px;">Disables registrations for this event across the website.</div>
+                  </div>
+                </label>
+              </div>
             </div>
 
+            <!-- EXTERNAL SETTINGS BLOCK -->
+            <div id="evtExternalSettingsBlock" style="display:none; background:#141210; border:1px solid #3a3227; border-radius:10px; padding:18px; margin-bottom:20px;">
+              <div style="font-size:13px; font-weight:800; color:#e4ad57; margin-bottom:14px; display:flex; align-items:center; gap:8px;">
+                <span>🌐</span> External Registration Website Configuration
+              </div>
+
+              <label class="admin-label">External Registration URL <span style="color:#e4ad57;">*</span></label>
+              <input type="url" class="admin-input" id="evtExternalUrl" placeholder="https://in.bookmyshow.com/... or https://forms.gle/..." oninput="updateExternalAdminPreview()">
+              <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:14px;">Must be a valid HTTP or HTTPS link (accepts any ticketing or registration URL).</small>
+
+              <div class="form-grid-2">
+                <div>
+                  <label class="admin-label">External Platform Name (Optional)</label>
+                  <input type="text" class="admin-input" id="evtExternalPlatformName" placeholder="e.g. BookMyShow, Google Forms" oninput="updateExternalAdminPreview()">
+                </div>
+                <div>
+                  <label class="admin-label">Link Behavior</label>
+                  <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px; padding-top:10px;">
+                    <input type="checkbox" id="evtExternalOpenNewTab" checked>
+                    <span>Open external registration in new tab (↗)</span>
+                  </label>
+                </div>
+              </div>
+
+              <label class="admin-label">External Platform Notes (Admin Reference Only)</label>
+              <textarea class="admin-textarea" id="evtExternalNotes" rows="2" placeholder="e.g. Ticket batch ID #9872, 10% commission, organizer POC..."></textarea>
+
+              <!-- Admin Preview Box -->
+              <div id="evtExternalAdminPreview" style="background:#0a0908; border:1px solid #2a231c; border-radius:8px; padding:14px; margin-top:8px;">
+                <div style="font-size:11px; font-weight:800; color:#e4ad57; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:8px;">ADMIN PREVIEW</div>
+                <div style="font-size:13px; color:#d5cbbd; margin-bottom:4px;">
+                  Registration Method: <strong style="color:#e4ad57;">External Website</strong>
+                </div>
+                <div style="font-size:13px; color:#d5cbbd; margin-bottom:12px;">
+                  External URL: <span id="evtExternalPreviewUrl" style="word-break:break-all; font-family:monospace; color:#6edb8c;">https://example.com/registration</span>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <a id="evtExternalPreviewBtn" href="#" target="_blank" rel="noopener noreferrer" class="action-btn btn-approve" style="text-decoration:none; padding:8px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                    <span>↗</span> Open Registration Link
+                  </a>
+                  <button type="button" class="action-btn btn-view" onclick="changeRegMethodToInternal()" style="font-size:12px; padding:8px 14px;">
+                    Change Registration Method
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- REGISTRATION BUTTON TEXT -->
             <div class="form-grid-2">
               <div>
-                <label class="admin-label">Registration Button Text</label>
-                <input type="text" class="admin-input" id="evtRegButtonText" value="RESERVE PERFORMANCE SLOT">
+                <label class="admin-label">Button Text</label>
+                <input type="text" class="admin-input" id="evtRegButtonText" value="REGISTER NOW" placeholder="e.g. REGISTER NOW">
+                <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">For external registrations, an external-link indicator [↗] is shown automatically.</small>
               </div>
-              <div>
+              <div id="evtMaxRegBlock">
                 <label class="admin-label">Maximum Registrations (0 for unlimited)</label>
                 <input type="number" class="admin-input" id="evtMaxRegistrations" value="50">
               </div>
             </div>
 
-            <label class="admin-label">Registration Confirmation Message</label>
-            <textarea class="admin-textarea" id="evtConfirmationMessage" rows="2" placeholder="Your performance registration has been received! Our curators are reviewing your submission."></textarea>
+            <!-- INTERNAL REGISTRATION EXTRA FIELDS -->
+            <div id="evtInternalSettingsBlock">
+              <div style="margin-bottom:14px;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px;">
+                  <input type="checkbox" id="evtIsRegistrationOpen" checked>
+                  <span style="font-weight:700;">Accepting Registrations (Enable internal submission form)</span>
+                </label>
+              </div>
 
-            <label class="admin-label">Performance Guidelines</label>
-            <textarea class="admin-textarea" id="evtPerformanceGuidelines" rows="2" placeholder="5–7 minute performance slot. Maintain artistic respect and creative honesty."></textarea>
+              <label class="admin-label">Registration Confirmation Message</label>
+              <textarea class="admin-textarea" id="evtConfirmationMessage" rows="2" placeholder="Your performance registration has been received! Our curators are reviewing your submission."></textarea>
+
+              <label class="admin-label">Performance Guidelines</label>
+              <textarea class="admin-textarea" id="evtPerformanceGuidelines" rows="2" placeholder="5–7 minute performance slot. Maintain artistic respect and creative honesty."></textarea>
+            </div>
           </div>
 
           <!-- TAB 7: SOCIAL & CONTACT -->

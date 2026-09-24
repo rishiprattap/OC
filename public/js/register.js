@@ -140,12 +140,76 @@
       }
     }
 
-    // Check status
+    // Provider and Status Checks
+    const provider = evt.registrationProvider || 'internal';
     const isClosed = evt.isRegistrationOpen === false ||
       evt.status === 'Registration Closed' ||
       evt.status === 'Event Completed' ||
       evt.status === 'Archived';
 
+    const extBox = document.getElementById('externalRegistrationBox');
+
+    if (provider === 'disabled') {
+      if (step1Card) step1Card.style.display = 'none';
+      if (stepsBar) stepsBar.style.display = 'none';
+      if (extBox) extBox.style.display = 'none';
+      if (registrationClosedBox) {
+        registrationClosedBox.style.display = 'block';
+        const msgP = registrationClosedBox.querySelector('p');
+        if (msgP) {
+          msgP.textContent = `Registration is currently disabled for ${evt.title || evt.name}.`;
+        }
+      }
+      return;
+    }
+
+    if (provider === 'external' || evt.isExternalRegistration) {
+      if (step1Card) step1Card.style.display = 'none';
+      if (stepsBar) stepsBar.style.display = 'none';
+
+      if (isClosed) {
+        if (extBox) extBox.style.display = 'none';
+        if (registrationClosedBox) {
+          registrationClosedBox.style.display = 'block';
+          const msgP = registrationClosedBox.querySelector('p');
+          if (msgP) {
+            msgP.textContent = `Registrations for ${evt.title || evt.name} are currently closed.`;
+          }
+        }
+      } else {
+        if (registrationClosedBox) registrationClosedBox.style.display = 'none';
+        if (extBox) {
+          extBox.style.display = 'block';
+          const titleEl = document.getElementById('externalRegTitle');
+          if (titleEl) {
+            titleEl.textContent = `Registration via ${evt.externalPlatformName || 'Partner Website'}`;
+          }
+          const descEl = document.getElementById('externalRegDesc');
+          if (descEl) {
+            descEl.textContent = `Registrations and ticket bookings for ${evt.title || evt.name} are hosted on ${evt.externalPlatformName || 'an external ticketing partner'}. Click below to secure your spot.`;
+          }
+          const ctaBtn = document.getElementById('externalRegCtaBtn');
+          const ctaText = document.getElementById('externalRegCtaBtnText');
+          if (ctaBtn) {
+            ctaBtn.href = evt.externalRegistrationUrl || '#';
+            if (evt.externalOpenNewTab !== false) {
+              ctaBtn.setAttribute('target', '_blank');
+              ctaBtn.setAttribute('rel', 'noopener noreferrer');
+            } else {
+              ctaBtn.removeAttribute('target');
+              ctaBtn.removeAttribute('rel');
+            }
+          }
+          if (ctaText) {
+            ctaText.textContent = evt.registrationButtonText || `PROCEED TO ${evt.externalPlatformName ? evt.externalPlatformName.toUpperCase() : 'REGISTER'}`;
+          }
+        }
+      }
+      return;
+    }
+
+    // Internal registration check
+    if (extBox) extBox.style.display = 'none';
     if (isClosed) {
       if (step1Card) step1Card.style.display = 'none';
       if (stepsBar) stepsBar.style.display = 'none';
@@ -156,6 +220,10 @@
           msgP.textContent = `${evt.title || evt.name} is currently ${evt.status || 'closed'}. Registrations are closed. For registered performers, certificates and galleries remain accessible.`;
         }
       }
+    } else {
+      if (registrationClosedBox) registrationClosedBox.style.display = 'none';
+      if (step1Card) step1Card.style.display = 'block';
+      if (stepsBar) stepsBar.style.display = 'flex';
     }
   }
 

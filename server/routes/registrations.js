@@ -84,6 +84,20 @@ router.post('/', async (req, res) => {
     // ── Check if registration is open for this event ─────────────────────────
     const globalRegSetting = await getSetting('registration_status', 'OPEN');
     if (targetEvent) {
+      const regProvider = targetEvent.registration_provider || 'internal';
+      if (regProvider === 'disabled') {
+        return res.status(403).json({ success: false, error: 'Registration is currently disabled for this event.' });
+      }
+      if (regProvider === 'external') {
+        return res.status(400).json({
+          success: false,
+          isExternal: true,
+          externalUrl: targetEvent.external_registration_url || '',
+          platformName: targetEvent.external_platform_name || 'External Platform',
+          error: `Registrations for this event are handled via ${targetEvent.external_platform_name || 'an external platform'}. Please use the official link: ${targetEvent.external_registration_url || ''}`
+        });
+      }
+
       if (!targetEvent.reg_enabled || ['registration_closed', 'event_completed', 'archived', 'draft'].includes(targetEvent.status)) {
         if (targetEvent.status === 'event_completed') {
           return res.status(403).json({ success: false, error: 'This event has concluded. Registrations are closed.' });

@@ -181,12 +181,30 @@
       setText('statCheckedIn', s.checkedIn);
 
       const subtitleEl = document.getElementById('overviewEventSubtitle');
+      const found = adminEvents.find(e => e.slug === activeAdminEventId);
       if (subtitleEl) {
-        const found = adminEvents.find(e => e.slug === activeAdminEventId);
         if (found) {
           subtitleEl.textContent = `${found.title || found.name} — Event Overview (${found.status || 'Active'})`;
         } else {
           subtitleEl.textContent = 'All Events Combined — System-wide Overview';
+        }
+      }
+
+      const extNotice = document.getElementById('overviewExternalNotice');
+      if (extNotice) {
+        if (found && found.registrationProvider === 'external') {
+          extNotice.style.display = 'flex';
+          const extDetails = document.getElementById('overviewExternalDetails');
+          if (extDetails) {
+            extDetails.textContent = `Registrations are being handled by an external platform (${found.externalPlatformName || 'External Platform'}). Internal participant records are not collected on this website for external events.`;
+          }
+          const extLink = document.getElementById('overviewExternalLink');
+          if (extLink) {
+            extLink.href = found.externalRegistrationUrl || '#';
+            extLink.textContent = `Open ${found.externalPlatformName || 'External'} Ticket Page ↗`;
+          }
+        } else {
+          extNotice.style.display = 'none';
         }
       }
     } catch (err) {
@@ -2070,6 +2088,13 @@
                 <span class="event-slug-pill">/event/${escHtml(evt.slug)}</span>
                 ${isCurrentActive ? '<span class="status-pill status-APPROVED" style="font-size:10px;">★ ACTIVE HOMEPAGE</span>' : ''}
                 <span class="badge-status ${statusClass}">${escHtml(evt.status || 'Draft')}</span>
+                ${evt.registrationProvider === 'external' ? `
+                  <span class="badge-status" style="background:rgba(110,219,140,0.12); color:#6edb8c; border:1px solid rgba(110,219,140,0.3);">🌐 External: ${escHtml(evt.externalPlatformName || 'Platform')}</span>
+                ` : (evt.registrationProvider === 'disabled' ? `
+                  <span class="badge-status" style="background:rgba(226,105,71,0.12); color:#e26947; border:1px solid rgba(226,105,71,0.3);">🚫 Reg Disabled</span>
+                ` : `
+                  <span class="badge-status" style="background:rgba(228,173,87,0.1); color:#e4ad57; border:1px solid rgba(228,173,87,0.25);">📝 Website Reg</span>
+                `)}
               </div>
             </div>
 
@@ -2082,6 +2107,9 @@
               <div class="event-meta-item"><span>📍</span> ${escHtml(evt.venue || 'Online')}, <b>${escHtml(evt.city || 'Online')}</b></div>
               <div class="event-meta-item"><span>🎟️</span> <b>${evt.fee ? ('₹' + evt.fee) : 'Free'}</b></div>
               <div class="event-meta-item"><span>👥</span> Registrations: <b style="color:#e4ad57;">${evt.registrationCount || 0}</b> (${evt.approvedCount || 0} approved)</div>
+              ${evt.registrationProvider === 'external' ? `
+                <div class="event-meta-item"><span>🌐</span> Provider: <b style="color:#6edb8c;">${escHtml(evt.externalPlatformName || 'External Platform')}</b></div>
+              ` : ''}
             </div>
 
             <div class="event-actions-bar">
@@ -2104,6 +2132,12 @@
               ` : `
                 <span style="font-size:11px; color:#6edb8c; font-weight:700;">✓ Active Live</span>
               `}
+
+              ${(evt.registrationProvider === 'external' && evt.externalRegistrationUrl) ? `
+                <a href="${escHtml(evt.externalRegistrationUrl)}" target="_blank" rel="noopener noreferrer" class="action-btn btn-view" style="text-decoration:none; color:#6edb8c;" title="Open external registration platform">
+                  ↗ Tickets (${escHtml(evt.externalPlatformName || 'External')})
+                </a>
+              ` : ''}
 
               <select class="filter-select" style="padding:4px 8px; font-size:11px; height:28px;" onchange="setEventStatus('${evt.slug}', this.value)">
                 <option value="" disabled selected>Status: ${evt.status}</option>
@@ -2132,9 +2166,65 @@
     }).join('');
   }
 
+  // ── Registration Provider State & Handlers ──────────────────────────────────
+  let editingEventPreviousProvider = 'internal';
+  let editingEventRegistrationCount = 0;
+
+  window.onRegistrationProviderChange = function (newVal) {
+    if (currentEditingEventSlug && editingEventRegistrationCount > 0 && newVal !== editingEventPreviousProvider) {
+      const msg = `Notice: This event has ${editingEventRegistrationCount} existing internal registration(s).\n\nChanging the registration method will direct ALL NEW registrations to ${newVal === 'external' ? 'an external website' : (newVal === 'disabled' ? 'a disabled state' : 'the website form')}, but will NOT delete or alter any existing participant records.\n\nDo you want to proceed?`;
+      if (!confirm(msg)) {
+        const prevRadio = document.querySelector(`input[name="evtRegistrationMethod"][value="${editingEventPreviousProvider}"]`);
+        if (prevRadio) prevRadio.checked = true;
+        return;
+      }
+    }
+
+    editingEventPreviousProvider = newVal;
+
+    const extBlock = document.getElementById('evtExternalSettingsBlock');
+    const intBlock = document.getElementById('evtInternalSettingsBlock');
+    const maxRegBlock = document.getElementById('evtMaxRegBlock');
+
+    if (extBlock) extBlock.style.display = (newVal === 'external') ? 'block' : 'none';
+    if (intBlock) intBlock.style.display = (newVal === 'internal') ? 'block' : 'none';
+    if (maxRegBlock) maxRegBlock.style.display = (newVal === 'internal') ? 'block' : 'none';
+
+    updateExternalAdminPreview();
+  };
+
+  window.updateExternalAdminPreview = function () {
+    const url = document.getElementById('evtExternalUrl')?.value.trim() || '';
+    const platform = document.getElementById('evtExternalPlatformName')?.value.trim() || '';
+    const previewUrlEl = document.getElementById('evtExternalPreviewUrl');
+    const previewBtn = document.getElementById('evtExternalPreviewBtn');
+
+    if (previewUrlEl) {
+      previewUrlEl.textContent = url || 'https://example.com/registration';
+    }
+    if (previewBtn) {
+      previewBtn.href = url || '#';
+      if (platform) {
+        previewBtn.innerHTML = `<span>↗</span> Open Registration Link (${platform})`;
+      } else {
+        previewBtn.innerHTML = '<span>↗</span> Open Registration Link';
+      }
+    }
+  };
+
+  window.changeRegMethodToInternal = function () {
+    const radio = document.getElementById('regMethodInternal');
+    if (radio) {
+      radio.checked = true;
+      onRegistrationProviderChange('internal');
+    }
+  };
+
   // ── Event Modal (Create / Edit) ───────────────────────────────────────────────
   window.openCreateEventModal = function () {
     currentEditingEventSlug = null;
+    editingEventPreviousProvider = 'internal';
+    editingEventRegistrationCount = 0;
     const form = document.getElementById('eventEditorForm');
     if (form) form.reset();
 
@@ -2151,9 +2241,17 @@
     document.getElementById('evtLogoUrl').value = '/assets/logo.png';
     document.getElementById('evtIsRegistrationOpen').checked = true;
     document.getElementById('evtIsRegistrationFeeEnabled').checked = true;
-    document.getElementById('evtRegButtonText').value = 'RESERVE PERFORMANCE SLOT';
+    document.getElementById('evtRegButtonText').value = 'REGISTER NOW';
     document.getElementById('evtAllowedCategories').value = 'Poetry & Shayari, Storytelling, Stand-up Comedy, Music & Vocals, Spoken Word, Other';
     document.getElementById('evtStatus').value = 'Draft';
+
+    const intRadio = document.getElementById('regMethodInternal');
+    if (intRadio) intRadio.checked = true;
+    if (document.getElementById('evtExternalUrl')) document.getElementById('evtExternalUrl').value = '';
+    if (document.getElementById('evtExternalPlatformName')) document.getElementById('evtExternalPlatformName').value = '';
+    if (document.getElementById('evtExternalNotes')) document.getElementById('evtExternalNotes').value = '';
+    if (document.getElementById('evtExternalOpenNewTab')) document.getElementById('evtExternalOpenNewTab').checked = true;
+    onRegistrationProviderChange('internal');
 
     switchEvtModalTab('basic');
     const modal = document.getElementById('eventEditorModal');
@@ -2218,9 +2316,29 @@
       document.getElementById('evtLogoUrl').value = evt.logoUrl || '/assets/logo.png';
       document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || '';
 
-      // Tab 6: Registration
+      // Tab 6: Registration Provider & Settings
+      const provider = evt.registrationProvider || 'internal';
+      editingEventPreviousProvider = provider;
+      editingEventRegistrationCount = evt.registrationCount || 0;
+
+      const targetRadio = document.querySelector(`input[name="evtRegistrationMethod"][value="${provider}"]`);
+      if (targetRadio) targetRadio.checked = true;
+
+      document.getElementById('evtExternalUrl').value = evt.externalRegistrationUrl || '';
+      document.getElementById('evtExternalPlatformName').value = evt.externalPlatformName || '';
+      document.getElementById('evtExternalNotes').value = evt.externalPlatformNotes || '';
+      document.getElementById('evtExternalOpenNewTab').checked = evt.externalOpenNewTab !== false;
+
+      const extBlock = document.getElementById('evtExternalSettingsBlock');
+      const intBlock = document.getElementById('evtInternalSettingsBlock');
+      const maxRegBlock = document.getElementById('evtMaxRegBlock');
+      if (extBlock) extBlock.style.display = (provider === 'external') ? 'block' : 'none';
+      if (intBlock) intBlock.style.display = (provider === 'internal') ? 'block' : 'none';
+      if (maxRegBlock) maxRegBlock.style.display = (provider === 'internal') ? 'block' : 'none';
+      updateExternalAdminPreview();
+
       document.getElementById('evtIsRegistrationOpen').checked = evt.isRegistrationOpen !== false;
-      document.getElementById('evtRegButtonText').value = evt.registrationButtonText || 'RESERVE PERFORMANCE SLOT';
+      document.getElementById('evtRegButtonText').value = evt.registrationButtonText || 'REGISTER NOW';
       document.getElementById('evtMaxRegistrations').value = evt.maxRegistrations || 50;
       document.getElementById('evtConfirmationMessage').value = evt.confirmationMessage || '';
       document.getElementById('evtPerformanceGuidelines').value = evt.performanceGuidelines || '';
@@ -2275,6 +2393,28 @@
     const rawCats = document.getElementById('evtAllowedCategories').value;
     const allowedCategories = rawCats.split(',').map(s => s.trim()).filter(Boolean);
 
+    const providerRadio = document.querySelector('input[name="evtRegistrationMethod"]:checked');
+    const registrationProvider = providerRadio ? providerRadio.value : 'internal';
+    const externalRegistrationUrl = document.getElementById('evtExternalUrl')?.value.trim() || '';
+    const externalPlatformName = document.getElementById('evtExternalPlatformName')?.value.trim() || '';
+    const externalPlatformNotes = document.getElementById('evtExternalNotes')?.value.trim() || '';
+    const externalOpenNewTab = document.getElementById('evtExternalOpenNewTab')?.checked ?? true;
+
+    if (registrationProvider === 'external') {
+      if (!externalRegistrationUrl) {
+        alert('Please enter a valid External Registration URL for external registration.');
+        switchEvtModalTab('reg');
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+        return;
+      }
+      if (!/^https?:\/\//i.test(externalRegistrationUrl)) {
+        alert('External Registration URL must start with http:// or https://');
+        switchEvtModalTab('reg');
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+        return;
+      }
+    }
+
     const payload = {
       slug: document.getElementById('evtSlug').value.trim().toLowerCase(),
       name: document.getElementById('evtName').value.trim(),
@@ -2308,6 +2448,11 @@
       bannerUrl: document.getElementById('evtBannerUrl').value.trim(),
       logoUrl: document.getElementById('evtLogoUrl').value.trim(),
       promoVideoUrl: document.getElementById('evtPromoVideoUrl').value.trim(),
+      registrationProvider,
+      externalRegistrationUrl,
+      externalPlatformName,
+      externalPlatformNotes,
+      externalOpenNewTab,
       isRegistrationOpen: document.getElementById('evtIsRegistrationOpen').checked,
       registrationButtonText: document.getElementById('evtRegButtonText').value.trim(),
       maxRegistrations: Number(document.getElementById('evtMaxRegistrations').value) || 0,
