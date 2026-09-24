@@ -2278,26 +2278,34 @@
       document.getElementById('evtSlug').readOnly = true;
       document.getElementById('evtName').value = evt.name || '';
       document.getElementById('evtTitle').value = evt.title || '';
-      document.getElementById('evtStatus').value = evt.status || 'Draft';
-      document.getElementById('evtShortDescription').value = evt.shortDescription || '';
+
+      const normStatus = (evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+      let matchedStatus = 'Draft';
+      if (normStatus === 'registrationopen' || normStatus === 'open') matchedStatus = 'Registration Open';
+      else if (normStatus === 'registrationclosed' || normStatus === 'closed') matchedStatus = 'Registration Closed';
+      else if (normStatus === 'eventcompleted' || normStatus === 'completed') matchedStatus = 'Event Completed';
+      else if (normStatus === 'archived') matchedStatus = 'Archived';
+      document.getElementById('evtStatus').value = matchedStatus;
+
+      document.getElementById('evtShortDescription').value = evt.shortDescription || evt.short_description || '';
       document.getElementById('evtDescription').value = evt.description || '';
 
       // Tab 2: Date & Time
-      document.getElementById('evtDate').value = evt.date || '';
-      document.getElementById('evtTime').value = evt.time || '';
-      document.getElementById('evtStartTime').value = evt.startTime || '';
-      document.getElementById('evtEndTime').value = evt.endTime || '';
+      document.getElementById('evtDate').value = evt.date || evt.eventDate || evt.event_date || '';
+      document.getElementById('evtTime').value = evt.time || evt.start_time || '';
+      document.getElementById('evtStartTime').value = evt.startTime || evt.start_time || '';
+      document.getElementById('evtEndTime').value = evt.endTime || evt.end_time || '';
       document.getElementById('evtTimezone').value = evt.timezone || 'IST (GMT+5:30)';
-      document.getElementById('evtRegOpeningDate').value = evt.registrationOpeningDate || '';
-      document.getElementById('evtRegClosingDate').value = evt.registrationClosingDate || '';
+      document.getElementById('evtRegOpeningDate').value = evt.registrationOpeningDate || evt.reg_open_date || '';
+      document.getElementById('evtRegClosingDate').value = evt.registrationClosingDate || evt.reg_close_date || '';
 
       // Tab 3: Venue
-      document.getElementById('evtVenue').value = evt.venue || '';
+      document.getElementById('evtVenue').value = evt.venue || evt.venueName || evt.venue_name || '';
       document.getElementById('evtCity').value = evt.city || '';
       document.getElementById('evtState').value = evt.state || '';
-      document.getElementById('evtGoogleMapsUrl').value = evt.googleMapsUrl || '';
-      document.getElementById('evtVenueAddress').value = evt.venueAddress || '';
-      document.getElementById('evtVenueImage').value = evt.venueImage || '';
+      document.getElementById('evtGoogleMapsUrl').value = evt.googleMapsUrl || evt.maps_url || '';
+      document.getElementById('evtVenueAddress').value = evt.venueAddress || evt.venue_address || '';
+      document.getElementById('evtVenueImage').value = evt.venueImage || evt.venue_image_url || '';
 
       // Tab 4: Pricing
       document.getElementById('evtFee').value = evt.fee ?? 79;
@@ -2305,29 +2313,38 @@
       document.getElementById('evtEarlyBirdPrice').value = evt.earlyBirdPrice || '';
       document.getElementById('evtIsRegistrationFeeEnabled').checked = evt.isRegistrationFeeEnabled !== false;
       document.getElementById('evtAllowedCategories').value = Array.isArray(evt.allowedCategories) ? evt.allowedCategories.join(', ') : (evt.allowedCategories || '');
-      document.getElementById('evtPayeeName').value = evt.payeeName || 'Preeti Yadav / Offstage Creators';
-      document.getElementById('evtUpiId').value = evt.upiId || 'preetiyadav15071985@okaxis';
-      document.getElementById('evtPaymentQr').value = evt.paymentQr || '/assets/payment-qr.jpeg';
-      document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || '';
+      document.getElementById('evtPayeeName').value = evt.payeeName || evt.payee_name || 'Preeti Yadav / Offstage Creators';
+      document.getElementById('evtUpiId').value = evt.upiId || evt.upi_id || 'preetiyadav15071985@okaxis';
+      document.getElementById('evtPaymentQr').value = evt.paymentQr || evt.qr_asset_path || '/assets/payment-qr.jpeg';
+      document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || evt.payment_instructions || '';
 
       // Tab 5: Media
-      document.getElementById('evtPosterUrl').value = evt.posterUrl || '/assets/poster.jpeg';
-      document.getElementById('evtBannerUrl').value = evt.bannerUrl || '';
-      document.getElementById('evtLogoUrl').value = evt.logoUrl || '/assets/logo.png';
-      document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || '';
+      let poster = evt.posterUrl || evt.poster_url;
+      if (!poster || poster === '/assets/poster.jpeg') {
+        poster = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+      }
+      document.getElementById('evtPosterUrl').value = poster;
+      document.getElementById('evtBannerUrl').value = evt.bannerUrl || evt.banner_url || poster;
+      document.getElementById('evtLogoUrl').value = evt.logoUrl || evt.logo_url || '/assets/logo.png';
+      document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || evt.promo_video_url || '';
 
       // Tab 6: Registration Provider & Settings
-      const provider = evt.registrationProvider || 'internal';
+      let provider = (evt.registrationProvider || evt.registration_provider || 'internal').toLowerCase();
+      if (!['internal', 'external', 'disabled'].includes(provider)) {
+        provider = 'internal';
+      }
       editingEventPreviousProvider = provider;
       editingEventRegistrationCount = evt.registrationCount || 0;
 
       const targetRadio = document.querySelector(`input[name="evtRegistrationMethod"][value="${provider}"]`);
       if (targetRadio) targetRadio.checked = true;
 
-      document.getElementById('evtExternalUrl').value = evt.externalRegistrationUrl || '';
-      document.getElementById('evtExternalPlatformName').value = evt.externalPlatformName || '';
-      document.getElementById('evtExternalNotes').value = evt.externalPlatformNotes || '';
-      document.getElementById('evtExternalOpenNewTab').checked = evt.externalOpenNewTab !== false;
+      let extUrl = evt.externalRegistrationUrl || evt.external_registration_url || '';
+      if (!/^https?:\/\//i.test(extUrl)) extUrl = '';
+      document.getElementById('evtExternalUrl').value = extUrl;
+      document.getElementById('evtExternalPlatformName').value = evt.externalPlatformName || evt.external_platform_name || '';
+      document.getElementById('evtExternalNotes').value = evt.externalPlatformNotes || evt.external_platform_notes || '';
+      document.getElementById('evtExternalOpenNewTab').checked = evt.externalOpenNewTab !== false && evt.external_open_new_tab !== 0;
 
       const extBlock = document.getElementById('evtExternalSettingsBlock');
       const intBlock = document.getElementById('evtInternalSettingsBlock');
@@ -2337,11 +2354,11 @@
       if (maxRegBlock) maxRegBlock.style.display = (provider === 'internal') ? 'block' : 'none';
       updateExternalAdminPreview();
 
-      document.getElementById('evtIsRegistrationOpen').checked = evt.isRegistrationOpen !== false;
-      document.getElementById('evtRegButtonText').value = evt.registrationButtonText || 'REGISTER NOW';
-      document.getElementById('evtMaxRegistrations').value = evt.maxRegistrations || 50;
-      document.getElementById('evtConfirmationMessage').value = evt.confirmationMessage || '';
-      document.getElementById('evtPerformanceGuidelines').value = evt.performanceGuidelines || '';
+      document.getElementById('evtIsRegistrationOpen').checked = evt.isRegistrationOpen !== false && evt.reg_enabled !== 0;
+      document.getElementById('evtRegButtonText').value = evt.registrationButtonText || evt.reg_button_text || 'REGISTER NOW';
+      document.getElementById('evtMaxRegistrations').value = evt.maxRegistrations || evt.max_registrations || 50;
+      document.getElementById('evtConfirmationMessage').value = evt.confirmationMessage || evt.confirmation_message || '';
+      document.getElementById('evtPerformanceGuidelines').value = evt.performanceGuidelines || evt.performance_guidelines || '';
 
       // Tab 7: Social
       document.getElementById('evtContactEmail').value = evt.contactEmail || 'support@offstagecreators.com';
@@ -2386,9 +2403,28 @@
   };
 
   window.saveEventForm = async function (e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     const btn = document.getElementById('btnSaveEvent');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    const slug = (document.getElementById('evtSlug').value || '').trim().toLowerCase();
+    const name = (document.getElementById('evtName').value || '').trim();
+    const title = (document.getElementById('evtTitle').value || '').trim();
+
+    if (!name || !title) {
+      switchEvtModalTab('basic');
+      alert('Please provide both an Event Name and Event Display Title.');
+      document.getElementById(!name ? 'evtName' : 'evtTitle')?.focus();
+      return;
+    }
+
+    const date = (document.getElementById('evtDate').value || '').trim();
+    const time = (document.getElementById('evtTime').value || '').trim();
+    if (!date || !time) {
+      switchEvtModalTab('datetime');
+      alert('Please provide a Display Date and Display Time.');
+      document.getElementById(!date ? 'evtDate' : 'evtTime')?.focus();
+      return;
+    }
 
     const rawCats = document.getElementById('evtAllowedCategories').value;
     const allowedCategories = rawCats.split(',').map(s => s.trim()).filter(Boolean);
@@ -2402,18 +2438,25 @@
 
     if (registrationProvider === 'external') {
       if (!externalRegistrationUrl) {
-        alert('Please enter a valid External Registration URL for external registration.');
         switchEvtModalTab('reg');
-        if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+        alert('Please enter an External Registration URL (e.g. BookMyShow, Google Forms).');
+        document.getElementById('evtExternalUrl')?.focus();
         return;
       }
       if (!/^https?:\/\//i.test(externalRegistrationUrl)) {
-        alert('External Registration URL must start with http:// or https://');
         switchEvtModalTab('reg');
-        if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+        alert('External Registration URL must start with http:// or https://');
+        document.getElementById('evtExternalUrl')?.focus();
         return;
       }
     }
+
+    let posterUrl = (document.getElementById('evtPosterUrl').value || '').trim();
+    if (!posterUrl || posterUrl === '/assets/poster.jpeg') {
+      posterUrl = (slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
     const payload = {
       slug: document.getElementById('evtSlug').value.trim().toLowerCase(),
@@ -2444,7 +2487,7 @@
       upiId: document.getElementById('evtUpiId').value.trim(),
       paymentQr: document.getElementById('evtPaymentQr').value.trim(),
       paymentInstructions: document.getElementById('evtPaymentInstructions').value.trim(),
-      posterUrl: document.getElementById('evtPosterUrl').value.trim(),
+      posterUrl,
       bannerUrl: document.getElementById('evtBannerUrl').value.trim(),
       logoUrl: document.getElementById('evtLogoUrl').value.trim(),
       promoVideoUrl: document.getElementById('evtPromoVideoUrl').value.trim(),

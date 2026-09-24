@@ -158,6 +158,8 @@ router.get('/:slug', async (req, res) => {
       success: true,
       event: {
         ...evt,
+        posterUrl: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
+        poster_url: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
         venue: evt.venue_name || '',
         venueName: evt.venue_name || '',
         venueAddress: evt.venue_address || '',
@@ -349,7 +351,10 @@ router.put('/:slug', async (req, res) => {
     const eventDate = b.eventDate !== undefined ? b.eventDate : (b.date !== undefined ? b.date : existing.event_date);
     const startTime = b.startTime !== undefined ? b.startTime : (b.time !== undefined ? b.time : existing.start_time);
     const endTime = b.endTime !== undefined ? b.endTime : existing.end_time;
-    const posterUrl = b.posterUrl !== undefined ? b.posterUrl : (b.poster !== undefined ? b.poster : existing.poster_url);
+    let posterUrl = b.posterUrl !== undefined ? b.posterUrl : (b.poster !== undefined ? b.poster : existing.poster_url);
+    if (!posterUrl || posterUrl === '/assets/poster.jpeg') {
+      posterUrl = (existing.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+    }
     const fee = b.fee !== undefined ? Number(b.fee) : existing.fee;
     const status = b.status !== undefined ? b.status : existing.status;
     const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : existing.reg_enabled);

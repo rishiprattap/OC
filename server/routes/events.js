@@ -98,8 +98,8 @@ function formatEventPublic(evt) {
       amount: Number(evt.fee || 79)
     },
     paymentInstructions: evt.payment_instructions || 'Pay via UPI using any payment app. Enter UTR and upload screenshot.',
-    posterUrl: evt.poster_url || '/assets/event-poster.png',
-    bannerUrl: evt.banner_url || evt.poster_url || '/assets/event-poster.png',
+    posterUrl: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
+    bannerUrl: (evt.banner_url && evt.banner_url !== '/assets/poster.jpeg') ? evt.banner_url : ((evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : '/assets/event-poster.png'),
     logoUrl: evt.logo_url || '/assets/logo.png',
     promoVideoUrl: evt.promo_video_url || '',
     registrationProvider,
@@ -131,7 +131,7 @@ function formatEventPublic(evt) {
     otherLinks,
     certificateEnabled: Boolean(evt.certificate_enabled),
     certificateTitle: evt.certificate_title || 'CERTIFICATE OF PARTICIPATION',
-    isCompleted: evt.status === 'event_completed',
+    isCompleted: normalizedStatus === 'eventcompleted' || normalizedStatus === 'completed',
     createdAt: evt.created_at,
     updatedAt: evt.updated_at
   };

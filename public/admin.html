@@ -1020,7 +1020,7 @@
           <button type="button" class="modal-tab-btn" id="tabBtnEvtSocial" onclick="switchEvtModalTab('social')">7. Social &amp; Contact</button>
         </div>
 
-        <form id="eventEditorForm" onsubmit="saveEventForm(event)">
+        <form id="eventEditorForm" novalidate onsubmit="saveEventForm(event)">
           <!-- TAB 1: BASIC INFO -->
           <div id="evtTabContentBasic">
             <div class="form-grid-2">
@@ -1185,7 +1185,7 @@
             <div class="form-grid-2">
               <div>
                 <label class="admin-label">Main Event Poster URL</label>
-                <input type="text" class="admin-input" id="evtPosterUrl" value="/assets/poster.jpeg" placeholder="/assets/poster.jpeg">
+                <input type="text" class="admin-input" id="evtPosterUrl" value="/assets/event-poster.png" placeholder="/assets/event-poster.png">
               </div>
               <div>
                 <label class="admin-label">Event Banner / Wide Poster URL</label>
@@ -1354,7 +1354,7 @@
           <div class="modal-actions" style="justify-content:space-between; margin-top:16px;">
             <button type="button" class="action-btn btn-view" onclick="closeEventModal()">Cancel</button>
             <div style="display:flex; gap:10px;">
-              <button type="submit" class="cta" id="btnSaveEvent">✓ Save Event</button>
+              <button type="submit" class="cta" id="btnSaveEvent" onclick="saveEventForm(event)">✓ Save Event</button>
             </div>
           </div>
         </form>
