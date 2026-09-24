@@ -19,6 +19,8 @@ const certificateRouter = require('./routes/certificate');
 const adminRouter = require('./routes/admin');
 const emailRouter = require('./routes/email');
 const galleryRouter = require('./routes/gallery');
+const eventsRouter = require('./routes/events');
+const adminEventsRouter = require('./routes/adminEvents');
 
 // Load meet router conditionally (may not exist in all deployments)
 let meetRouter;
@@ -110,29 +112,61 @@ app.use('/api/scanner', scannerRouter);
 app.use('/api/certificate', certificateRouter);
 app.use('/api/admin/login', adminLoginLimiter);  // rate limit login specifically
 app.use('/api/admin', adminRouter);
+app.use('/api/admin/events', adminEventsRouter);
+app.use('/api/events', eventsRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/gallery', galleryRouter);
 app.use('/api/admin/gallery', galleryRouter);
 if (meetRouter) app.use('/api/admin/meet', meetRouter);
 
-// Public config endpoint
+// Public config endpoint (dynamically loaded from database with fallback)
 app.get('/api/config', async (req, res) => {
   let registrationStatus = 'CLOSED';
+  let activeEvent = null;
   try {
-    const { getSetting } = require('./db');
-    registrationStatus = await getSetting('registration_status', 'CLOSED');
+    const { getSetting, getActiveEvent } = require('./db');
+    activeEvent = await getActiveEvent();
+    const settingStatus = await getSetting('registration_status', null);
+    if (settingStatus) {
+      registrationStatus = settingStatus;
+    } else if (activeEvent) {
+      registrationStatus = (activeEvent.reg_enabled && activeEvent.status === 'registration_open') ? 'OPEN' : 'CLOSED';
+    }
   } catch (_) {}
+
+  const eventObj = activeEvent || config.EVENT;
+  const isCompleted = activeEvent ? (activeEvent.status === 'event_completed') : true;
 
   res.json({
     success: true,
-    event: config.EVENT,
+    event: {
+      id: eventObj.slug || eventObj.id || 'online-open-mic-2026',
+      slug: eventObj.slug || eventObj.id || 'online-open-mic-2026',
+      title: eventObj.title || 'Online Open Mic',
+      name: eventObj.name || eventObj.title || 'Online Open Mic 2026',
+      date: eventObj.event_date || eventObj.date || '23 September',
+      time: eventObj.start_time ? (eventObj.end_time ? `${eventObj.start_time} – ${eventObj.end_time}` : eventObj.start_time) : (eventObj.time || '7:30 PM IST'),
+      venue: eventObj.venue_name || eventObj.venue || 'Online (Google Meet)',
+      fee: Number(eventObj.fee !== undefined ? eventObj.fee : (config.OPEN_MIC_FEE_INR || 79)),
+      voice: eventObj.subtitle || config.EVENT.voice || 'Tomboy',
+      tagline: eventObj.description || config.EVENT.tagline || 'ek lafz. ek awaaz. aur ek shaam.',
+      posterUrl: eventObj.poster_url || '/assets/event-poster.png',
+      status: eventObj.status || 'event_completed'
+    },
     delhiEvent: config.DELHI_EVENT,
-    upi: config.UPI,
-    fee: config.OPEN_MIC_FEE_INR,
-    amount: config.OPEN_MIC_FEE_INR,
+    upi: {
+      upiId: eventObj.upi_id || config.UPI.upiId,
+      payeeName: eventObj.payee_name || config.UPI.payeeName,
+      qrAssetPath: eventObj.qr_asset_path || config.UPI.qrAssetPath,
+      amount: Number(eventObj.fee !== undefined ? eventObj.fee : (config.UPI.amount || 79))
+    },
+    fee: Number(eventObj.fee !== undefined ? eventObj.fee : (config.OPEN_MIC_FEE_INR || 79)),
+    amount: Number(eventObj.fee !== undefined ? eventObj.fee : (config.OPEN_MIC_FEE_INR || 79)),
+    eventSlug: eventObj.slug || eventObj.id || 'online-open-mic-2026',
+    eventFee: Number(eventObj.fee !== undefined ? eventObj.fee : (config.OPEN_MIC_FEE_INR || 79)),
     registrationStatus,
     registrationOpen: registrationStatus === 'OPEN',
-    eventCompleted: true
+    eventCompleted: isCompleted
   });
 });
 
@@ -146,6 +180,12 @@ app.get('/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certifi
 app.get(['/gallery', '/event-gallery'], (req, res) => res.sendFile(path.join(publicDir, 'gallery.html')));
 app.get('/scanner', (req, res) => res.sendFile(path.join(publicDir, 'scanner.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
+
+// ─── Scalable Event-Specific URLs (Requirement 4) ─────────────────────────────
+app.get('/event/:slug', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('/event/:slug/register', (req, res) => res.sendFile(path.join(publicDir, 'register.html')));
+app.get('/event/:slug/gallery', (req, res) => res.sendFile(path.join(publicDir, 'gallery.html')));
+app.get('/event/:slug/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certificate.html')));
 
 // Fallback — serve index.html
 app.get('*', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));

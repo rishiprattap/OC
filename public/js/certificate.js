@@ -938,7 +938,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Auto-Verification via URL Parameters (e.g. Scanned QR Code)
+  // Auto-Verification via URL Parameters & Event Context Detection
   // ─────────────────────────────────────────────────────────────────────────────
   const urlParams = new URLSearchParams(window.location.search);
   const regIdParam = urlParams.get('regId') || urlParams.get('id');
@@ -950,6 +950,26 @@
       regInput.value = regIdParam.trim();
       performVerification({ registrationId: regIdParam.trim() });
     }
+  }
+
+  const eventSlugMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
+  const eventQueryParam = urlParams.get('event');
+  const targetCertSlug = eventSlugMatch ? eventSlugMatch[1] : (eventQueryParam || null);
+
+  if (targetCertSlug) {
+    fetch('/api/events/' + encodeURIComponent(targetCertSlug))
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.event) {
+          const evt = data.event;
+          const kicker = document.getElementById('certKicker');
+          if (kicker) kicker.textContent = (evt.name || evt.title || '').toUpperCase() + ' — OFFICIAL CREDENTIAL';
+          const sub = document.getElementById('certSubtitle');
+          if (sub) sub.textContent = `Official verified certificates for performers from ${evt.title || evt.name} (${evt.date || ''}).`;
+          document.title = `Participation Certificate | ${evt.title || evt.name} — Offstage Creators`;
+        }
+      })
+      .catch(() => {});
   }
 
 })();

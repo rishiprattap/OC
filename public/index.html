@@ -62,68 +62,68 @@
   </div>
 
   <main>
-    <!-- HERO / EVENT #1: ONLINE OPEN MIC (MAIN / FIRST EVENT) -->
+    <!-- HERO / ACTIVE EVENT SECTION -->
     <section class="hero-section" id="openmic">
       <div class="hero-poster-box">
-        <div class="hero-poster-badge badge" style="background:#1b4d2e; color:#7ef5a7; border:1px solid #2e8b57; font-weight:800; letter-spacing:0.08em;">
+        <div class="hero-poster-badge badge" id="heroPosterBadge" style="background:#1b4d2e; color:#7ef5a7; border:1px solid #2e8b57; font-weight:800; letter-spacing:0.08em;">
           ✓ EVENT COMPLETED
         </div>
-        <img src="./assets/event-poster.png" alt="Offstage Creators Presents Online Open Mic — Tonight's Voice: Tomboy">
+        <img id="heroPosterImg" src="./assets/event-poster.png" alt="Offstage Creators Event Poster">
       </div>
 
       <div class="hero-content">
         <div class="hero-title-group">
-          <p class="kicker orange">OFFSTAGE CREATORS PRESENTS</p>
-          <h1>Online<br><span>Open Mic</span></h1>
-          <p class="hero-quote">“ek lafz. ek awaaz. aur ek shaam.”</p>
-          <p class="badge badge-gold" style="margin-top: 6px;">
+          <p class="kicker orange" id="heroKicker">OFFSTAGE CREATORS PRESENTS</p>
+          <h1 id="heroTitle">Online<br><span>Open Mic</span></h1>
+          <p class="hero-quote" id="heroQuote">“ek lafz. ek awaaz. aur ek shaam.”</p>
+          <p class="badge badge-gold" id="heroBadgeNotice" style="margin-top: 6px;">
             ✦ Event Concluded • Congratulations to Winner Suhavani Kaur!
           </p>
         </div>
 
-        <div class="hero-meta-strip">
-          <div class="meta-item">
+        <div class="hero-meta-strip" id="heroMetaStrip">
+          <div class="meta-item" id="metaDateItem">
             <div class="meta-icon">📅</div>
             <div class="meta-texts">
               <span class="meta-label">Date</span>
-              <span class="meta-val">23 September (Completed)</span>
+              <span class="meta-val" id="metaDateVal">23 September</span>
             </div>
           </div>
-          <div class="meta-item">
+          <div class="meta-item" id="metaTimeItem">
             <div class="meta-icon">⏰</div>
             <div class="meta-texts">
               <span class="meta-label">Time</span>
-              <span class="meta-val">7:30 PM IST</span>
+              <span class="meta-val" id="metaTimeVal">7:30 PM IST</span>
             </div>
           </div>
-          <div class="meta-item">
-            <div class="meta-icon">🏆</div>
+          <div class="meta-item" id="metaVenueItem">
+            <div class="meta-icon">📍</div>
             <div class="meta-texts">
-              <span class="meta-label">Event Winner</span>
-              <span class="meta-val price" style="font-size:16px;">Suhavani Kaur</span>
+              <span class="meta-label" id="metaVenueLabel">Venue</span>
+              <span class="meta-val" id="metaVenueVal">Online (Google Meet)</span>
             </div>
           </div>
-          <div class="meta-item">
-            <div class="meta-icon">🎙️</div>
+          <div class="meta-item" id="metaFeeItem">
+            <div class="meta-icon">🎟️</div>
             <div class="meta-texts">
-              <span class="meta-label">Host Voice</span>
-              <span class="meta-val">Tomboy</span>
+              <span class="meta-label" id="metaFeeLabel">Entry Fee</span>
+              <span class="meta-val price" id="metaFeeVal">₹79</span>
             </div>
           </div>
         </div>
 
-        <div class="hero-actions">
-          <a class="cta" href="/certificate">
-            <span>DOWNLOAD CERTIFICATE</span>
+        <div class="hero-actions" id="heroActions">
+          <a class="cta" id="heroCtaPrimary" href="/certificate">
+            <span id="heroCtaPrimaryText">DOWNLOAD CERTIFICATE</span>
             <b>→</b>
           </a>
-          <a class="cta cta-secondary" href="/gallery">
-            <span>VIEW EVENT GALLERY</span>
+          <a class="cta cta-secondary" id="heroCtaSecondary" href="/gallery">
+            <span id="heroCtaSecondaryText">VIEW EVENT GALLERY</span>
             <b>↗</b>
           </a>
         </div>
 
-        <div class="hero-note">
+        <div class="hero-note" id="heroNote">
           “THANK YOU TO EVERY CREATOR WHO TOOK THE MIC.” ♡
         </div>
       </div>

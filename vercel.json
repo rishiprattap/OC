@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/event/(.*)", "destination": "/api" },
     { "source": "/registration/:id", "destination": "/registration" }
   ]
 }

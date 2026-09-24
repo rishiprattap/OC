@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { get, all } = require('../db');
+const { get, all, getEventBySlug } = require('../db');
 const config = require('../config');
 
 function normalizeName(str) {
@@ -17,8 +17,8 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-// ─── Event Winners System ─────────────────────────────────────────────────────
-const WINNER_REGISTRATIONS = {
+// ─── Default Winner Registrations (Backward Compatibility) ─────────────────────
+const DEFAULT_WINNER_REGISTRATIONS = {
   'OC-OM-2440F923': {
     isWinner: true,
     position: 'WINNER',
@@ -29,15 +29,27 @@ const WINNER_REGISTRATIONS = {
   }
 };
 
-function getWinnerInfo(record) {
+function resolveWinnerInfo(record) {
   if (!record) return null;
+  // 1. Check if stored directly on participant record
+  if (record.achievement || record.badge_text || (record.position && record.position !== 'Participant')) {
+    return {
+      isWinner: Boolean(record.position === 'WINNER' || record.badge_text),
+      position: record.position || 'Winner',
+      achievement: record.achievement || record.position,
+      certificateTitle: record.certificate_title || 'CERTIFICATE OF EXCELLENCE',
+      badgeText: record.badge_text || '★ EVENT WINNER ★',
+      citation: record.citation || 'for exceptional performance in'
+    };
+  }
+  // 2. Fallback to default winners table (preserves Suhavani Kaur)
   const regId = String(record.registration_id || '').trim().toUpperCase();
-  if (WINNER_REGISTRATIONS[regId]) {
-    return WINNER_REGISTRATIONS[regId];
+  if (DEFAULT_WINNER_REGISTRATIONS[regId]) {
+    return DEFAULT_WINNER_REGISTRATIONS[regId];
   }
   const cleanName = normalizeName(record.full_name);
   if (cleanName === 'suhavani kaur' || cleanName.includes('suhavani')) {
-    return WINNER_REGISTRATIONS['OC-OM-2440F923'];
+    return DEFAULT_WINNER_REGISTRATIONS['OC-OM-2440F923'];
   }
   return null;
 }
@@ -69,6 +81,74 @@ async function handleVerify(req, res) {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const baseUrl = `${protocol}://${host}`;
 
+    // Helper to format certificate response
+    async function buildCertResponse(record) {
+      if (['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED') {
+        return {
+          status: 403,
+          data: { success: false, error: 'Registration has been revoked/cancelled. Certificate cannot be issued.' }
+        };
+      }
+
+      if (record.reg_status !== 'APPROVED' && record.payment_status !== 'PAID') {
+        return {
+          status: 403,
+          data: { success: false, error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.' }
+        };
+      }
+
+      const winnerInfoPreCheck = resolveWinnerInfo(record);
+      if (!record.checked_in && !record.certificate_eligible && !winnerInfoPreCheck) {
+        return {
+          status: 403,
+          data: { success: false, error: 'Participation certificate is issued after attending and checking in to the event.' }
+        };
+      }
+
+      // Dynamic Event Resolution
+      let eventTitle = config.EVENT.title;
+      let eventDate = config.EVENT.date;
+      let eventSlug = record.event_id || config.EVENT.id;
+
+      if (record.event_id) {
+        const evt = await getEventBySlug(record.event_id);
+        if (evt) {
+          eventTitle = evt.title || evt.name;
+          eventDate = evt.event_date || config.EVENT.date;
+          eventSlug = evt.slug;
+        }
+      }
+
+      const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(record.registration_id)}`;
+      const qrCode = await generateQr(verificationUrl);
+      const winnerInfo = resolveWinnerInfo(record);
+
+      return {
+        status: 200,
+        data: {
+          success: true,
+          verifiedName: record.full_name,
+          registrationId: record.registration_id,
+          certificateId: record.registration_id,
+          eventId: eventSlug,
+          event: eventTitle,
+          eventName: eventTitle,
+          category: record.category || 'Performer',
+          performanceTitle: record.performance_title || null,
+          city: record.city || null,
+          date: eventDate,
+          verificationUrl,
+          qrCode,
+          isWinner: Boolean(winnerInfo),
+          position: winnerInfo ? winnerInfo.position : (record.position || 'Participant'),
+          achievement: winnerInfo ? winnerInfo.achievement : (record.achievement || null),
+          certificateTitle: winnerInfo ? winnerInfo.certificateTitle : (record.certificate_title || 'CERTIFICATE OF PARTICIPATION'),
+          badgeText: winnerInfo ? winnerInfo.badgeText : (record.badge_text || null),
+          citation: winnerInfo ? winnerInfo.citation : (record.citation || null)
+        }
+      };
+    }
+
     // Check if looking up directly by registrationId
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
       const cleanRegId = registrationId.trim().toUpperCase();
@@ -78,63 +158,8 @@ async function handleVerify(req, res) {
       );
 
       if (record) {
-        if (['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED') {
-          return res.status(403).json({
-            success: false,
-            error: 'Registration has been revoked/cancelled. Certificate cannot be issued.'
-          });
-        }
-
-        if (record.reg_status !== 'APPROVED' && record.payment_status !== 'PAID') {
-          return res.status(403).json({
-            success: false,
-            error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.'
-          });
-        }
-
-        if (!record.checked_in && !record.certificate_eligible) {
-          return res.status(403).json({
-            success: false,
-            error: 'Participation certificate is issued after attending and checking in to the event.'
-          });
-        }
-
-        // Dispatch certificate email if function exists
-        const emailService = require('../services/email');
-        if (typeof emailService.sendCertificateAvailableEmail === 'function') {
-          try {
-            await emailService.sendCertificateAvailableEmail({
-              to: record.email,
-              registration: record
-            });
-          } catch (err) {
-            console.warn('Failed to dispatch certificate email:', err.message);
-          }
-        }
-
-        const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(record.registration_id)}`;
-        const qrCode = await generateQr(verificationUrl);
-        const winnerInfo = getWinnerInfo(record);
-
-        return res.json({
-          success: true,
-          verifiedName: record.full_name,
-          registrationId: record.registration_id,
-          certificateId: record.registration_id,
-          event: config.EVENT.title,
-          category: record.category || 'Performer',
-          performanceTitle: record.performance_title || null,
-          city: record.city || null,
-          date: config.EVENT.date,
-          verificationUrl,
-          qrCode,
-          isWinner: Boolean(winnerInfo),
-          position: winnerInfo ? winnerInfo.position : 'Participant',
-          achievement: winnerInfo ? winnerInfo.achievement : null,
-          certificateTitle: winnerInfo ? winnerInfo.certificateTitle : 'CERTIFICATE OF PARTICIPATION',
-          badgeText: winnerInfo ? winnerInfo.badgeText : null,
-          citation: winnerInfo ? winnerInfo.citation : null
-        });
+        const resp = await buildCertResponse(record);
+        return res.status(resp.status).json(resp.data);
       }
     }
 
@@ -149,11 +174,18 @@ async function handleVerify(req, res) {
       });
     }
 
-    // 1. Check active registrations database first
-    const matchingRecords = await all(
+    // 1. Check registrations database
+    let matchingRecords = await all(
       `SELECT * FROM registrations WHERE phone = ?`,
       [cleanPhone]
     );
+
+    // Optional event filter if passed in query/body
+    const targetEventId = body.eventId || body.event;
+    if (targetEventId && matchingRecords) {
+      const filteredByEvent = matchingRecords.filter(r => r.event_id === targetEventId);
+      if (filteredByEvent.length > 0) matchingRecords = filteredByEvent;
+    }
 
     if (matchingRecords && matchingRecords.length > 0) {
       const match = matchingRecords.find(r => {
@@ -161,50 +193,8 @@ async function handleVerify(req, res) {
         return rName === cleanName || rName.includes(cleanName) || cleanName.includes(rName);
       }) || matchingRecords[0];
 
-      if (['REVOKED', 'CANCELLED'].includes(match.reg_status) || match.payment_status === 'REVOKED') {
-        return res.status(403).json({
-          success: false,
-          error: 'Registration has been revoked/cancelled. Certificate cannot be issued.'
-        });
-      }
-
-      if (match.reg_status !== 'APPROVED' && match.payment_status !== 'PAID') {
-        return res.status(403).json({
-          success: false,
-          error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.'
-        });
-      }
-
-      if (!match.checked_in && !match.certificate_eligible) {
-        return res.status(403).json({
-          success: false,
-          error: 'Participation certificate is issued after event attendance and check-in.'
-        });
-      }
-
-      const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(match.registration_id)}`;
-      const qrCode = await generateQr(verificationUrl);
-      const winnerInfo = getWinnerInfo(match);
-
-      return res.json({
-        success: true,
-        verifiedName: match.full_name,
-        registrationId: match.registration_id,
-        certificateId: match.registration_id,
-        event: config.EVENT.title,
-        category: match.category || 'Performer',
-        performanceTitle: match.performance_title || null,
-        city: match.city || null,
-        date: config.EVENT.date,
-        verificationUrl,
-        qrCode,
-        isWinner: Boolean(winnerInfo),
-        position: winnerInfo ? winnerInfo.position : 'Participant',
-        achievement: winnerInfo ? winnerInfo.achievement : null,
-        certificateTitle: winnerInfo ? winnerInfo.certificateTitle : 'CERTIFICATE OF PARTICIPATION',
-        badgeText: winnerInfo ? winnerInfo.badgeText : null,
-        citation: winnerInfo ? winnerInfo.citation : null
-      });
+      const resp = await buildCertResponse(match);
+      return res.status(resp.status).json(resp.data);
     }
 
     // 2. Check legacy certificates hash (preserves previous participants from certificate.html)

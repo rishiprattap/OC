@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { run, get, getSetting } = require('../db');
+const { run, get, getSetting, getActiveEvent, getEventBySlug } = require('../db');
 const config = require('../config');
 const otpService = require('../services/otp');
 const emailService = require('../services/email');
@@ -32,15 +32,10 @@ function validateEmail(email) {
 
 router.post('/', async (req, res) => {
   try {
-    // ── Check if registration is open ─────────────────────────────────────────
-    const regSetting = await getSetting('registration_status', 'OPEN');
-    if (regSetting === 'CLOSED') {
-      return res.status(403).json({ success: false, error: 'Registration is currently closed.' });
-    }
-
     const {
       fullName, phone, email, city, category,
-      instagram, performanceTitle, performanceDescription, terms
+      instagram, performanceTitle, performanceDescription, terms,
+      eventId: requestedEventId, eventSlug
     } = req.body;
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -73,7 +68,46 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'You must agree to the event guidelines and terms.' });
     }
 
-    const eventId = config.EVENT.id;
+    // ── Determine Target Event ────────────────────────────────────────────────
+    let targetEvent = null;
+    const targetSlug = requestedEventId || eventSlug;
+    if (targetSlug) {
+      targetEvent = await getEventBySlug(targetSlug);
+    }
+    if (!targetEvent) {
+      targetEvent = await getActiveEvent();
+    }
+
+    const eventId = targetEvent ? targetEvent.slug : (config.EVENT.id || 'online-open-mic-2026');
+    const eventAmount = targetEvent && targetEvent.fee !== undefined ? Number(targetEvent.fee) : (config.OPEN_MIC_FEE_INR || 79);
+
+    // ── Check if registration is open for this event ─────────────────────────
+    const globalRegSetting = await getSetting('registration_status', 'OPEN');
+    if (targetEvent) {
+      if (!targetEvent.reg_enabled || ['registration_closed', 'event_completed', 'archived', 'draft'].includes(targetEvent.status)) {
+        if (targetEvent.status === 'event_completed') {
+          return res.status(403).json({ success: false, error: 'This event has concluded. Registrations are closed.' });
+        }
+        if (targetEvent.status === 'draft') {
+          return res.status(403).json({ success: false, error: 'This event is in draft mode and not yet accepting registrations.' });
+        }
+        return res.status(403).json({ success: false, error: 'Registration is currently closed for this event.' });
+      }
+
+      // Check max capacity
+      if (targetEvent.max_registrations > 0) {
+        const countRow = await get(
+          `SELECT COUNT(*) as c FROM registrations WHERE event_id = ? AND reg_status NOT IN ('REJECTED', 'REVOKED', 'CANCELLED')`,
+          [eventId]
+        );
+        if (countRow && countRow.c >= targetEvent.max_registrations) {
+          return res.status(403).json({ success: false, error: 'Registration capacity has been reached for this event.' });
+        }
+      }
+    } else if (globalRegSetting === 'CLOSED') {
+      return res.status(403).json({ success: false, error: 'Registration is currently closed.' });
+    }
+
     const cleanFullName = fullName.trim();
     const cleanEmail = email.trim().toLowerCase();
     const cleanCity = city.trim();
@@ -84,7 +118,7 @@ router.post('/', async (req, res) => {
     const now = new Date().toISOString();
 
     // ── Duplicate check ───────────────────────────────────────────────────────
-    // Block if already APPROVED or VERIFIED for this email
+    // Block if already APPROVED or VERIFIED for this email and this event
     const existing = await get(
       `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
       [eventId, cleanEmail]
@@ -93,14 +127,13 @@ router.post('/', async (req, res) => {
     if (existing) {
       return res.status(409).json({
         success: false,
-        error: 'A verified registration already exists for this email address.',
+        error: `A verified registration already exists for ${cleanEmail} for this event.`,
         registrationId: existing.registration_id,
         status: existing.reg_status
       });
     }
 
     // ── Reuse or create ───────────────────────────────────────────────────────
-    // If there's an existing PENDING_VERIFICATION record, update it instead of creating a new one
     let regId;
     const pending = await get(
       `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status = 'PENDING_VERIFICATION' ORDER BY id DESC LIMIT 1`,
@@ -113,10 +146,10 @@ router.post('/', async (req, res) => {
         `UPDATE registrations SET
            full_name = ?, phone = ?, city = ?, category = ?,
            instagram = ?, performance_title = ?, performance_description = ?,
-           updated_at = ?
+           amount = ?, updated_at = ?
          WHERE id = ?`,
         [cleanFullName, cleanPhone, cleanCity, cleanCategory,
-         cleanInstagram, cleanTitle, cleanDesc, now, pending.id]
+         cleanInstagram, cleanTitle, cleanDesc, eventAmount, now, pending.id]
       );
     } else {
       regId = generateRegistrationId();
@@ -126,9 +159,9 @@ router.post('/', async (req, res) => {
            category, instagram, performance_title, performance_description,
            amount, otp_verified, reg_status, checked_in, certificate_eligible,
            created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 79, 0, 'PENDING_VERIFICATION', 0, 0, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING_VERIFICATION', 0, 0, ?, ?)`,
         [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
-         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, now, now]
+         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount, now, now]
       );
     }
 
@@ -142,7 +175,8 @@ router.post('/', async (req, res) => {
         email: cleanEmail,
         name: cleanFullName,
         otp,
-        expiryMinutes: config.OTP_EXPIRY_MINUTES
+        expiryMinutes: config.OTP_EXPIRY_MINUTES,
+        eventTitle: targetEvent?.title || config.EVENT.title
       });
 
       return res.status(201).json({
@@ -150,19 +184,22 @@ router.post('/', async (req, res) => {
         message: `Registration created. A verification code has been sent to ${cleanEmail}.`,
         registrationId: regId,
         email: cleanEmail,
+        eventId,
+        amount: eventAmount,
         expiresAt,
         expiryMinutes: config.OTP_EXPIRY_MINUTES
       });
 
     } catch (emailErr) {
       console.error('[Registration] OTP email failed:', emailErr.message);
-      // Registration created but email failed — return specific error
       return res.status(201).json({
         success: true,
         otpEmailFailed: true,
         message: 'Registration created but we could not send the verification email. Please use "Resend OTP" on the next screen.',
         registrationId: regId,
         email: cleanEmail,
+        eventId,
+        amount: eventAmount,
         expiryMinutes: config.OTP_EXPIRY_MINUTES
       });
     }
@@ -206,7 +243,6 @@ router.get('/:id', async (req, res) => {
     const isApproved = record.reg_status === 'APPROVED';
 
     let qrCode = null;
-    // Strictly invalidate QR codes for revoked or rejected registrations
     if (!isRevoked && record.reg_status !== 'REJECTED') {
       try {
         qrCode = await QRCode.toDataURL(record.registration_id, {
@@ -219,10 +255,43 @@ router.get('/:id', async (req, res) => {
       }
     }
 
+    // Dynamic event data resolution
+    let eventInfo = {
+      id: config.EVENT.id,
+      title: config.EVENT.title,
+      name: config.EVENT.title,
+      date: config.EVENT.date,
+      time: config.EVENT.time,
+      venue: 'Online (Google Meet)',
+      venueAddress: '',
+      city: 'Online'
+    };
+
+    if (record.event_id) {
+      const evt = await getEventBySlug(record.event_id);
+      if (evt) {
+        eventInfo = {
+          id: evt.slug,
+          slug: evt.slug,
+          name: evt.name,
+          title: evt.title,
+          date: evt.event_date || config.EVENT.date,
+          time: evt.start_time ? (evt.end_time ? `${evt.start_time} – ${evt.end_time}` : evt.start_time) : config.EVENT.time,
+          venue: evt.venue_name || 'Online (Google Meet)',
+          venueAddress: evt.venue_address || '',
+          city: evt.city || '',
+          mapsUrl: evt.maps_url || '',
+          fee: Number(evt.fee !== undefined ? evt.fee : (config.OPEN_MIC_FEE_INR || 79))
+        };
+      }
+    }
+
     return res.json({
       success: true,
       registration: {
         registrationId: record.registration_id,
+        eventId: record.event_id,
+        serialNumber: record.serial_number || record.id,
         fullName: record.full_name,
         email: record.email,
         category: record.category,
@@ -236,6 +305,11 @@ router.get('/:id', async (req, res) => {
         otpVerified: Boolean(record.otp_verified),
         checkedIn: Boolean(record.checked_in),
         certificateEligible: Boolean(record.certificate_eligible),
+        position: record.position || 'Participant',
+        achievement: record.achievement || null,
+        certificateTitle: record.certificate_title || 'CERTIFICATE OF PARTICIPATION',
+        badgeText: record.badge_text || null,
+        citation: record.citation || null,
         approvedAt: record.approved_at,
         rejectedAt: record.rejected_at,
         rejectedReason: record.rejected_reason || record.admin_notes,
@@ -244,12 +318,7 @@ router.get('/:id', async (req, res) => {
         paymentSubmittedAt: record.payment_submitted_at,
         createdAt: record.created_at,
         qrCode,
-        event: {
-          title: config.EVENT.title,
-          date: config.EVENT.date,
-          time: config.EVENT.time,
-          venue: 'Online (Google Meet)'
-        }
+        event: eventInfo
       }
     });
 

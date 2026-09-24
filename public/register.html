@@ -280,7 +280,7 @@
       </div>
       <span class="step-sep">›</span>
       <div class="step-pill" id="stepPill3">
-        <span class="num">3</span> ₹79 Payment
+        <span class="num">3</span> <span id="step3PillText">₹79 Payment</span>
       </div>
       <span class="step-sep">›</span>
       <div class="step-pill" id="stepPill4">
@@ -290,7 +290,7 @@
 
     <!-- PAGE HEADER -->
     <div class="page-head" id="pageHead">
-      <span class="kicker orange">ONLINE OPEN MIC — 23 SEPTEMBER</span>
+      <span class="kicker orange" id="pageKicker">ONLINE OPEN MIC — 23 SEPTEMBER</span>
       <h1 id="pageHeading">Performer<br><em>Registration</em></h1>
       <p id="pageSubheading">Reserve your 5–7 minute performance slot. Each registered creator receives a verified participation certificate.</p>
     </div>
@@ -300,24 +300,24 @@
       <div class="summary-details">
         <div class="summary-item">
           <span class="summary-label">Event</span>
-          <span class="summary-value">Online Open Mic 2026</span>
+          <span class="summary-value" id="summaryEventName">Online Open Mic 2026</span>
         </div>
         <div class="summary-item">
           <span class="summary-label">Date</span>
-          <span class="summary-value">23 September</span>
+          <span class="summary-value" id="summaryEventDate">23 September</span>
         </div>
         <div class="summary-item">
           <span class="summary-label">Time</span>
-          <span class="summary-value">7:30 PM IST</span>
+          <span class="summary-value" id="summaryEventTime">7:30 PM IST</span>
         </div>
         <div class="summary-item">
-          <span class="summary-label">Tonight's Voice</span>
-          <span class="summary-value">Tomboy</span>
+          <span class="summary-label" id="summaryVenueLabel">Venue / City</span>
+          <span class="summary-value" id="summaryEventVenue">Online (Google Meet)</span>
         </div>
       </div>
       <div class="summary-item" style="text-align: right;">
         <span class="summary-label">Registration Fee</span>
-        <span class="summary-price">₹79</span>
+        <span class="summary-price" id="summaryEventFee">₹79</span>
       </div>
     </div>
 
@@ -463,24 +463,24 @@
     <div class="form-card" id="step3Card" style="display:none;">
       <div style="text-align:center; margin-bottom:28px;">
         <span class="badge badge-live" style="margin-bottom:12px; display:inline-block;">✓ EMAIL VERIFIED</span>
-        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 8px; color:#f7eee1;">
-          Complete Entry Fee (₹79)
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 8px; color:#f7eee1;" id="step3Title">
+          Complete Entry Fee (<span id="step3FeeHeading">₹79</span>)
         </h2>
-        <p style="color:#d5cbbd; font-size:14px; max-width:520px; margin:0 auto;">
-          Pay ₹79 using any UPI app (GPay, PhonePe, Paytm, BHIM). Then enter your 12-digit UPI reference (UTR) and upload your payment screenshot.
+        <p style="color:#d5cbbd; font-size:14px; max-width:520px; margin:0 auto;" id="step3Description">
+          Pay <span id="step3FeeDesc">₹79</span> using any UPI app (GPay, PhonePe, Paytm, BHIM). Then enter your 12-digit UPI reference (UTR) and upload your payment screenshot.
         </p>
       </div>
 
       <div class="payment-grid">
         <!-- LEFT: UPI QR & DETAILS -->
         <div class="upi-qr-card">
-          <div style="font-size:11px; font-weight:800; letter-spacing:0.18em; color:#e4ad57; text-transform:uppercase;">
-            SCAN &amp; PAY ₹79
+          <div style="font-size:11px; font-weight:800; letter-spacing:0.18em; color:#e4ad57; text-transform:uppercase;" id="scanPayBanner">
+            SCAN &amp; PAY <span id="step3FeeScan">₹79</span>
           </div>
           <img src="/assets/payment-qr.jpeg" alt="₹79 UPI Payment QR Code" class="upi-qr-img" id="paymentQrImg">
 
           <div style="font-size:12px; color:#9d9488; margin-bottom:4px;">Payee Name</div>
-          <div style="font-weight:700; color:#f7eee1; font-size:15px; margin-bottom:12px;">Preeti Yadav / Offstage Creators</div>
+          <div style="font-weight:700; color:#f7eee1; font-size:15px; margin-bottom:12px;" id="payeeNameVal">Preeti Yadav / Offstage Creators</div>
 
           <div style="font-size:12px; color:#9d9488; margin-bottom:4px;">UPI ID</div>
           <div class="upi-copy-box">

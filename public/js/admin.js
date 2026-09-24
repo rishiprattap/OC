@@ -91,15 +91,55 @@
     });
   }
 
+  // ── Multi-Event State ─────────────────────────────────────────────────────────
+  let adminEvents = [];
+  let activeAdminEventId = ''; // '' means all events or global context
+  let currentEditingEventSlug = null;
+  let eventsTabFilter = 'ALL';
+  let cachedCertParticipants = [];
+
   function showDashboard() {
     if (authOverlay) authOverlay.style.display = 'none';
     if (adminLayout) adminLayout.style.display = 'flex';
-    loadOverview();
+    loadAdminEventsList().then(() => {
+      loadOverview();
+    });
   }
+
+  // ── Global Event Context Handler ──────────────────────────────────────────────
+  window.onGlobalEventChange = function (slug) {
+    activeAdminEventId = slug || '';
+    const regFilter = document.getElementById('regEventFilter');
+    if (regFilter) regFilter.value = activeAdminEventId;
+    const certFilter = document.getElementById('certEventFilter');
+    if (certFilter) certFilter.value = activeAdminEventId;
+
+    // Update active event badge and preview link
+    const indicator = document.getElementById('activeEventIndicator');
+    const previewLink = document.getElementById('btnPreviewEventLive');
+    const selectedEvt = adminEvents.find(e => e.slug === activeAdminEventId);
+
+    if (indicator) {
+      if (selectedEvt && selectedEvt.isActive) {
+        indicator.style.display = 'inline-flex';
+      } else {
+        indicator.style.display = 'none';
+      }
+    }
+
+    if (previewLink) {
+      previewLink.href = activeAdminEventId ? `/event/${activeAdminEventId}` : '/';
+    }
+
+    // Refresh currently open tab
+    const activeTabBtn = document.querySelector('.admin-nav-item.active');
+    const tabName = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : 'overview';
+    showTab(tabName);
+  };
 
   // ── Tab Navigation ────────────────────────────────────────────────────────────
   window.showTab = function (tabName) {
-    ['overview', 'registrations', 'pending', 'approved', 'emailCenter', 'settings', 'gallery'].forEach(name => {
+    ['overview', 'events', 'registrations', 'pending', 'approved', 'certificates', 'emailCenter', 'settings', 'gallery'].forEach(name => {
       const el = document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1));
       if (el) el.style.display = 'none';
     });
@@ -111,9 +151,11 @@
     if (tabEl) tabEl.style.display = 'block';
 
     if (tabName === 'overview') loadOverview();
+    else if (tabName === 'events') loadEventsTab();
     else if (tabName === 'registrations') loadRegistrations();
     else if (tabName === 'pending') loadFiltered('VERIFIED');
     else if (tabName === 'approved') loadFiltered('APPROVED');
+    else if (tabName === 'certificates') loadCertificatesTab();
     else if (tabName === 'emailCenter') initEmailCenter();
     else if (tabName === 'settings') loadRegistrationSettings();
     else if (tabName === 'gallery') loadAdminGallery();
@@ -122,7 +164,11 @@
   // ── Overview Stats ────────────────────────────────────────────────────────────
   window.loadOverview = async function () {
     try {
-      const res = await adminFetch('/api/admin/overview');
+      let url = '/api/admin/overview';
+      if (activeAdminEventId) {
+        url += `?eventId=${encodeURIComponent(activeAdminEventId)}`;
+      }
+      const res = await adminFetch(url);
       if (res.status === 401) { showLoginOverlay(); return; }
       const data = await res.json();
       if (!data.success) return;
@@ -133,6 +179,16 @@
       setText('statApproved', s.approved);
       setText('statRejected', s.rejected);
       setText('statCheckedIn', s.checkedIn);
+
+      const subtitleEl = document.getElementById('overviewEventSubtitle');
+      if (subtitleEl) {
+        const found = adminEvents.find(e => e.slug === activeAdminEventId);
+        if (found) {
+          subtitleEl.textContent = `${found.title || found.name} — Event Overview (${found.status || 'Active'})`;
+        } else {
+          subtitleEl.textContent = 'All Events Combined — System-wide Overview';
+        }
+      }
     } catch (err) {
       console.error('[Admin] Overview error:', err);
     }
@@ -147,7 +203,9 @@
   window.loadRegistrations = async function () {
     const search = document.getElementById('searchInput')?.value.trim() || '';
     const status = document.getElementById('statusFilter')?.value || 'ALL';
-    await fetchAndRenderTable({ search, status, containerId: 'regTableWrapper' });
+    const category = document.getElementById('regCategoryFilter')?.value || 'ALL';
+    const checkedIn = document.getElementById('regCheckinFilter')?.value || 'ALL';
+    await fetchAndRenderTable({ search, status, category, checkedIn, containerId: 'regTableWrapper' });
   };
 
   async function loadFiltered(status) {
@@ -155,14 +213,42 @@
     await fetchAndRenderTable({ status, containerId });
   }
 
-  async function fetchAndRenderTable({ search, status, containerId }) {
+  function populateRegistrationCategories(regs) {
+    const sel = document.getElementById('regCategoryFilter');
+    if (!sel || !Array.isArray(regs)) return;
+    const currentVal = sel.value || 'ALL';
+    const categories = Array.from(new Set(regs.map(r => r.category).filter(Boolean))).sort();
+
+    // Also include allowed categories from active event if available
+    const activeEvt = adminEvents.find(e => e.slug === activeAdminEventId);
+    if (activeEvt && Array.isArray(activeEvt.allowedCategories)) {
+      activeEvt.allowedCategories.forEach(c => {
+        if (c && !categories.includes(c)) categories.push(c);
+      });
+    }
+
+    let opts = '<option value="ALL">All Categories</option>';
+    categories.forEach(cat => {
+      opts += `<option value="${escHtml(cat)}">${escHtml(cat)}</option>`;
+    });
+    sel.innerHTML = opts;
+    if (currentVal && (currentVal === 'ALL' || categories.includes(currentVal))) {
+      sel.value = currentVal;
+    }
+  }
+
+  async function fetchAndRenderTable({ search, status, category, checkedIn, containerId }) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
 
     try {
-      let url = '/api/admin/registrations?limit=200';
+      let url = '/api/admin/registrations?limit=500';
+      const eventFilterVal = document.getElementById('regEventFilter')?.value || activeAdminEventId;
+      if (eventFilterVal && eventFilterVal !== 'ALL') url += `&eventId=${encodeURIComponent(eventFilterVal)}`;
       if (status && status !== 'ALL') url += `&status=${encodeURIComponent(status)}`;
+      if (category && category !== 'ALL') url += `&category=${encodeURIComponent(category)}`;
+      if (checkedIn !== undefined && checkedIn !== '' && checkedIn !== 'ALL') url += `&checkedIn=${encodeURIComponent(checkedIn)}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
 
       const res = await adminFetch(url);
@@ -174,8 +260,12 @@
         return;
       }
 
+      if (containerId === 'regTableWrapper') {
+        populateRegistrationCategories(data.registrations);
+      }
+
       if (!data.registrations.length) {
-        container.innerHTML = '<div class="empty-state"><p>No registrations found.</p></div>';
+        container.innerHTML = '<div class="empty-state"><p>No registrations found matching the applied filters.</p></div>';
         return;
       }
 
@@ -192,7 +282,7 @@
                 <th>City</th>
                 <th>Performance</th>
                 <th>Status</th>
-                <th>OTP</th>
+                <th>Checked In</th>
                 <th>Registered</th>
                 <th>Transaction ID</th>
                 <th>Screenshot</th>
@@ -210,7 +300,7 @@
                   <td>${escHtml(r.city || '—')}</td>
                   <td>${escHtml(r.performanceTitle || '—')}</td>
                   <td><span class="status-pill status-${r.status}">${formatStatus(r.status)}</span></td>
-                  <td style="text-align:center;">${r.otpVerified ? '<span style="color:#6edb8c;">✓</span>' : '<span style="color:#5a5248;">✗</span>'}</td>
+                  <td style="text-align:center;">${r.checkedIn ? '<span style="color:#6edb8c; font-weight:700;">✓ Yes</span>' : '<span style="color:#5a5248;">No</span>'}</td>
                   <td style="font-size:11px; color:#8e8477;">${formatDate(r.createdAt)}</td>
                   <td><span style="font-family:monospace; color:#e4ad57;">${escHtml(r.transactionId)}</span></td>
                   <td>${r.paymentScreenshotUrl ? `<img src="${escHtml(r.paymentScreenshotUrl)}" alt="Screenshot" title="Click to enlarge" style="max-width:80px; border-radius:4px; cursor:zoom-in;" onclick="openLightbox('${escHtml(r.paymentScreenshotUrl)}')" />` : '—'}</td>
@@ -234,6 +324,68 @@
       container.innerHTML = '<div class="empty-state"><p>Network error. Please retry.</p></div>';
     }
   }
+
+  // ── Download / Export Filtered Registrations CSV ───────────────────────────────
+  window.exportRegistrationsCsv = async function (overrides = {}) {
+    const btn = document.getElementById('btnExportCsv');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span>⏳</span> Exporting…';
+    }
+
+    try {
+      const eventFilterVal = overrides.eventId !== undefined ? overrides.eventId : (document.getElementById('regEventFilter')?.value || activeAdminEventId);
+      const status = overrides.status !== undefined ? overrides.status : (document.getElementById('statusFilter')?.value || 'ALL');
+      const category = overrides.category !== undefined ? overrides.category : (document.getElementById('regCategoryFilter')?.value || 'ALL');
+      const checkedIn = overrides.checkedIn !== undefined ? overrides.checkedIn : (document.getElementById('regCheckinFilter')?.value || 'ALL');
+      const search = overrides.search !== undefined ? overrides.search : (document.getElementById('searchInput')?.value.trim() || '');
+
+      const params = new URLSearchParams();
+      if (eventFilterVal && eventFilterVal !== 'ALL') params.append('eventId', eventFilterVal);
+      if (status && status !== 'ALL') params.append('status', status);
+      if (category && category !== 'ALL') params.append('category', category);
+      if (checkedIn && checkedIn !== 'ALL') params.append('checkedIn', checkedIn);
+      if (search) params.append('search', search);
+
+      const url = `/api/admin/registrations/export?${params.toString()}`;
+      const res = await adminFetch(url);
+
+      if (res.status === 401) { showLoginOverlay(); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Failed to export participant list: ${err.error || 'Server error'}`);
+        return;
+      }
+
+      let filename = 'participants_export.csv';
+      const disposition = res.headers.get('Content-Disposition');
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) filename = match[1].trim();
+      }
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+
+    } catch (err) {
+      console.error('[Admin] CSV Export Error:', err);
+      alert('Error downloading participant list: ' + err.message);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+  };
 
   // Debounce search input
   let searchDebounce;
@@ -609,10 +761,12 @@
 
   window.filterCustomEmailList = function () {
     const search = (document.getElementById('customEmailSearch')?.value || '').trim().toLowerCase();
+    const eventVal = document.getElementById('customEmailEventFilter')?.value || '';
     const cat = document.getElementById('customEmailCategoryFilter')?.value || 'ALL';
     const status = document.getElementById('customEmailStatusFilter')?.value || 'ALL';
 
     const filtered = cachedParticipants.filter(p => {
+      if (eventVal && p.eventId !== eventVal) return false;
       if (cat !== 'ALL' && p.category !== cat) return false;
       if (status !== 'ALL' && p.status !== status) return false;
       if (!search) return true;
@@ -745,6 +899,8 @@
     const firstRegId = selectedCustomRecipients.values().next().value || null;
     const manual = getManualEmails('customEmailManual')[0] || null;
 
+    const selectedEventId = document.getElementById('customEmailEventFilter')?.value || activeAdminEventId || undefined;
+
     try {
       const res = await adminFetch('/api/admin/email/preview', {
         method: 'POST',
@@ -754,7 +910,8 @@
           subject,
           bodyContent,
           registrationId: firstRegId,
-          manualEmail: manual
+          manualEmail: manual,
+          eventId: selectedEventId
         })
       });
       const data = await res.json();
@@ -785,6 +942,7 @@
     const bodyContent = document.getElementById('customEmailBody')?.value?.trim();
     const regIds = Array.from(selectedCustomRecipients);
     const manualEmails = getManualEmails('customEmailManual');
+    const selectedEventId = document.getElementById('customEmailEventFilter')?.value || activeAdminEventId || undefined;
 
     if (!subject) return alert('Please enter an email subject.');
     if (!bodyContent) return alert('Please write the email message.');
@@ -806,7 +964,8 @@
               registrationIds: regIds,
               manualEmails,
               subject,
-              bodyContent
+              bodyContent,
+              eventId: selectedEventId
             })
           });
           const data = await res.json();
@@ -1392,6 +1551,8 @@
         });
         const caption = document.getElementById('adminGalleryCaptionInput')?.value.trim() || '';
         if (caption) formData.append('caption', caption);
+        const galleryEvtId = document.getElementById('adminGalleryUploadEvent')?.value || activeAdminEventId;
+        if (galleryEvtId) formData.append('eventId', galleryEvtId);
 
         const res = await adminFetch('/api/admin/gallery/upload', {
           method: 'POST',
@@ -1431,12 +1592,13 @@
     if (!url || !url.trim()) return;
 
     const caption = prompt('Optional caption for this photo:') || '';
+    const galleryEvtId = document.getElementById('adminGalleryUploadEvent')?.value || activeAdminEventId;
 
     try {
       const res = await adminFetch('/api/admin/gallery/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), caption: caption.trim() })
+        body: JSON.stringify({ url: url.trim(), caption: caption.trim(), eventId: galleryEvtId || undefined })
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -1457,7 +1619,10 @@
     wrapper.innerHTML = '<div class="empty-state"><p>Loading gallery items…</p></div>';
 
     try {
-      const res = await adminFetch('/api/admin/gallery/admin');
+      let url = '/api/admin/gallery/admin';
+      const eventFilterVal = document.getElementById('adminGalleryEventSelect')?.value || activeAdminEventId;
+      if (eventFilterVal) url += `?eventId=${encodeURIComponent(eventFilterVal)}`;
+      const res = await adminFetch(url);
       if (res.status === 401) { showLoginOverlay(); return; }
 
       const data = await res.json();
@@ -1776,6 +1941,718 @@
     } catch (err) {
       console.error('[Gallery Reorder Error]:', err);
       await loadAdminGallery();
+    }
+  };
+
+  // ── Events Management System ──────────────────────────────────────────────────
+  async function loadAdminEventsList() {
+    try {
+      const res = await adminFetch('/api/admin/events');
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.events)) {
+        adminEvents = data.events;
+
+        // Auto-select active event if none currently selected
+        const activeEvt = adminEvents.find(e => e.isActive);
+        if (!activeAdminEventId && activeEvt) {
+          activeAdminEventId = activeEvt.slug;
+        }
+
+        // Update dropdowns
+        const selects = ['globalEventSelect', 'regEventFilter', 'certEventFilter', 'customEmailEventFilter', 'adminGalleryUploadEvent'];
+        selects.forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const currentVal = el.value;
+          const isGlobalOrFilter = id !== 'adminGalleryUploadEvent';
+          let opts = isGlobalOrFilter ? '<option value="">All Events</option>' : '';
+          opts += adminEvents.map(evt => {
+            const label = `${evt.name || evt.title} (${evt.date || 'TBA'}) ${evt.isActive ? '★ ACTIVE' : ''}`;
+            return `<option value="${evt.slug}">${escHtml(label)}</option>`;
+          }).join('');
+          el.innerHTML = opts;
+          if (currentVal && adminEvents.some(e => e.slug === currentVal)) {
+            el.value = currentVal;
+          } else if (id === 'globalEventSelect') {
+            el.value = activeAdminEventId;
+          }
+        });
+
+        // Update count badges
+        const countAll = adminEvents.length;
+        const countActive = adminEvents.filter(e => e.isActive).length;
+        const countOpen = adminEvents.filter(e => e.status === 'Registration Open').length;
+        const countDraft = adminEvents.filter(e => e.status === 'Draft').length;
+        const countCompleted = adminEvents.filter(e => e.status === 'Event Completed').length;
+        const countArchived = adminEvents.filter(e => e.status === 'Archived').length;
+
+        setText('countEventsAll', countAll);
+        setText('countEventsActive', countActive);
+        setText('countEventsOpen', countOpen);
+        setText('countEventsDraft', countDraft);
+        setText('countEventsCompleted', countCompleted);
+        setText('countEventsArchived', countArchived);
+
+        // Update live indicator & preview link
+        const indicator = document.getElementById('activeEventIndicator');
+        const previewLink = document.getElementById('btnPreviewEventLive');
+        const selected = adminEvents.find(e => e.slug === activeAdminEventId);
+        if (indicator) {
+          indicator.style.display = (selected && selected.isActive) ? 'inline-flex' : 'none';
+        }
+        if (previewLink) {
+          previewLink.href = activeAdminEventId ? `/event/${activeAdminEventId}` : '/';
+        }
+      }
+    } catch (err) {
+      console.error('[Admin] Events list error:', err);
+    }
+  }
+
+  window.loadEventsTab = async function () {
+    await loadAdminEventsList();
+    renderEventsList(eventsTabFilter);
+  };
+
+  window.filterEventsTab = function (filter) {
+    eventsTabFilter = filter;
+    ['All', 'Active', 'Open', 'Draft', 'Completed', 'Archived'].forEach(k => {
+      const b = document.getElementById('subnavEvent' + k);
+      if (b) b.classList.remove('active');
+    });
+
+    if (filter === 'ALL') document.getElementById('subnavEventAll')?.classList.add('active');
+    else if (filter === 'ACTIVE') document.getElementById('subnavEventActive')?.classList.add('active');
+    else if (filter === 'Registration Open') document.getElementById('subnavEventOpen')?.classList.add('active');
+    else if (filter === 'Draft') document.getElementById('subnavEventDraft')?.classList.add('active');
+    else if (filter === 'Event Completed') document.getElementById('subnavEventCompleted')?.classList.add('active');
+    else if (filter === 'Archived') document.getElementById('subnavEventArchived')?.classList.add('active');
+
+    renderEventsList(filter);
+  };
+
+  function renderEventsList(filter) {
+    const wrapper = document.getElementById('eventsListWrapper');
+    if (!wrapper) return;
+
+    let list = [...adminEvents];
+    if (filter === 'ACTIVE') {
+      list = list.filter(e => e.isActive);
+    } else if (filter && filter !== 'ALL') {
+      list = list.filter(e => e.status === filter);
+    }
+
+    if (!list.length) {
+      wrapper.innerHTML = `
+        <div class="empty-state" style="padding:40px 20px;">
+          <span style="font-size:36px; display:block; margin-bottom:8px;">🎪</span>
+          <p style="color:#f7eee1; font-weight:700;">No events match the "${escHtml(filter)}" filter.</p>
+          <button type="button" class="cta" onclick="openCreateEventModal()" style="margin-top:12px;">+ Create New Event</button>
+        </div>
+      `;
+      return;
+    }
+
+    wrapper.innerHTML = list.map(evt => {
+      const isCurrentActive = Boolean(evt.isActive);
+      const isSelectedContext = activeAdminEventId === evt.slug;
+      const statusClass = 'badge-' + (evt.status || 'Draft').replace(/[^a-zA-Z0-9]/g, '');
+
+      return `
+        <div class="event-card ${isCurrentActive ? 'is-active' : ''}" style="${isSelectedContext ? 'box-shadow: 0 0 0 2px #e4ad57;' : ''}">
+          <img src="${evt.posterUrl || '/assets/poster.jpeg'}" alt="${escHtml(evt.name)}" class="event-thumb" onerror="this.src='/assets/poster.jpeg'">
+
+          <div class="event-info">
+            <div class="event-title-row">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <h3 class="event-title">${escHtml(evt.name || evt.title)}</h3>
+                <span class="event-slug-pill">/event/${escHtml(evt.slug)}</span>
+                ${isCurrentActive ? '<span class="status-pill status-APPROVED" style="font-size:10px;">★ ACTIVE HOMEPAGE</span>' : ''}
+                <span class="badge-status ${statusClass}">${escHtml(evt.status || 'Draft')}</span>
+              </div>
+            </div>
+
+            <div style="font-size:13px; color:#d5cbbd; margin-bottom:8px;">
+              ${escHtml(evt.shortDescription || evt.title || '')}
+            </div>
+
+            <div class="event-meta-grid">
+              <div class="event-meta-item"><span>📅</span> <b>${escHtml(evt.date || 'TBA')}</b> ${escHtml(evt.time || '')}</div>
+              <div class="event-meta-item"><span>📍</span> ${escHtml(evt.venue || 'Online')}, <b>${escHtml(evt.city || 'Online')}</b></div>
+              <div class="event-meta-item"><span>🎟️</span> <b>${evt.fee ? ('₹' + evt.fee) : 'Free'}</b></div>
+              <div class="event-meta-item"><span>👥</span> Registrations: <b style="color:#e4ad57;">${evt.registrationCount || 0}</b> (${evt.approvedCount || 0} approved)</div>
+            </div>
+
+            <div class="event-actions-bar">
+              <button type="button" class="action-btn ${isSelectedContext ? 'btn-approve' : 'btn-view'}" onclick="onGlobalEventChange('${evt.slug}')">
+                ${isSelectedContext ? '✓ Managing Event' : 'Manage Event'}
+              </button>
+
+              <button type="button" class="action-btn btn-view" onclick="openEditEventModal('${evt.slug}')">
+                ✏️ Edit Details
+              </button>
+
+              <button type="button" class="action-btn btn-view" onclick="openDuplicateModalFor('${evt.slug}')">
+                ⧉ Duplicate Event
+              </button>
+
+              ${!isCurrentActive ? `
+                <button type="button" class="action-btn btn-approve" onclick="setActiveEvent('${evt.slug}')">
+                  ★ Set Active
+                </button>
+              ` : `
+                <span style="font-size:11px; color:#6edb8c; font-weight:700;">✓ Active Live</span>
+              `}
+
+              <select class="filter-select" style="padding:4px 8px; font-size:11px; height:28px;" onchange="setEventStatus('${evt.slug}', this.value)">
+                <option value="" disabled selected>Status: ${evt.status}</option>
+                <option value="Draft">Draft</option>
+                <option value="Registration Open">Registration Open</option>
+                <option value="Registration Closed">Registration Closed</option>
+                <option value="Event Completed">Event Completed</option>
+                <option value="Archived">Archived</option>
+              </select>
+
+              <button type="button" class="action-btn btn-view" onclick="exportRegistrationsCsv({ eventId: '${evt.slug}' })" title="Download participant CSV for ${escHtml(evt.name || evt.title)}">
+                📥 Export CSV
+              </button>
+
+              <a href="/event/${evt.slug}" target="_blank" class="action-btn btn-view" style="text-decoration:none;">
+                ↗ Public Page
+              </a>
+
+              <button type="button" class="action-btn btn-revoke" onclick="deleteEvent('${evt.slug}')" style="margin-left:auto;">
+                🗑️ Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ── Event Modal (Create / Edit) ───────────────────────────────────────────────
+  window.openCreateEventModal = function () {
+    currentEditingEventSlug = null;
+    const form = document.getElementById('eventEditorForm');
+    if (form) form.reset();
+
+    setText('eventModalKicker', 'CREATE NEW EVENT');
+    setText('eventModalHeading', 'New Open Mic Event');
+    const slugInput = document.getElementById('evtSlug');
+    if (slugInput) slugInput.readOnly = false;
+    document.getElementById('evtFee').value = '79';
+    document.getElementById('evtCurrency').value = '₹';
+    document.getElementById('evtPayeeName').value = 'Preeti Yadav / Offstage Creators';
+    document.getElementById('evtUpiId').value = 'preetiyadav15071985@okaxis';
+    document.getElementById('evtPaymentQr').value = '/assets/payment-qr.jpeg';
+    document.getElementById('evtPosterUrl').value = '/assets/poster.jpeg';
+    document.getElementById('evtLogoUrl').value = '/assets/logo.png';
+    document.getElementById('evtIsRegistrationOpen').checked = true;
+    document.getElementById('evtIsRegistrationFeeEnabled').checked = true;
+    document.getElementById('evtRegButtonText').value = 'RESERVE PERFORMANCE SLOT';
+    document.getElementById('evtAllowedCategories').value = 'Poetry & Shayari, Storytelling, Stand-up Comedy, Music & Vocals, Spoken Word, Other';
+    document.getElementById('evtStatus').value = 'Draft';
+
+    switchEvtModalTab('basic');
+    const modal = document.getElementById('eventEditorModal');
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.openEditEventModal = async function (slug) {
+    currentEditingEventSlug = slug;
+    try {
+      const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}`);
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.event) {
+        alert('Failed to load event details: ' + (data.error || 'Server error'));
+        return;
+      }
+
+      const evt = data.event;
+      setText('eventModalKicker', 'EDIT EVENT CONFIGURATION');
+      setText('eventModalHeading', `Edit: ${evt.name || evt.title}`);
+
+      // Tab 1: Basic
+      document.getElementById('evtSlug').value = evt.slug || '';
+      document.getElementById('evtSlug').readOnly = true;
+      document.getElementById('evtName').value = evt.name || '';
+      document.getElementById('evtTitle').value = evt.title || '';
+      document.getElementById('evtStatus').value = evt.status || 'Draft';
+      document.getElementById('evtShortDescription').value = evt.shortDescription || '';
+      document.getElementById('evtDescription').value = evt.description || '';
+
+      // Tab 2: Date & Time
+      document.getElementById('evtDate').value = evt.date || '';
+      document.getElementById('evtTime').value = evt.time || '';
+      document.getElementById('evtStartTime').value = evt.startTime || '';
+      document.getElementById('evtEndTime').value = evt.endTime || '';
+      document.getElementById('evtTimezone').value = evt.timezone || 'IST (GMT+5:30)';
+      document.getElementById('evtRegOpeningDate').value = evt.registrationOpeningDate || '';
+      document.getElementById('evtRegClosingDate').value = evt.registrationClosingDate || '';
+
+      // Tab 3: Venue
+      document.getElementById('evtVenue').value = evt.venue || '';
+      document.getElementById('evtCity').value = evt.city || '';
+      document.getElementById('evtState').value = evt.state || '';
+      document.getElementById('evtGoogleMapsUrl').value = evt.googleMapsUrl || '';
+      document.getElementById('evtVenueAddress').value = evt.venueAddress || '';
+      document.getElementById('evtVenueImage').value = evt.venueImage || '';
+
+      // Tab 4: Pricing
+      document.getElementById('evtFee').value = evt.fee ?? 79;
+      document.getElementById('evtCurrency').value = evt.currency || '₹';
+      document.getElementById('evtEarlyBirdPrice').value = evt.earlyBirdPrice || '';
+      document.getElementById('evtIsRegistrationFeeEnabled').checked = evt.isRegistrationFeeEnabled !== false;
+      document.getElementById('evtAllowedCategories').value = Array.isArray(evt.allowedCategories) ? evt.allowedCategories.join(', ') : (evt.allowedCategories || '');
+      document.getElementById('evtPayeeName').value = evt.payeeName || 'Preeti Yadav / Offstage Creators';
+      document.getElementById('evtUpiId').value = evt.upiId || 'preetiyadav15071985@okaxis';
+      document.getElementById('evtPaymentQr').value = evt.paymentQr || '/assets/payment-qr.jpeg';
+      document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || '';
+
+      // Tab 5: Media
+      document.getElementById('evtPosterUrl').value = evt.posterUrl || '/assets/poster.jpeg';
+      document.getElementById('evtBannerUrl').value = evt.bannerUrl || '';
+      document.getElementById('evtLogoUrl').value = evt.logoUrl || '/assets/logo.png';
+      document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || '';
+
+      // Tab 6: Registration
+      document.getElementById('evtIsRegistrationOpen').checked = evt.isRegistrationOpen !== false;
+      document.getElementById('evtRegButtonText').value = evt.registrationButtonText || 'RESERVE PERFORMANCE SLOT';
+      document.getElementById('evtMaxRegistrations').value = evt.maxRegistrations || 50;
+      document.getElementById('evtConfirmationMessage').value = evt.confirmationMessage || '';
+      document.getElementById('evtPerformanceGuidelines').value = evt.performanceGuidelines || '';
+
+      // Tab 7: Social
+      document.getElementById('evtContactEmail').value = evt.contactEmail || 'support@offstagecreators.com';
+      document.getElementById('evtContactPhone').value = evt.contactPhone || '';
+      document.getElementById('evtInstagram').value = evt.instagram || 'https://www.instagram.com/offstagecreators/';
+      document.getElementById('evtYoutube').value = evt.youtube || '';
+      document.getElementById('evtWhatsapp').value = evt.whatsapp || '';
+      document.getElementById('evtGoogleMeetLink').value = evt.googleMeetLink || '';
+
+      switchEvtModalTab('basic');
+      const modal = document.getElementById('eventEditorModal');
+      if (modal) modal.style.display = 'flex';
+    } catch (err) {
+      alert('Network error loading event: ' + err.message);
+    }
+  };
+
+  window.switchEvtModalTab = function (tabId) {
+    const tabs = ['basic', 'datetime', 'venue', 'pricing', 'media', 'reg', 'social'];
+    const tabMap = {
+      basic: 'Basic',
+      datetime: 'DateTime',
+      venue: 'Venue',
+      pricing: 'Pricing',
+      media: 'Media',
+      reg: 'Reg',
+      social: 'Social'
+    };
+
+    tabs.forEach(t => {
+      const btn = document.getElementById('tabBtnEvt' + tabMap[t]);
+      const content = document.getElementById('evtTabContent' + tabMap[t]);
+      if (btn) btn.classList.toggle('active', t === tabId);
+      if (content) content.style.display = (t === tabId) ? 'block' : 'none';
+    });
+  };
+
+  window.closeEventModal = function () {
+    const modal = document.getElementById('eventEditorModal');
+    if (modal) modal.style.display = 'none';
+    currentEditingEventSlug = null;
+  };
+
+  window.saveEventForm = async function (e) {
+    e.preventDefault();
+    const btn = document.getElementById('btnSaveEvent');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    const rawCats = document.getElementById('evtAllowedCategories').value;
+    const allowedCategories = rawCats.split(',').map(s => s.trim()).filter(Boolean);
+
+    const payload = {
+      slug: document.getElementById('evtSlug').value.trim().toLowerCase(),
+      name: document.getElementById('evtName').value.trim(),
+      title: document.getElementById('evtTitle').value.trim(),
+      status: document.getElementById('evtStatus').value,
+      shortDescription: document.getElementById('evtShortDescription').value.trim(),
+      description: document.getElementById('evtDescription').value.trim(),
+      date: document.getElementById('evtDate').value.trim(),
+      time: document.getElementById('evtTime').value.trim(),
+      startTime: document.getElementById('evtStartTime').value.trim(),
+      endTime: document.getElementById('evtEndTime').value.trim(),
+      timezone: document.getElementById('evtTimezone').value.trim(),
+      registrationOpeningDate: document.getElementById('evtRegOpeningDate').value.trim(),
+      registrationClosingDate: document.getElementById('evtRegClosingDate').value.trim(),
+      venue: document.getElementById('evtVenue').value.trim(),
+      city: document.getElementById('evtCity').value.trim(),
+      state: document.getElementById('evtState').value.trim(),
+      googleMapsUrl: document.getElementById('evtGoogleMapsUrl').value.trim(),
+      venueAddress: document.getElementById('evtVenueAddress').value.trim(),
+      venueImage: document.getElementById('evtVenueImage').value.trim(),
+      fee: Number(document.getElementById('evtFee').value) || 0,
+      currency: document.getElementById('evtCurrency').value.trim() || '₹',
+      earlyBirdPrice: document.getElementById('evtEarlyBirdPrice').value ? Number(document.getElementById('evtEarlyBirdPrice').value) : null,
+      isRegistrationFeeEnabled: document.getElementById('evtIsRegistrationFeeEnabled').checked,
+      allowedCategories,
+      payeeName: document.getElementById('evtPayeeName').value.trim(),
+      upiId: document.getElementById('evtUpiId').value.trim(),
+      paymentQr: document.getElementById('evtPaymentQr').value.trim(),
+      paymentInstructions: document.getElementById('evtPaymentInstructions').value.trim(),
+      posterUrl: document.getElementById('evtPosterUrl').value.trim(),
+      bannerUrl: document.getElementById('evtBannerUrl').value.trim(),
+      logoUrl: document.getElementById('evtLogoUrl').value.trim(),
+      promoVideoUrl: document.getElementById('evtPromoVideoUrl').value.trim(),
+      isRegistrationOpen: document.getElementById('evtIsRegistrationOpen').checked,
+      registrationButtonText: document.getElementById('evtRegButtonText').value.trim(),
+      maxRegistrations: Number(document.getElementById('evtMaxRegistrations').value) || 0,
+      confirmationMessage: document.getElementById('evtConfirmationMessage').value.trim(),
+      performanceGuidelines: document.getElementById('evtPerformanceGuidelines').value.trim(),
+      contactEmail: document.getElementById('evtContactEmail').value.trim(),
+      contactPhone: document.getElementById('evtContactPhone').value.trim(),
+      instagram: document.getElementById('evtInstagram').value.trim(),
+      youtube: document.getElementById('evtYoutube').value.trim(),
+      whatsapp: document.getElementById('evtWhatsapp').value.trim(),
+      googleMeetLink: document.getElementById('evtGoogleMeetLink').value.trim()
+    };
+
+    try {
+      let res;
+      if (currentEditingEventSlug) {
+        res = await adminFetch(`/api/admin/events/${encodeURIComponent(currentEditingEventSlug)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        res = await adminFetch('/api/admin/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to save event: ' + (data.error || 'Server error'));
+        if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+        return;
+      }
+
+      closeEventModal();
+      await loadAdminEventsList();
+      renderEventsList(eventsTabFilter);
+      alert(currentEditingEventSlug ? 'Event updated successfully!' : 'New event created successfully!');
+    } catch (err) {
+      alert('Network error saving event: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+    }
+  };
+
+  window.setActiveEvent = async function (slug) {
+    try {
+      const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}/set-active`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        activeAdminEventId = slug;
+        await loadAdminEventsList();
+        renderEventsList(eventsTabFilter);
+        loadOverview();
+      } else {
+        alert('Failed to set active event: ' + (data.error || 'Server error'));
+      }
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    }
+  };
+
+  window.setEventStatus = async function (slug, status) {
+    if (!status) return;
+    try {
+      const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await loadAdminEventsList();
+        renderEventsList(eventsTabFilter);
+      } else {
+        alert('Failed to update event status: ' + (data.error || 'Server error'));
+      }
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    }
+  };
+
+  // ── Duplicate Event ───────────────────────────────────────────────────────────
+  window.openDuplicateModalFor = function (slug) {
+    const evt = adminEvents.find(e => e.slug === slug);
+    if (!evt) return;
+
+    document.getElementById('dupSourceSlug').value = evt.slug;
+    document.getElementById('dupSourceEventDisplay').textContent = `${evt.name || evt.title} (${evt.slug})`;
+    document.getElementById('dupNewSlug').value = `${evt.slug}-copy`;
+    document.getElementById('dupNewName').value = `${evt.name || evt.title} (New Edition)`;
+    document.getElementById('dupNewTitle').value = `${evt.title || evt.name} — Next Edition`;
+    document.getElementById('dupNewDate').value = '';
+
+    const modal = document.getElementById('duplicateEventModal');
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.openDuplicateCurrentEvent = function () {
+    const slug = activeAdminEventId || (adminEvents[0] ? adminEvents[0].slug : null);
+    if (!slug) {
+      alert('Please create or select an event first.');
+      return;
+    }
+    openDuplicateModalFor(slug);
+  };
+
+  window.closeDuplicateModal = function () {
+    const modal = document.getElementById('duplicateEventModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.submitDuplicateEvent = async function (e) {
+    e.preventDefault();
+    const sourceSlug = document.getElementById('dupSourceSlug').value;
+    const newSlug = document.getElementById('dupNewSlug').value.trim().toLowerCase();
+    const newName = document.getElementById('dupNewName').value.trim();
+    const newTitle = document.getElementById('dupNewTitle').value.trim();
+    const newDate = document.getElementById('dupNewDate').value.trim();
+
+    const btn = document.getElementById('btnConfirmDuplicate');
+    if (btn) { btn.disabled = true; btn.textContent = 'Cloning…'; }
+
+    try {
+      const res = await adminFetch(`/api/admin/events/${encodeURIComponent(sourceSlug)}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newSlug, newName, newTitle, newDate })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to duplicate event: ' + (data.error || 'Server error'));
+        if (btn) { btn.disabled = false; btn.textContent = '⧉ Clone Event'; }
+        return;
+      }
+
+      closeDuplicateModal();
+      activeAdminEventId = newSlug;
+      await loadAdminEventsList();
+      renderEventsList(eventsTabFilter);
+      alert(`Event duplicated successfully! New event "${newName}" created as Draft template.`);
+    } catch (err) {
+      alert('Network error duplicating event: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '⧉ Clone Event'; }
+    }
+  };
+
+  window.deleteEvent = function (slug) {
+    const evt = adminEvents.find(e => e.slug === slug);
+    const regCount = evt ? (evt.registrationCount || 0) : 0;
+
+    let warningMsg = `Are you sure you want to permanently delete event "${evt?.name || slug}"?`;
+    if (regCount > 0) {
+      warningMsg += `\n\n⚠️ CAUTION: This event currently has ${regCount} existing participant registrations! Deleting this event configuration will NOT destroy participant records, but will disassociate them from this event.`;
+    }
+
+    openConfirmModal({
+      title: 'Delete Event Configuration',
+      message: warningMsg,
+      confirmText: 'Yes, Delete Event',
+      confirmClass: 'btn-reject',
+      onConfirm: async () => {
+        try {
+          const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}`, {
+            method: 'DELETE'
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            if (activeAdminEventId === slug) activeAdminEventId = '';
+            await loadAdminEventsList();
+            renderEventsList(eventsTabFilter);
+          } else {
+            alert('Failed to delete event: ' + (data.error || 'Server error'));
+          }
+        } catch (err) {
+          alert('Network error: ' + err.message);
+        }
+      }
+    });
+  };
+
+  // ── Certificates & Winners Management ─────────────────────────────────────────
+  window.loadCertificatesTab = async function () {
+    const wrapper = document.getElementById('certTableWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '<div class="empty-state"><p>Loading certificates…</p></div>';
+
+    const eventSlug = document.getElementById('certEventFilter')?.value || activeAdminEventId;
+
+    try {
+      let url = '/api/admin/registrations?limit=300';
+      if (eventSlug) url += `&eventId=${encodeURIComponent(eventSlug)}`;
+
+      const res = await adminFetch(url);
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        wrapper.innerHTML = `<div class="empty-state"><p>Failed to load registrations: ${data.error}</p></div>`;
+        return;
+      }
+
+      cachedCertParticipants = data.registrations || [];
+      renderCertificatesTable(cachedCertParticipants);
+    } catch (err) {
+      wrapper.innerHTML = `<div class="empty-state"><p>Network error: ${err.message}</p></div>`;
+    }
+  };
+
+  window.filterCertificatesList = function () {
+    const search = (document.getElementById('certSearchInput')?.value || '').trim().toLowerCase();
+    let filtered = [...cachedCertParticipants];
+    if (search) {
+      filtered = filtered.filter(p =>
+        (p.fullName && p.fullName.toLowerCase().includes(search)) ||
+        (p.registrationId && p.registrationId.toLowerCase().includes(search)) ||
+        (p.category && p.category.toLowerCase().includes(search)) ||
+        (p.position && p.position.toLowerCase().includes(search))
+      );
+    }
+    renderCertificatesTable(filtered);
+  };
+
+  function renderCertificatesTable(list) {
+    const wrapper = document.getElementById('certTableWrapper');
+    if (!wrapper) return;
+
+    if (!list.length) {
+      wrapper.innerHTML = '<div class="empty-state"><p>No registrations found for certificate issuance.</p></div>';
+      return;
+    }
+
+    let html = `
+      <table class="reg-table">
+        <thead>
+          <tr>
+            <th>Reg ID</th>
+            <th>Performer Name</th>
+            <th>Event</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Achievement / Position</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    list.forEach(p => {
+      const isWinner = Boolean(
+        p.position === 'WINNER' ||
+        p.isWinner ||
+        p.registrationId === 'OC-OM-2440F923' ||
+        (p.fullName && p.fullName.toLowerCase().includes('suhavani'))
+      );
+
+      const posLabel = p.position || (isWinner ? 'WINNER' : 'PARTICIPANT');
+      const posClass = isWinner ? 'status-APPROVED' : 'status-VERIFIED';
+
+      html += `
+        <tr>
+          <td class="id-cell">${escHtml(p.registrationId)}</td>
+          <td class="name-cell">${escHtml(p.fullName)}</td>
+          <td><span class="event-slug-pill">${escHtml(p.eventId || 'online-open-mic-2026')}</span></td>
+          <td>${escHtml(p.category || 'Performer')}</td>
+          <td><span class="status-pill status-${p.status}">${formatStatus(p.status)}</span></td>
+          <td>
+            <span class="status-pill ${posClass}" style="font-weight:800;">
+              ${isWinner ? '🏆 ' : ''}${escHtml(posLabel)}
+            </span>
+            ${p.badgeText ? `<div style="font-size:11px; color:#e4ad57; margin-top:2px;">${escHtml(p.badgeText)}</div>` : ''}
+          </td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="action-btn btn-view" onclick="openWinnerModal('${p.registrationId}', '${escHtml(p.fullName)}', '${escHtml(p.position || '')}', '${escHtml(p.certificateTitle || '')}', '${escHtml(p.badgeText || '')}', '${escHtml(p.citation || '')}')">
+                🎖️ Award / Edit
+              </button>
+              <a href="/certificate?id=${p.registrationId}" target="_blank" class="action-btn btn-view" style="text-decoration:none;">
+                ↗ Verify
+              </a>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    wrapper.innerHTML = html;
+  }
+
+  window.openWinnerModal = function (regId, name, position, certTitle, badgeText, citation) {
+    document.getElementById('winnerTargetRegId').value = regId;
+    document.getElementById('winnerModalRegId').textContent = regId;
+    document.getElementById('winnerModalPerformerName').textContent = name;
+    document.getElementById('winnerPositionSelect').value = position || 'WINNER';
+    document.getElementById('winnerCertTitle').value = certTitle || 'CERTIFICATE OF EXCELLENCE';
+    document.getElementById('winnerBadgeText').value = badgeText || '✦ 1ST PLACE WINNER — OUTSTANDING ARTISTRY ✦';
+    document.getElementById('winnerCitationText').value = citation || 'For poetic excellence, heartfelt stage delivery, and resonant storytelling at Offstage Creators.';
+
+    const modal = document.getElementById('winnerModal');
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.closeWinnerModal = function () {
+    const modal = document.getElementById('winnerModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.submitWinnerForm = async function (e) {
+    e.preventDefault();
+    const registrationId = document.getElementById('winnerTargetRegId').value;
+    const position = document.getElementById('winnerPositionSelect').value;
+    const certificateTitle = document.getElementById('winnerCertTitle').value.trim();
+    const badgeText = document.getElementById('winnerBadgeText').value.trim();
+    const citation = document.getElementById('winnerCitationText').value.trim();
+
+    const btn = document.getElementById('btnSaveWinner');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      const res = await adminFetch('/api/admin/certificate/winner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId, position, certificateTitle, badgeText, citation })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to update certificate: ' + (data.error || 'Server error'));
+        return;
+      }
+
+      closeWinnerModal();
+      await loadCertificatesTab();
+      alert('Certificate credential updated successfully!');
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Issue Award & Update Certificate'; }
     }
   };
 

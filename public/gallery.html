@@ -341,14 +341,22 @@
     </a>
 
     <div class="gallery-head">
-      <div class="event-concluded-pill">
-        ✓ Event Completed • 23 September 2026
+      <div class="event-concluded-pill" id="galleryPill">
+        ✓ Event Moments &amp; Highlights
       </div>
-      <p class="kicker orange">MEMORIES FROM THE STAGE</p>
-      <h1>Event<br><em>Gallery</em></h1>
-      <p>
-        Moments from Offstage Creators — Capturing the voices, expressions, stories, and soul of our completed 2026 Online Open Mic edition.
+      <p class="kicker orange" id="galleryKicker">MEMORIES FROM THE STAGE</p>
+      <h1 id="galleryTitle">Event<br><em>Gallery</em></h1>
+      <p id="gallerySubtitle">
+        Capturing the voices, expressions, stories, and soul from Offstage Creators open mic events.
       </p>
+
+      <!-- Event Selector Dropdown -->
+      <div style="margin-top: 24px; display: inline-flex; align-items: center; gap: 10px; background: #141210; border: 1px solid #2a231c; border-radius: 100px; padding: 6px 18px;">
+        <span style="font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: #8e8477; text-transform: uppercase;">SELECT EVENT:</span>
+        <select id="eventSelect" style="background: none; border: none; color: #e4ad57; font-size: 13px; font-weight: 700; outline: none; cursor: pointer;">
+          <option value="" style="background:#141210; color:#f7eee1;">All Events</option>
+        </select>
+      </div>
     </div>
 
     <!-- GALLERY CONTAINER (Populated dynamically via API) -->
@@ -427,11 +435,70 @@
       const closeBtn = document.getElementById('lightboxCloseBtn');
       const prevBtn = document.getElementById('lightboxPrevBtn');
       const nextBtn = document.getElementById('lightboxNextBtn');
+      const eventSelect = document.getElementById('eventSelect');
+
+      // Detect event slug from path /event/:slug/gallery or query ?event=:slug
+      const pathMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
+      const querySlug = new URLSearchParams(window.location.search).get('event');
+      let currentEventSlug = pathMatch ? pathMatch[1] : (querySlug || '');
+
+      let allEvents = [];
+
+      async function initEvents() {
+        try {
+          const res = await fetch('/api/events');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.events)) {
+              allEvents = data.events;
+              if (eventSelect) {
+                eventSelect.innerHTML = '<option value="">All Events</option>' +
+                  allEvents.map(evt => `<option value="${evt.slug}">${evt.title || evt.name} (${evt.date || ''})</option>`).join('');
+
+                if (currentEventSlug) {
+                  eventSelect.value = currentEventSlug;
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Events list fetch error:', err);
+        }
+      }
+
+      if (eventSelect) {
+        eventSelect.addEventListener('change', (e) => {
+          currentEventSlug = e.target.value;
+          updateGalleryHeader();
+          loadGallery();
+        });
+      }
+
+      function updateGalleryHeader() {
+        const found = allEvents.find(e => e.slug === currentEventSlug);
+        const pill = document.getElementById('galleryPill');
+        const title = document.getElementById('galleryTitle');
+        const subtitle = document.getElementById('gallerySubtitle');
+
+        if (found) {
+          if (pill) pill.textContent = `✓ ${found.name || found.title} • ${found.date || ''}`;
+          if (title) title.innerHTML = `${found.title || found.name}<br><em>Gallery</em>`;
+          if (subtitle) subtitle.textContent = `Moments and highlights from ${found.title || found.name} held in ${found.venue || found.city || 'Online'}.`;
+        } else {
+          if (pill) pill.textContent = '✓ Event Moments & Highlights';
+          if (title) title.innerHTML = 'Event<br><em>Gallery</em>';
+          if (subtitle) subtitle.textContent = 'Capturing the voices, expressions, stories, and soul from Offstage Creators open mic events.';
+        }
+      }
 
       // Fetch published gallery images
       async function loadGallery() {
         try {
-          const res = await fetch('/api/gallery');
+          let url = '/api/gallery';
+          if (currentEventSlug) {
+            url += `?eventId=${encodeURIComponent(currentEventSlug)}`;
+          }
+          const res = await fetch(url);
           const data = await res.json();
 
           if (res.ok && data.success && Array.isArray(data.images) && data.images.length > 0) {
@@ -569,6 +636,8 @@
       });
 
       // Initialize
+      initEvents();
+      updateGalleryHeader();
       loadGallery();
     })();
   </script>

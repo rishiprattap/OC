@@ -14,7 +14,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { run, get, all, getSetting, setSetting } = require('../db');
+const { run, get, all, getSetting, setSetting, getEventBySlug, getActiveEvent } = require('../db');
 const config = require('../config');
 const emailService = require('../services/email');
 
@@ -117,19 +117,31 @@ router.use(requireAdmin);
 
 router.get('/overview', async (req, res) => {
   try {
+    const eventId = (req.query.eventId || req.query.event || '').trim();
+    let whereClause = '';
+    const params = [];
+    if (eventId && eventId !== 'ALL') {
+      whereClause = ' WHERE event_id = ?';
+      params.push(eventId);
+    }
+
+    const andEvent = eventId && eventId !== 'ALL' ? ' AND event_id = ?' : '';
+    const eventParam = eventId && eventId !== 'ALL' ? [eventId] : [];
+
     const [total, pendingVerif, verified, approved, rejected, revoked, checkedIn, certEligible] = await Promise.all([
-      get(`SELECT COUNT(*) as c FROM registrations`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'PENDING_VERIFICATION'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'VERIFIED'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'APPROVED'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'REJECTED'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status IN ('REVOKED', 'CANCELLED')`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE checked_in = 1 AND reg_status = 'APPROVED'`),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE certificate_eligible = 1 AND reg_status = 'APPROVED'`)
+      get(`SELECT COUNT(*) as c FROM registrations${whereClause}`, params),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'PENDING_VERIFICATION'${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'VERIFIED'${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'APPROVED'${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'REJECTED'${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status IN ('REVOKED', 'CANCELLED')${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE checked_in = 1 AND reg_status = 'APPROVED'${andEvent}`, eventParam),
+      get(`SELECT COUNT(*) as c FROM registrations WHERE certificate_eligible = 1 AND reg_status = 'APPROVED'${andEvent}`, eventParam)
     ]);
 
     return res.json({
       success: true,
+      eventId: eventId || 'ALL',
       stats: {
         total: total?.c || 0,
         pendingVerification: pendingVerif?.c || 0,
@@ -151,14 +163,29 @@ router.get('/overview', async (req, res) => {
 
 router.get('/registrations', async (req, res) => {
   try {
-    const { status, search, limit = 100, offset = 0 } = req.query;
+    const { status, search, eventId, category, checkedIn, limit = 100, offset = 0 } = req.query;
 
     let sql = `SELECT * FROM registrations WHERE 1=1`;
     const params = [];
 
+    if (eventId && eventId !== 'ALL') {
+      sql += ` AND event_id = ?`;
+      params.push(eventId);
+    }
+
     if (status && status !== 'ALL') {
       sql += ` AND reg_status = ?`;
       params.push(status);
+    }
+
+    if (category && category !== 'ALL') {
+      sql += ` AND category = ?`;
+      params.push(category);
+    }
+
+    if (checkedIn !== undefined && checkedIn !== '' && checkedIn !== 'ALL') {
+      sql += ` AND checked_in = ?`;
+      params.push(checkedIn === '1' || checkedIn === 'true' ? 1 : 0);
     }
 
     if (search && search.trim()) {
@@ -188,6 +215,8 @@ router.get('/registrations', async (req, res) => {
       registrations: rows.map(r => ({
         id: r.id,
         registrationId: r.registration_id,
+        eventId: r.event_id || 'online-open-mic-2026',
+        serialNumber: r.serial_number || r.id,
         fullName: r.full_name,
         email: r.email,
         phone: r.phone,
@@ -200,6 +229,12 @@ router.get('/registrations', async (req, res) => {
         otpVerifiedAt: r.otp_verified_at,
         checkedIn: Boolean(r.checked_in),
         checkinAt: r.checkin_at,
+        certificateEligible: Boolean(r.certificate_eligible),
+        position: r.position || 'Participant',
+        achievement: r.achievement || null,
+        badgeText: r.badge_text || null,
+        citation: r.citation || null,
+        certificateTitle: r.certificate_title || 'CERTIFICATE OF PARTICIPATION',
         approvedAt: r.approved_at,
         approvedBy: r.approved_by,
         rejectedAt: r.rejected_at,
@@ -215,6 +250,171 @@ router.get('/registrations', async (req, res) => {
   } catch (err) {
     console.error('[Admin] List registrations error:', err);
     return res.status(500).json({ success: false, error: 'Failed to load registrations.' });
+  }
+});
+
+// ─── GET /api/admin/registrations/export (DOWNLOAD PARTICIPANTS WITH FILTERS) ──
+
+router.get('/registrations/export', async (req, res) => {
+  try {
+    const { status, search, eventId, category, checkedIn } = req.query;
+
+    let sql = `SELECT * FROM registrations WHERE 1=1`;
+    const params = [];
+
+    if (eventId && eventId !== 'ALL') {
+      sql += ` AND event_id = ?`;
+      params.push(eventId);
+    }
+
+    if (status && status !== 'ALL') {
+      sql += ` AND reg_status = ?`;
+      params.push(status);
+    }
+
+    if (category && category !== 'ALL') {
+      sql += ` AND category = ?`;
+      params.push(category);
+    }
+
+    if (checkedIn !== undefined && checkedIn !== '' && checkedIn !== 'ALL') {
+      sql += ` AND checked_in = ?`;
+      params.push(checkedIn === '1' || checkedIn === 'true' ? 1 : 0);
+    }
+
+    if (search && search.trim()) {
+      const trimmed = search.trim();
+      const q = `%${trimmed}%`;
+      const num = parseInt(trimmed.replace(/^0+/, ''), 10);
+      if (!isNaN(num) && num > 0) {
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR id = ?)`;
+        params.push(q, q, q, q, q, num);
+      } else {
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ?)`;
+        params.push(q, q, q, q, q);
+      }
+    }
+
+    sql += ` ORDER BY id ASC`;
+    const rows = await all(sql, params);
+
+    // Fetch event metadata to map slug to readable event name
+    const eventMap = {};
+    try {
+      const allEvents = await all(`SELECT slug, name, title FROM events`);
+      if (Array.isArray(allEvents)) {
+        allEvents.forEach(e => {
+          eventMap[e.slug] = e.name || e.title || e.slug;
+        });
+      }
+    } catch (_) {}
+
+    function csvCell(val) {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    }
+
+    const headers = [
+      'Serial Number',
+      'Registration ID',
+      'Event Slug',
+      'Event Name',
+      'Full Name',
+      'Email',
+      'Phone',
+      'City',
+      'Category',
+      'Performance Title',
+      'Performance Description',
+      'Instagram Handle',
+      'Fee Amount (INR)',
+      'Registration Status',
+      'Payment Status',
+      'Transaction ID',
+      'OTP Verified',
+      'Checked In (Attended)',
+      'Check-in Time',
+      'Certificate Eligible',
+      'Position / Award',
+      'Achievement',
+      'Badge Text',
+      'Citation',
+      'Certificate Title',
+      'Registered At',
+      'Approved At',
+      'Approved By',
+      'Rejection Reason',
+      'Admin Notes',
+      'Payment Screenshot URL',
+      'Certificate Verification URL'
+    ];
+
+    const host = req.get('host') || 'offstagecreators.com';
+    const protocol = req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    const csvDataRows = rows.map(r => {
+      const evSlug = r.event_id || 'online-open-mic-2026';
+      const evName = eventMap[evSlug] || (evSlug === 'online-open-mic-2026' ? 'Online Open Mic 2026' : evSlug);
+      const serial = String(r.serial_number || r.id).padStart(6, '0');
+      const certUrl = `${baseUrl}/certificate.html?id=${encodeURIComponent(r.registration_id)}`;
+
+      return [
+        serial,
+        r.registration_id,
+        evSlug,
+        evName,
+        r.full_name || '',
+        r.email || '',
+        r.phone || '',
+        r.city || '',
+        r.category || '',
+        r.performance_title || '',
+        r.performance_description || '',
+        r.instagram || '',
+        r.amount ?? 79,
+        r.reg_status || 'PENDING_VERIFICATION',
+        r.payment_status || 'PAID',
+        r.transaction_id || '',
+        r.otp_verified ? 'YES' : 'NO',
+        r.checked_in ? 'YES' : 'NO',
+        r.checkin_at || '',
+        r.certificate_eligible ? 'YES' : 'NO',
+        r.position || 'Participant',
+        r.achievement || '',
+        r.badge_text || '',
+        r.citation || '',
+        r.certificate_title || 'CERTIFICATE OF PARTICIPATION',
+        r.created_at || '',
+        r.approved_at || '',
+        r.approved_by || '',
+        r.rejected_reason || '',
+        r.admin_notes || '',
+        r.payment_screenshot_url || '',
+        certUrl
+      ];
+    });
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const eventPart = (eventId && eventId !== 'ALL') ? eventId.replace(/[^a-zA-Z0-9_-]/g, '') : 'all-events';
+    const statusPart = (status && status !== 'ALL') ? status.toLowerCase() : 'all-statuses';
+    const filename = `participants_${eventPart}_${statusPart}_${dateStr}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    // \uFEFF is UTF-8 Byte Order Mark for Excel compatibility
+    const csvOutput = '\uFEFF' + [
+      headers.map(csvCell).join(','),
+      ...csvDataRows.map(row => row.map(csvCell).join(','))
+    ].join('\r\n');
+
+    return res.send(csvOutput);
+
+  } catch (err) {
+    console.error('[Admin] Export registrations error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to export registrations.' });
   }
 });
 
@@ -305,7 +505,18 @@ router.post('/approve/:id', async (req, res) => {
         name: reg.full_name,
         category: reg.category,
         performanceTitle: reg.performance_title,
-        event: config.EVENT
+        event: await (async () => {
+          if (reg.event_id) {
+            const evt = await getEventBySlug(reg.event_id);
+            if (evt) return {
+              title: evt.title || evt.name,
+              date: evt.event_date || config.EVENT.date,
+              time: evt.start_time ? (evt.end_time ? `${evt.start_time} – ${evt.end_time}` : evt.start_time) : config.EVENT.time,
+              venue: evt.venue_name || 'Online (Google Meet)'
+            };
+          }
+          return config.EVENT;
+        })()
       });
       await run(
         `UPDATE registrations SET approval_email_sent_at = ? WHERE registration_id = ?`,
@@ -433,6 +644,35 @@ router.post('/revoke/:id', async (req, res) => {
   }
 });
 
+// ─── POST /api/admin/registrations/:id/status ──────────────────────────────────
+router.post(['/registrations/:id/status', '/registrations/status/:id'], async (req, res) => {
+  try {
+    const regId = req.params.id.trim().toUpperCase();
+    const { status } = req.body;
+    if (!status) return res.status(400).json({ success: false, error: 'Status is required.' });
+
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const now = new Date().toISOString();
+    const isApproved = status.toUpperCase() === 'APPROVED';
+    await run(
+      `UPDATE registrations SET
+         reg_status = ?,
+         approved_at = ?,
+         certificate_eligible = ?,
+         updated_at = ?
+       WHERE registration_id = ?`,
+      [status.toUpperCase(), isApproved ? now : reg.approved_at, isApproved ? 1 : reg.certificate_eligible, now, regId]
+    );
+
+    return res.json({ success: true, message: `Status updated to ${status}.`, status: status.toUpperCase() });
+  } catch (err) {
+    console.error('[Admin] Registration status error:', err);
+    return res.status(500).json({ success: false, error: 'Server error updating registration status.' });
+  }
+});
+
 // ─── POST /api/admin/checkin/:id ──────────────────────────────────────────────
 
 router.post('/checkin/:id', async (req, res) => {
@@ -462,23 +702,90 @@ router.post('/checkin/:id', async (req, res) => {
   }
 });
 
-// ─── POST /api/admin/certificate/:id ─────────────────────────────────────────
-
-router.post('/certificate/:id', async (req, res) => {
+// POST /api/admin/certificate/winner — Assign Winner / Special Achievement
+router.post('/certificate/winner', async (req, res) => {
   try {
-    const regId = req.params.id.trim().toUpperCase();
-    const { eligible } = req.body;
-
+    const { registrationId, position, achievement, badgeText, citation, certificateTitle } = req.body;
+    if (!registrationId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
+    const regId = registrationId.trim().toUpperCase();
     const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const now = new Date().toISOString();
     await run(
-      `UPDATE registrations SET certificate_eligible = ?, updated_at = ? WHERE registration_id = ?`,
-      [eligible ? 1 : 0, now, regId]
+      `UPDATE registrations SET
+        position = ?,
+        achievement = ?,
+        badge_text = ?,
+        citation = ?,
+        certificate_title = ?,
+        certificate_eligible = 1,
+        updated_at = ?
+      WHERE registration_id = ?`,
+      [
+        position || 'WINNER',
+        achievement || 'Winner — First Place',
+        badgeText || '★ EVENT WINNER ★',
+        citation || '',
+        certificateTitle || 'CERTIFICATE OF EXCELLENCE',
+        now,
+        regId
+      ]
     );
 
-    return res.json({ success: true, certificateEligible: Boolean(eligible) });
+    return res.json({
+      success: true,
+      message: `Updated achievement for ${reg.full_name}.`,
+      position: position || 'WINNER',
+      achievement: achievement || 'Winner — First Place'
+    });
+  } catch (err) {
+    console.error('[Admin] Winner assign error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to assign winner.' });
+  }
+});
+
+// ─── POST /api/admin/certificate/:id ─────────────────────────────────────────
+
+router.post('/certificate/:id', async (req, res) => {
+  try {
+    const regId = req.params.id.trim().toUpperCase();
+    const { eligible, position, achievement, badgeText, citation, certificateTitle } = req.body;
+
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const now = new Date().toISOString();
+    const isEligible = eligible !== undefined ? (eligible ? 1 : 0) : reg.certificate_eligible;
+
+    await run(
+      `UPDATE registrations SET
+        certificate_eligible = ?,
+        position = COALESCE(?, position),
+        achievement = COALESCE(?, achievement),
+        badge_text = COALESCE(?, badge_text),
+        citation = COALESCE(?, citation),
+        certificate_title = COALESCE(?, certificate_title),
+        updated_at = ?
+      WHERE registration_id = ?`,
+      [
+        isEligible,
+        position !== undefined ? position : null,
+        achievement !== undefined ? achievement : null,
+        badgeText !== undefined ? badgeText : null,
+        citation !== undefined ? citation : null,
+        certificateTitle !== undefined ? certificateTitle : null,
+        now,
+        regId
+      ]
+    );
+
+    return res.json({
+      success: true,
+      certificateEligible: Boolean(isEligible),
+      position: position !== undefined ? position : reg.position,
+      achievement: achievement !== undefined ? achievement : reg.achievement
+    });
 
   } catch (err) {
     console.error('[Admin] Certificate error:', err);
@@ -486,17 +793,26 @@ router.post('/certificate/:id', async (req, res) => {
   }
 });
 
-// ─── Email Helpers & Placeholders ─────────────────────────────────────────────
+// ─── Email Helpers & Placeholders (Requirement 9) ─────────────────────────────
 
-function replacePlaceholders(templateText, reg = {}) {
+function replacePlaceholders(templateText, reg = {}, event = null) {
   if (!templateText) return '';
   const name = reg.full_name || reg.fullName || 'Participant';
   const regId = reg.registration_id || reg.registrationId || '';
   const rawId = reg.id || '';
-  const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
+  const serialNo = reg.serial_number ? String(reg.serial_number).padStart(6, '0') : (rawId ? String(rawId).padStart(6, '0') : '');
   const category = reg.category || '';
   const entry = reg.performance_title || reg.performanceTitle || reg.category || '';
   const city = reg.city || '';
+
+  // Event placeholders (Requirement 9)
+  const eventName = event ? (event.name || event.title) : config.EVENT.title;
+  const eventDate = event ? (event.event_date || event.date) : config.EVENT.date;
+  const eventTime = event ? (event.start_time ? (event.end_time ? `${event.start_time} – ${event.end_time}` : event.start_time) : event.time) : config.EVENT.time;
+  const venue = event ? (event.venue_name || event.venue) : 'Online (Google Meet)';
+  const venueAddress = event ? (event.venue_address || venue) : 'Online (Google Meet)';
+  const registrationFee = event && event.fee !== undefined ? `₹${event.fee}` : `₹${config.OPEN_MIC_FEE_INR || 79}`;
+  const certificateUrl = `${config.APP_URL}/certificate${regId ? `?regId=${encodeURIComponent(regId)}` : ''}`;
 
   let out = templateText
     .replace(/\{name\}/gi, name)
@@ -504,7 +820,14 @@ function replacePlaceholders(templateText, reg = {}) {
     .replace(/\{serial_no\}/gi, serialNo)
     .replace(/\{category\}/gi, category)
     .replace(/\{entry\}/gi, entry)
-    .replace(/\{city\}/gi, city);
+    .replace(/\{city\}/gi, city)
+    .replace(/\{event_name\}/gi, eventName)
+    .replace(/\{event_date\}/gi, eventDate)
+    .replace(/\{event_time\}/gi, eventTime)
+    .replace(/\{venue\}/gi, venue)
+    .replace(/\{venue_address\}/gi, venueAddress)
+    .replace(/\{registration_fee\}/gi, registrationFee)
+    .replace(/\{certificate_url\}/gi, certificateUrl);
 
   if (!regId) {
     out = out.replace(/^[ \t]*Registration ID:[ \t]*\n?/gim, '');
@@ -781,11 +1104,14 @@ router.get('/email-history', async (req, res) => {
 
 router.post('/email/preview', async (req, res) => {
   try {
-    const { type, subject, bodyContent, meetData, registrationId, manualEmail } = req.body;
+    const { type, subject, bodyContent, meetData, registrationId, manualEmail, eventId } = req.body;
     let reg = null;
     if (registrationId) {
       reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
     }
+    const targetEventId = eventId || (reg ? reg.event_id : null);
+    const eventObj = targetEventId ? await getEventBySlug(targetEventId) : await getActiveEvent();
+
     if (!reg) {
       reg = {
         full_name: 'John Doe',
@@ -794,7 +1120,8 @@ router.post('/email/preview', async (req, res) => {
         category: 'Music / Singing',
         performance_title: 'Acoustic Melody',
         city: 'Mumbai',
-        email: manualEmail || 'creator@example.com'
+        email: manualEmail || 'creator@example.com',
+        event_id: eventObj ? eventObj.slug : 'online-open-mic-2026'
       };
     }
 
@@ -802,17 +1129,17 @@ router.post('/email/preview', async (req, res) => {
     let renderedBodyHtml = '';
 
     if (type === 'meet') {
-      finalSubject = replacePlaceholders(subject || `Google Meet Invitation: ${meetData?.meetingTitle || 'Online Open Mic'}`, reg);
+      finalSubject = replacePlaceholders(subject || `Google Meet Invitation: ${meetData?.meetingTitle || eventObj?.title || 'Online Open Mic'}`, reg, eventObj);
       const rawId = reg.id || '';
       const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
-      const substitutedInstructions = replacePlaceholders(meetData?.additionalMessage || meetData?.customHtml || '', reg);
+      const substitutedInstructions = replacePlaceholders(meetData?.additionalMessage || meetData?.customHtml || '', reg, eventObj);
       renderedBodyHtml = generateMeetHtml({
-        meetingTitle: meetData?.meetingTitle,
-        meetLink: meetData?.meetLink,
-        date: meetData?.date,
-        startTime: meetData?.startTime,
-        endTime: meetData?.endTime,
-        timeZone: meetData?.timeZone,
+        meetingTitle: meetData?.meetingTitle || eventObj?.title,
+        meetLink: meetData?.meetLink || eventObj?.meet_link,
+        date: meetData?.date || eventObj?.event_date,
+        startTime: meetData?.startTime || eventObj?.start_time,
+        endTime: meetData?.endTime || eventObj?.end_time,
+        timeZone: meetData?.timeZone || eventObj?.timezone,
         additionalMessage: substitutedInstructions,
         name: reg.full_name,
         regId: reg.registration_id,
@@ -820,8 +1147,8 @@ router.post('/email/preview', async (req, res) => {
         category: reg.category
       });
     } else {
-      finalSubject = replacePlaceholders(subject || 'Message from Offstage Creators', reg);
-      const substitutedBody = replacePlaceholders(bodyContent || '', reg);
+      finalSubject = replacePlaceholders(subject || `Message regarding ${eventObj?.title || 'Offstage Creators'}`, reg, eventObj);
+      const substitutedBody = replacePlaceholders(bodyContent || '', reg, eventObj);
       renderedBodyHtml = formatRichEmailContent(substitutedBody);
     }
 
@@ -840,7 +1167,7 @@ router.post('/email/preview', async (req, res) => {
 
 router.post('/email/custom-send', async (req, res) => {
   try {
-    const { registrationIds = [], manualEmails = [], subject, bodyContent } = req.body;
+    const { registrationIds = [], manualEmails = [], subject, bodyContent, eventId } = req.body;
 
     if (!subject || !subject.trim()) {
       return res.status(400).json({ success: false, error: 'Subject is required.' });
@@ -852,6 +1179,7 @@ router.post('/email/custom-send', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please select at least one recipient.' });
     }
 
+    const defaultEvent = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
     const results = [];
     let sentCount = 0;
     let failedCount = 0;
@@ -866,8 +1194,9 @@ router.post('/email/custom-send', async (req, res) => {
           continue;
         }
 
-        const substitutedSubject = replacePlaceholders(subject, reg);
-        const substitutedBody = replacePlaceholders(bodyContent, reg);
+        const regEvent = reg.event_id ? await getEventBySlug(reg.event_id) : defaultEvent;
+        const substitutedSubject = replacePlaceholders(subject, reg, regEvent);
+        const substitutedBody = replacePlaceholders(bodyContent, reg, regEvent);
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,
@@ -898,8 +1227,8 @@ router.post('/email/custom-send', async (req, res) => {
       if (!trimmed) continue;
       try {
         const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
-        const substitutedSubject = replacePlaceholders(subject, dummyReg);
-        const substitutedBody = replacePlaceholders(bodyContent, dummyReg);
+        const substitutedSubject = replacePlaceholders(subject, dummyReg, defaultEvent);
+        const substitutedBody = replacePlaceholders(bodyContent, dummyReg, defaultEvent);
 
         const html = emailService.emailWrapper({
           title: substitutedSubject,
@@ -951,7 +1280,8 @@ router.post('/email/meet-send', async (req, res) => {
       timeZone,
       additionalMessage,
       customHtml,
-      customSubject
+      customSubject,
+      eventId
     } = req.body;
 
     if (!meetLink || !meetLink.trim()) {
@@ -961,7 +1291,8 @@ router.post('/email/meet-send', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please select at least one recipient.' });
     }
 
-    const baseSubject = customSubject || `Google Meet Invitation: ${meetingTitle || 'Online Open Mic'}`;
+    const defaultEvent = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
+    const baseSubject = customSubject || `Google Meet Invitation: ${meetingTitle || defaultEvent?.title || 'Online Open Mic'}`;
     const results = [];
     let sentCount = 0;
     let failedCount = 0;
@@ -975,18 +1306,19 @@ router.post('/email/meet-send', async (req, res) => {
           continue;
         }
 
+        const regEvent = reg.event_id ? await getEventBySlug(reg.event_id) : defaultEvent;
         const rawId = reg.id || '';
         const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
-        const substitutedSubject = replacePlaceholders(baseSubject, reg);
-        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', reg);
+        const substitutedSubject = replacePlaceholders(baseSubject, reg, regEvent);
+        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', reg, regEvent);
 
         const bodyContent = generateMeetHtml({
-          meetingTitle,
+          meetingTitle: meetingTitle || regEvent?.title,
           meetLink,
-          date,
-          startTime,
-          endTime,
-          timeZone,
+          date: date || regEvent?.event_date,
+          startTime: startTime || regEvent?.start_time,
+          endTime: endTime || regEvent?.end_time,
+          timeZone: timeZone || regEvent?.timezone,
           additionalMessage: substitutedInstructions,
           name: reg.full_name,
           regId: reg.registration_id,
@@ -1022,16 +1354,16 @@ router.post('/email/meet-send', async (req, res) => {
       if (!trimmed) continue;
       try {
         const dummyReg = { full_name: 'Creator', email: trimmed, id: '', registration_id: '', category: '', performance_title: '', city: '' };
-        const substitutedSubject = replacePlaceholders(baseSubject, dummyReg);
-        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', dummyReg);
+        const substitutedSubject = replacePlaceholders(baseSubject, dummyReg, defaultEvent);
+        const substitutedInstructions = replacePlaceholders(additionalMessage || customHtml || '', dummyReg, defaultEvent);
 
         const bodyContent = generateMeetHtml({
-          meetingTitle,
+          meetingTitle: meetingTitle || defaultEvent?.title,
           meetLink,
-          date,
-          startTime,
-          endTime,
-          timeZone,
+          date: date || defaultEvent?.event_date,
+          startTime: startTime || defaultEvent?.start_time,
+          endTime: endTime || defaultEvent?.end_time,
+          timeZone: timeZone || defaultEvent?.timezone,
           additionalMessage: substitutedInstructions,
           name: 'Creator',
           regId: null,

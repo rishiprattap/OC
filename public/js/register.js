@@ -61,20 +61,105 @@
   const registrationClosedBox = document.getElementById('registrationClosedBox');
   const stepsBar = document.querySelector('.steps-bar');
 
-  async function checkRegistrationStatus() {
+  // ── Dynamic Event Context ──────────────────────────────────────────────────
+  let currentEvent = null;
+  let eventFee = 79;
+
+  // Detect event slug from path /event/:slug/register or query param ?event=:slug
+  const pathMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
+  const queryParamSlug = new URLSearchParams(window.location.search).get('event');
+  const targetEventSlug = pathMatch ? pathMatch[1] : (queryParamSlug || null);
+
+  async function initEventData() {
     try {
-      const res = await fetch('/api/config');
+      const endpoint = targetEventSlug
+        ? `/api/events/${encodeURIComponent(targetEventSlug)}`
+        : '/api/events/active';
+      const res = await fetch(endpoint);
       if (res.ok) {
         const data = await res.json();
-        if (data.registrationOpen === false || data.registrationStatus === 'CLOSED') {
-          if (step1Card) step1Card.style.display = 'none';
-          if (stepsBar) stepsBar.style.display = 'none';
-          if (registrationClosedBox) registrationClosedBox.style.display = 'block';
+        if (data.success && data.event) {
+          currentEvent = data.event;
+          applyEventToUI(currentEvent);
         }
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[Register] Event fetch fallback:', err);
+    }
   }
-  checkRegistrationStatus();
+
+  function applyEventToUI(evt) {
+    if (!evt) return;
+
+    eventFee = typeof evt.fee === 'number' ? evt.fee : (parseInt(evt.fee, 10) || 0);
+    const feeStr = eventFee > 0 ? `₹${eventFee}` : 'Free';
+
+    // Update document title and kicker
+    if (evt.title || evt.name) {
+      document.title = `Performer Registration | ${evt.title || evt.name} — Offstage Creators`;
+    }
+    const kickerEl = document.getElementById('pageKicker');
+    if (kickerEl) {
+      kickerEl.textContent = `${(evt.name || evt.title || '').toUpperCase()} — ${evt.date || ''}`;
+    }
+
+    // Update Summary Bar
+    const sName = document.getElementById('summaryEventName');
+    if (sName) sName.textContent = evt.title || evt.name || 'Open Mic';
+    const sDate = document.getElementById('summaryEventDate');
+    if (sDate) sDate.textContent = evt.date || 'TBA';
+    const sTime = document.getElementById('summaryEventTime');
+    if (sTime) sTime.textContent = evt.time || 'TBA';
+    const sVenue = document.getElementById('summaryEventVenue');
+    if (sVenue) sVenue.textContent = evt.venue || evt.city || 'Online';
+    const sFee = document.getElementById('summaryEventFee');
+    if (sFee) sFee.textContent = feeStr;
+
+    // Update Step 3 Texts
+    const step3Pill = document.getElementById('step3PillText');
+    if (step3Pill) step3Pill.textContent = `${feeStr} Payment`;
+    const step3HeadingFee = document.getElementById('step3FeeHeading');
+    if (step3HeadingFee) step3HeadingFee.textContent = feeStr;
+    const step3FeeDesc = document.getElementById('step3FeeDesc');
+    if (step3FeeDesc) step3FeeDesc.textContent = feeStr;
+    const step3FeeScan = document.getElementById('step3FeeScan');
+    if (step3FeeScan) step3FeeScan.textContent = feeStr;
+    const payeeEl = document.getElementById('payeeNameVal');
+    if (payeeEl && evt.payeeName) payeeEl.textContent = evt.payeeName;
+    const upiText = document.getElementById('upiIdText');
+    if (upiText && evt.upiId) upiText.textContent = evt.upiId;
+    const qrImg = document.getElementById('paymentQrImg');
+    if (qrImg && evt.paymentQr) qrImg.src = evt.paymentQr;
+
+    // Populate categories if specified
+    if (Array.isArray(evt.allowedCategories) && evt.allowedCategories.length > 0) {
+      const catSelect = document.getElementById('category');
+      if (catSelect) {
+        catSelect.innerHTML = '<option value="" disabled selected>Select category...</option>' +
+          evt.allowedCategories.map(c => `<option value="${c}">${c}</option>`).join('');
+      }
+    }
+
+    // Check status
+    const isClosed = evt.isRegistrationOpen === false ||
+      evt.status === 'Registration Closed' ||
+      evt.status === 'Event Completed' ||
+      evt.status === 'Archived';
+
+    if (isClosed) {
+      if (step1Card) step1Card.style.display = 'none';
+      if (stepsBar) stepsBar.style.display = 'none';
+      if (registrationClosedBox) {
+        registrationClosedBox.style.display = 'block';
+        const msgP = registrationClosedBox.querySelector('p');
+        if (msgP) {
+          msgP.textContent = `${evt.title || evt.name} is currently ${evt.status || 'closed'}. Registrations are closed. For registered performers, certificates and galleries remain accessible.`;
+        }
+      }
+    }
+  }
+
+  initEventData();
 
   const errorAlert = document.getElementById('errorAlert');
   const successAlert = document.getElementById('successAlert');
@@ -136,7 +221,8 @@
       startResendCooldown(60);
     } else if (step === 3) {
       if (step3Card) step3Card.style.display = 'block';
-      if (pageHeading) pageHeading.innerHTML = 'Complete Entry<br><em>₹79 Payment</em>';
+      const feeLabel = eventFee > 0 ? ('₹' + eventFee) : 'Free';
+      if (pageHeading) pageHeading.innerHTML = `Complete Entry<br><em>${feeLabel} Payment</em>`;
       if (pageSubheading) pageSubheading.textContent = 'Scan the UPI QR code, make the payment, and upload your payment proof screenshot with the UTR number.';
       if (paymentPerformerName) paymentPerformerName.textContent = activeName || '—';
       if (paymentRegIdDisplay) paymentRegIdDisplay.textContent = activeRegistrationId || '—';
@@ -386,10 +472,16 @@
       submitBtnText.textContent = 'CREATING REGISTRATION…';
 
       try {
+        const payload = {
+          fullName, phone, email, city, category, instagram,
+          performanceTitle, performanceDescription, terms,
+          eventId: currentEvent ? (currentEvent.slug || currentEvent.id) : undefined
+        };
+
         const res = await fetch('/api/registrations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fullName, phone, email, city, category, instagram, performanceTitle, performanceDescription, terms })
+          body: JSON.stringify(payload)
         });
 
         const data = await res.json();

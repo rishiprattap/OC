@@ -1,16 +1,14 @@
 /**
  * Offstage Creators — Event Gallery Routes
- * Public and Admin endpoints for managing event gallery photos.
+ * Public and Admin endpoints for managing event-specific gallery photos.
  */
 const express = require('express');
 const router = express.Router();
-const path = require('path');
-const fs = require('fs');
 const multer = require('multer');
-const { run, get, all } = require('../db');
+const { run, get, all, getActiveEvent } = require('../db');
 const config = require('../config');
 
-// Multer memory storage (allows seamless persistence to Postgres on both Vercel & local)
+// Multer memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max per image
@@ -44,11 +42,18 @@ function requireAdmin(req, res, next) {
 
 // ─── HANDLERS ───────────────────────────────────────────────────────────────
 
-// Handler: List public published images
+// Handler: List public published images for an event
 async function handlePublicList(req, res) {
   try {
+    let eventId = (req.query.eventId || req.query.event || req.params.eventId || '').trim();
+    if (!eventId) {
+      const active = await getActiveEvent();
+      eventId = active ? active.slug : 'online-open-mic-2026';
+    }
+
     const rows = await all(
-      `SELECT * FROM gallery_images WHERE is_published = 1 ORDER BY display_order ASC, id DESC`
+      `SELECT * FROM gallery_images WHERE is_published = 1 AND (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
+      [eventId, eventId]
     );
 
     const images = (rows || []).map(r => ({
@@ -57,11 +62,13 @@ async function handlePublicList(req, res) {
       caption: r.caption || '',
       displayOrder: r.display_order,
       isPublished: Boolean(r.is_published),
+      eventId: r.event_id || eventId,
       createdAt: r.created_at
     }));
 
     return res.json({
       success: true,
+      eventId,
       count: images.length,
       images
     });
@@ -71,12 +78,21 @@ async function handlePublicList(req, res) {
   }
 }
 
-// Handler: List all images for admin (including unpublished)
+// Handler: List all images for admin (including unpublished, filtered by event)
 async function handleAdminList(req, res) {
   try {
-    const rows = await all(
-      `SELECT * FROM gallery_images ORDER BY display_order ASC, id DESC`
-    );
+    const eventId = (req.query.eventId || req.query.event || '').trim();
+    let rows;
+    if (eventId && eventId !== 'ALL') {
+      rows = await all(
+        `SELECT * FROM gallery_images WHERE (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
+        [eventId, eventId]
+      );
+    } else {
+      rows = await all(
+        `SELECT * FROM gallery_images ORDER BY display_order ASC, id DESC`
+      );
+    }
 
     const images = (rows || []).map(r => ({
       id: r.id,
@@ -84,12 +100,14 @@ async function handleAdminList(req, res) {
       caption: r.caption || '',
       displayOrder: r.display_order,
       isPublished: Boolean(r.is_published),
+      eventId: r.event_id || 'online-open-mic-2026',
       createdAt: r.created_at,
       updatedAt: r.updated_at
     }));
 
     return res.json({
       success: true,
+      eventId: eventId || 'ALL',
       count: images.length,
       images
     });
@@ -99,12 +117,17 @@ async function handleAdminList(req, res) {
   }
 }
 
-// Handler: Upload images
+// Handler: Upload images attached to a specific event
 async function handleUpload(req, res) {
   try {
     const now = new Date().toISOString();
     const createdImages = [];
     const defaultCaption = (req.body.caption || '').trim();
+    let eventId = (req.body.eventId || req.body.event || req.query.eventId || '').trim();
+    if (!eventId) {
+      const active = await getActiveEvent();
+      eventId = active ? active.slug : 'online-open-mic-2026';
+    }
 
     // 1. Handle file uploads (multipart)
     if (req.files && req.files.length > 0) {
@@ -115,9 +138,9 @@ async function handleUpload(req, res) {
         const imageUrl = `data:${mimeType};base64,${base64Data}`;
 
         const result = await run(
-          `INSERT INTO gallery_images (image_url, caption, display_order, is_published, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-          [imageUrl, defaultCaption, 0, 1, now, now]
+          `INSERT INTO gallery_images (image_url, caption, display_order, is_published, event_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          [imageUrl, defaultCaption, 0, 1, eventId, now, now]
         );
 
         createdImages.push({
@@ -126,11 +149,12 @@ async function handleUpload(req, res) {
           caption: defaultCaption,
           displayOrder: 0,
           isPublished: true,
+          eventId,
           createdAt: now
         });
       }
     } 
-    // 2. Handle direct URL or JSON payload
+    // 2. Handle direct URL
     else if (req.body.imageUrl || req.body.url) {
       const url = (req.body.imageUrl || req.body.url).trim();
       const caption = (req.body.caption || '').trim();
@@ -139,9 +163,9 @@ async function handleUpload(req, res) {
       }
 
       const result = await run(
-        `INSERT INTO gallery_images (image_url, caption, display_order, is_published, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-        [url, caption, 0, 1, now, now]
+        `INSERT INTO gallery_images (image_url, caption, display_order, is_published, event_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        [url, caption, 0, 1, eventId, now, now]
       );
 
       createdImages.push({
@@ -150,25 +174,28 @@ async function handleUpload(req, res) {
         caption,
         displayOrder: 0,
         isPublished: true,
+        eventId,
         createdAt: now
       });
     } else {
-      return res.status(400).json({ success: false, error: 'Please select at least one image file or provide an image URL.' });
+      return res.status(400).json({ success: false, error: 'Please choose image files or provide an image URL.' });
     }
 
-    return res.json({
+    return res.status(201).json({
       success: true,
-      message: `Successfully added ${createdImages.length} image(s) to the gallery.`,
+      message: `Successfully uploaded ${createdImages.length} image(s) for event "${eventId}".`,
+      count: createdImages.length,
+      eventId,
       images: createdImages
     });
 
   } catch (err) {
     console.error('[Gallery Admin] Upload error:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to upload gallery images.' });
+    return res.status(500).json({ success: false, error: err.message || 'Image upload failed.' });
   }
 }
 
-// Handler: Update image
+// Handler: Update image metadata (caption, display order, publish status, eventId)
 async function handleUpdate(req, res) {
   try {
     const id = parseInt(req.params.id, 10);
@@ -177,34 +204,25 @@ async function handleUpdate(req, res) {
     const existing = await get(`SELECT * FROM gallery_images WHERE id = ?`, [id]);
     if (!existing) return res.status(404).json({ success: false, error: 'Gallery image not found.' });
 
+    const caption = req.body.caption !== undefined ? req.body.caption.trim() : existing.caption;
+    const isPublished = req.body.isPublished !== undefined ? (req.body.isPublished ? 1 : 0) : existing.is_published;
+    const displayOrder = req.body.displayOrder !== undefined ? parseInt(req.body.displayOrder, 10) : existing.display_order;
+    const eventId = req.body.eventId !== undefined ? req.body.eventId.trim() : (existing.event_id || 'online-open-mic-2026');
     const now = new Date().toISOString();
-    const caption = req.body.caption !== undefined ? String(req.body.caption).trim() : existing.caption;
-    const isPublished = req.body.isPublished !== undefined
-      ? (req.body.isPublished ? 1 : 0)
-      : (req.body.is_published !== undefined ? (req.body.is_published ? 1 : 0) : existing.is_published);
-    const displayOrder = req.body.displayOrder !== undefined ? Number(req.body.displayOrder) : existing.display_order;
 
     await run(
-      `UPDATE gallery_images SET caption = ?, is_published = ?, display_order = ?, updated_at = ? WHERE id = ?`,
-      [caption, isPublished, displayOrder, now, id]
+      `UPDATE gallery_images SET caption = ?, is_published = ?, display_order = ?, event_id = ?, updated_at = ? WHERE id = ?`,
+      [caption, isPublished, displayOrder, eventId, now, id]
     );
 
     return res.json({
       success: true,
-      message: 'Gallery image updated successfully.',
-      image: {
-        id,
-        imageUrl: existing.image_url,
-        caption,
-        isPublished: Boolean(isPublished),
-        displayOrder,
-        updatedAt: now
-      }
+      message: 'Image updated successfully.',
+      image: { id, caption, isPublished: Boolean(isPublished), displayOrder, eventId, updatedAt: now }
     });
-
   } catch (err) {
     console.error('[Gallery Admin] Update error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to update gallery image.' });
+    return res.status(500).json({ success: false, error: 'Failed to update image details.' });
   }
 }
 
@@ -214,58 +232,54 @@ async function handleDelete(req, res) {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid image ID.' });
 
-    const existing = await get(`SELECT id FROM gallery_images WHERE id = ?`, [id]);
+    const existing = await get(`SELECT * FROM gallery_images WHERE id = ?`, [id]);
     if (!existing) return res.status(404).json({ success: false, error: 'Gallery image not found.' });
 
     await run(`DELETE FROM gallery_images WHERE id = ?`, [id]);
 
-    return res.json({
-      success: true,
-      message: 'Gallery image deleted successfully.'
-    });
-
+    return res.json({ success: true, message: 'Image deleted.' });
   } catch (err) {
     console.error('[Gallery Admin] Delete error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to delete gallery image.' });
+    return res.status(500).json({ success: false, error: 'Failed to delete image.' });
   }
 }
 
 // Handler: Reorder images
 async function handleReorder(req, res) {
   try {
-    const { order } = req.body;
-    if (!Array.isArray(order)) {
-      return res.status(400).json({ success: false, error: 'Expected order array of IDs.' });
+    const orders = req.body.orders;
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.status(400).json({ success: false, error: 'Expected an array of { id, displayOrder }' });
     }
 
     const now = new Date().toISOString();
-    for (let index = 0; index < order.length; index++) {
-      const id = parseInt(order[index], 10);
-      if (id) {
-        await run(`UPDATE gallery_images SET display_order = ?, updated_at = ? WHERE id = ?`, [index, now, id]);
+    for (const item of orders) {
+      if (item && item.id !== undefined && item.displayOrder !== undefined) {
+        await run(
+          `UPDATE gallery_images SET display_order = ?, updated_at = ? WHERE id = ?`,
+          [parseInt(item.displayOrder, 10), now, parseInt(item.id, 10)]
+        );
       }
     }
 
-    return res.json({ success: true, message: 'Gallery order updated successfully.' });
-
+    return res.json({ success: true, message: 'Display order updated successfully.' });
   } catch (err) {
     console.error('[Gallery Admin] Reorder error:', err);
-    return res.status(500).json({ success: false, error: 'Failed to reorder gallery images.' });
+    return res.status(500).json({ success: false, error: 'Failed to reorder images.' });
   }
 }
 
-// ─── ROUTE ATTACHMENTS ──────────────────────────────────────────────────────
-
-// GET list: public published or admin all depending on mount/path
+// ─── ROUTE REGISTRATION ───────────────────────────────────────────────────────
 router.get('/', (req, res, next) => {
-  if (req.baseUrl.includes('/admin')) {
+  const isAdminPath = req.baseUrl.includes('admin') || req.path.startsWith('/admin') || req.query.admin === '1';
+  if (isAdminPath) {
     return requireAdmin(req, res, () => handleAdminList(req, res));
   }
   return handlePublicList(req, res);
 });
-router.get(['/admin', '/admin/list', '/list'], requireAdmin, handleAdminList);
 
-// Admin actions (accepts both with and without /admin subpath)
+router.get(['/admin', '/admin/list', '/list'], requireAdmin, handleAdminList);
+router.get(['/event/:eventId'], handlePublicList);
 router.post(['/upload', '/admin/upload'], requireAdmin, upload.array('images', 20), handleUpload);
 router.put(['/:id', '/admin/:id'], requireAdmin, handleUpdate);
 router.delete(['/:id', '/admin/:id'], requireAdmin, handleDelete);

@@ -305,6 +305,55 @@
       background: rgba(226,105,71,0.15); color: #e26947; border: 2px solid rgba(226,105,71,0.4);
     }
 
+    /* Event Management Styles */
+    .event-card {
+      background: #141210; border: 1px solid #2a231c; border-radius: 12px;
+      padding: 20px; margin-bottom: 16px; transition: all 0.2s ease;
+      display: flex; gap: 20px; align-items: flex-start;
+    }
+    .event-card:hover { border-color: rgba(228, 173, 87, 0.4); background: #161412; }
+    .event-card.is-active { border-color: #e4ad57; box-shadow: 0 0 20px rgba(228, 173, 87, 0.15); }
+    .event-thumb {
+      width: 100px; height: 130px; object-fit: cover; border-radius: 8px;
+      background: #0d0c0a; border: 1px solid #2a231c; flex-shrink: 0;
+    }
+    .event-info { flex: 1; min-width: 0; }
+    .event-title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+    .event-title { font-size: 18px; font-weight: 800; color: #f7eee1; margin: 0; }
+    .event-slug-pill { font-family: monospace; font-size: 11px; color: #e4ad57; background: #1a1612; padding: 2px 8px; border-radius: 4px; border: 1px solid #2a231c; }
+    .event-meta-grid { display: flex; flex-wrap: wrap; gap: 16px; margin: 10px 0 14px; font-size: 12.5px; color: #a89f92; }
+    .event-meta-item { display: flex; align-items: center; gap: 6px; }
+    .event-actions-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    .badge-status {
+      display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
+      border-radius: 100px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+    }
+    .badge-Draft { background: rgba(142, 132, 119, 0.15); color: #8e8477; border: 1px solid #3a3228; }
+    .badge-RegistrationOpen, .badge-Registration-Open { background: rgba(228, 173, 87, 0.15); color: #e4ad57; border: 1px solid rgba(228, 173, 87, 0.4); }
+    .badge-RegistrationClosed, .badge-Registration-Closed { background: rgba(226, 105, 71, 0.15); color: #e26947; border: 1px solid rgba(226, 105, 71, 0.4); }
+    .badge-EventCompleted, .badge-Event-Completed { background: rgba(110, 219, 140, 0.15); color: #6edb8c; border: 1px solid rgba(110, 219, 140, 0.4); }
+    .badge-Archived { background: rgba(80, 70, 60, 0.25); color: #a09080; border: 1px solid #4a3e30; }
+
+    .modal-tab-bar {
+      display: flex; gap: 6px; border-bottom: 1px solid #2a231c; margin-bottom: 20px;
+      overflow-x: auto; padding-bottom: 2px;
+    }
+    .modal-tab-btn {
+      background: none; border: none; color: #8e8477; font-size: 12px; font-weight: 700;
+      padding: 8px 14px; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: all 0.2s ease;
+    }
+    .modal-tab-btn:hover { color: #f7eee1; background: #1a1612; }
+    .modal-tab-btn.active { color: #e4ad57; background: rgba(228, 173, 87, 0.12); font-weight: 800; }
+
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    @media (max-width: 640px) {
+      .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+      .event-card { flex-direction: column; }
+      .event-thumb { width: 100%; height: 160px; }
+    }
+
     @media (max-width: 768px) {
       .admin-layout { flex-direction: column; }
       .admin-sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
@@ -347,6 +396,9 @@
         <button class="admin-nav-item active" data-tab="overview" onclick="showTab('overview')">
           <span class="nav-icon">📊</span> Overview
         </button>
+        <button class="admin-nav-item" data-tab="events" onclick="showTab('events')">
+          <span class="nav-icon">🎪</span> Events Management
+        </button>
         <button class="admin-nav-item" data-tab="registrations" onclick="showTab('registrations')">
           <span class="nav-icon">📋</span> Registrations
         </button>
@@ -356,14 +408,17 @@
         <button class="admin-nav-item" data-tab="approved" onclick="showTab('approved')">
           <span class="nav-icon">✓</span> Approved
         </button>
+        <button class="admin-nav-item" data-tab="certificates" onclick="showTab('certificates')">
+          <span class="nav-icon">🏆</span> Certificates &amp; Winners
+        </button>
         <button class="admin-nav-item" data-tab="emailCenter" onclick="showTab('emailCenter')">
           <span class="nav-icon">✉️</span> Email Center
         </button>
-        <button class="admin-nav-item" data-tab="settings" onclick="showTab('settings')">
-          <span class="nav-icon">⚙️</span> Registration Settings
-        </button>
         <button class="admin-nav-item" data-tab="gallery" onclick="showTab('gallery')">
           <span class="nav-icon">🖼️</span> Event Gallery
+        </button>
+        <button class="admin-nav-item" data-tab="settings" onclick="showTab('settings')">
+          <span class="nav-icon">⚙️</span> Registration Settings
         </button>
       </nav>
       <button class="logout-btn" id="logoutBtn">⟵ Logout</button>
@@ -372,11 +427,33 @@
     <!-- Main Content -->
     <main class="admin-main">
 
+      <!-- GLOBAL EVENT CONTEXT HEADER BAR -->
+      <div class="admin-event-context-bar" style="background:#141210; border:1px solid #2a231c; border-radius:12px; padding:12px 18px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+          <span style="font-size:11px; font-weight:800; letter-spacing:0.1em; color:#8e8477; text-transform:uppercase;">MANAGING EVENT:</span>
+          <select id="globalEventSelect" class="filter-select" style="font-weight:700; color:#e4ad57; background:#0d0c0a; border-color:#3a3227; min-width:240px;" onchange="onGlobalEventChange(this.value)">
+            <option value="">All Events (Global View)</option>
+          </select>
+          <span class="status-pill status-APPROVED" id="activeEventIndicator" style="display:none;">LIVE ON HOMEPAGE</span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="cta" onclick="openCreateEventModal()" style="padding:8px 16px; font-size:12px;">
+            + CREATE EVENT
+          </button>
+          <button type="button" class="cta cta-secondary" onclick="openDuplicateCurrentEvent()" id="btnDuplicateCurrentEvent" style="padding:8px 14px; font-size:12px;">
+            ⧉ DUPLICATE
+          </button>
+          <a id="btnPreviewEventLive" href="/" target="_blank" class="cta cta-secondary" style="padding:8px 14px; font-size:12px; text-decoration:none;">
+            ↗ VIEW PUBLIC
+          </a>
+        </div>
+      </div>
+
       <!-- ── OVERVIEW TAB ──────────────────────────────── -->
       <div id="tabOverview">
         <div style="margin-bottom:28px;">
           <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:36px; margin:0 0 4px;">Dashboard</h1>
-          <p style="color:#8e8477; font-size:13px; margin:0;">Online Open Mic 2026 — Registration Overview</p>
+          <p style="color:#8e8477; font-size:13px; margin:0;" id="overviewEventSubtitle">Online Open Mic — Event Overview</p>
         </div>
 
         <div class="stats-grid" id="statsGrid">
@@ -391,17 +468,75 @@
         <div style="display:flex; gap:12px; flex-wrap:wrap;">
           <button class="cta cta-secondary" onclick="loadOverview()">⟳ Refresh Stats</button>
           <button class="cta" onclick="showTab('pending')">Review Pending Registrations →</button>
+          <button class="cta cta-secondary" onclick="showTab('events')">🎪 Manage All Events →</button>
+        </div>
+      </div>
+
+      <!-- ── EVENTS MANAGEMENT TAB ──────────────────────── -->
+      <div id="tabEvents" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 4px;">Events Management</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Create, edit, duplicate, activate, and archive Open Mic editions without writing code.</p>
+          </div>
+          <button type="button" class="cta" onclick="openCreateEventModal()">+ CREATE NEW EVENT</button>
+        </div>
+
+        <div class="subnav-bar">
+          <button class="subnav-btn active" id="subnavEventAll" onclick="filterEventsTab('ALL')">All Events (<span id="countEventsAll">0</span>)</button>
+          <button class="subnav-btn" id="subnavEventActive" onclick="filterEventsTab('ACTIVE')">Active Event (<span id="countEventsActive">0</span>)</button>
+          <button class="subnav-btn" id="subnavEventOpen" onclick="filterEventsTab('Registration Open')">Registration Open (<span id="countEventsOpen">0</span>)</button>
+          <button class="subnav-btn" id="subnavEventDraft" onclick="filterEventsTab('Draft')">Drafts (<span id="countEventsDraft">0</span>)</button>
+          <button class="subnav-btn" id="subnavEventCompleted" onclick="filterEventsTab('Event Completed')">Completed (<span id="countEventsCompleted">0</span>)</button>
+          <button class="subnav-btn" id="subnavEventArchived" onclick="filterEventsTab('Archived')">Archived (<span id="countEventsArchived">0</span>)</button>
+        </div>
+
+        <div id="eventsListWrapper">
+          <div class="empty-state"><p>Loading events…</p></div>
+        </div>
+      </div>
+
+      <!-- ── CERTIFICATES & WINNERS TAB ──────────────────── -->
+      <div id="tabCertificates" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 4px;">Certificates &amp; Winners</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Assign official winner titles, citations, and badges to performers, and preview event-specific certificates.</p>
+          </div>
+        </div>
+
+        <div class="controls-bar">
+          <select class="filter-select" id="certEventFilter" onchange="loadCertificatesTab()">
+            <option value="">Select Event...</option>
+          </select>
+          <input type="search" class="search-input" id="certSearchInput" placeholder="Search participant name, registration ID…" oninput="filterCertificatesList()">
+          <button class="cta cta-secondary" onclick="loadCertificatesTab()">⟳ Refresh</button>
+        </div>
+
+        <div id="certTableWrapper">
+          <div class="empty-state"><p>Select an event to view participant credentials…</p></div>
         </div>
       </div>
 
       <!-- ── REGISTRATIONS TAB ──────────────────────────── -->
       <div id="tabRegistrations" style="display:none;">
-        <div style="margin-bottom:24px;">
-          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">All Registrations</h1>
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">All Registrations</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Filter, search, review, and download participant details.</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="cta cta-primary" id="btnExportCsv" onclick="exportRegistrationsCsv()" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Download Filtered CSV
+            </button>
+          </div>
         </div>
-        <div class="controls-bar">
-          <input type="search" class="search-input" id="searchInput" placeholder="Search name, email, ID, phone…">
-          <select class="filter-select" id="statusFilter">
+        <div class="controls-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <select class="filter-select" id="regEventFilter" onchange="loadRegistrations()">
+            <option value="">All Events</option>
+          </select>
+          <input type="search" class="search-input" id="searchInput" placeholder="Search name, email, ID, phone…" oninput="loadRegistrations()">
+          <select class="filter-select" id="statusFilter" onchange="loadRegistrations()">
             <option value="ALL">All Statuses</option>
             <option value="PENDING_VERIFICATION">Pending Verification</option>
             <option value="VERIFIED">Verified</option>
@@ -409,7 +544,15 @@
             <option value="REJECTED">Rejected</option>
             <option value="REVOKED">Revoked / Cancelled</option>
           </select>
-          <button class="cta cta-secondary" onclick="loadRegistrations()">⟳ Refresh</button>
+          <select class="filter-select" id="regCategoryFilter" onchange="loadRegistrations()">
+            <option value="ALL">All Categories</option>
+          </select>
+          <select class="filter-select" id="regCheckinFilter" onchange="loadRegistrations()">
+            <option value="ALL">All Attendance</option>
+            <option value="1">Checked In Only</option>
+            <option value="0">Not Checked In</option>
+          </select>
+          <button type="button" class="cta cta-secondary" onclick="loadRegistrations()">⟳ Refresh</button>
         </div>
         <div id="regTableWrapper">
           <div class="empty-state"><p>Loading registrations…</p></div>
@@ -418,9 +561,16 @@
 
       <!-- ── PENDING TAB ────────────────────────────────── -->
       <div id="tabPending" style="display:none;">
-        <div style="margin-bottom:24px;">
-          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Pending Review</h1>
-          <p style="color:#8e8477; font-size:13px;">Verified registrations waiting for approval.</p>
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Pending Review</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Verified registrations waiting for approval.</p>
+          </div>
+          <div>
+            <button type="button" class="cta cta-secondary" onclick="exportRegistrationsCsv({ status: 'PENDING_VERIFICATION' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Export Pending CSV
+            </button>
+          </div>
         </div>
         <div id="pendingTableWrapper">
           <div class="empty-state"><p>Loading…</p></div>
@@ -429,8 +579,16 @@
 
       <!-- ── APPROVED TAB ────────────────────────────────── -->
       <div id="tabApproved" style="display:none;">
-        <div style="margin-bottom:24px;">
-          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Approved Registrations</h1>
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Approved Registrations</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Confirmed and approved performers.</p>
+          </div>
+          <div>
+            <button type="button" class="cta cta-secondary" onclick="exportRegistrationsCsv({ status: 'APPROVED' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Export Approved CSV
+            </button>
+          </div>
         </div>
         <div id="approvedTableWrapper">
           <div class="empty-state"><p>Loading…</p></div>
@@ -458,8 +616,11 @@
               <span style="color:#e4ad57; font-size:12px; font-weight:700;" id="customEmailSelectedCount">0 recipients selected</span>
             </div>
 
-            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
-              <input type="search" class="admin-input" id="customEmailSearch" placeholder="Search name, ID, email, serial number..." style="margin-bottom:0;" oninput="filterCustomEmailList()">
+            <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+              <input type="search" class="admin-input" id="customEmailSearch" placeholder="Search name, ID, email..." style="margin-bottom:0;" oninput="filterCustomEmailList()">
+              <select class="admin-select" id="customEmailEventFilter" style="margin-bottom:0;" onchange="filterCustomEmailList()">
+                <option value="">All Events</option>
+              </select>
               <select class="admin-select" id="customEmailCategoryFilter" style="margin-bottom:0;" onchange="filterCustomEmailList()">
                 <option value="ALL">All Categories</option>
               </select>
@@ -503,10 +664,17 @@
               <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{category}')">{category}</button>
               <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{entry}')">{entry}</button>
               <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{city}')">{city}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{event_name}')">{event_name}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{event_date}')">{event_date}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{event_time}')">{event_time}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{venue}')">{venue}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{venue_address}')">{venue_address}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{registration_fee}')">{registration_fee}</button>
+              <button type="button" class="placeholder-chip" onclick="insertCustomPlaceholder('{certificate_url}')">{certificate_url}</button>
             </div>
 
             <label class="admin-label">Email Message</label>
-            <textarea class="admin-textarea" id="customEmailBody" rows="8" placeholder="Dear {name},&#10;&#10;Your registration ID is {registration_id}. We are excited to announce your {category} performance slot..."></textarea>
+            <textarea class="admin-textarea" id="customEmailBody" rows="8" placeholder="Dear {name},&#10;&#10;Your registration ID is {registration_id}. We are excited to announce your {category} performance slot for {event_name} on {event_date} at {venue}..."></textarea>
 
             <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:8px;">
               <button type="button" class="cta cta-secondary" onclick="openPreviewCustomEmail()">👁️ Preview Email</button>
@@ -815,6 +983,383 @@
   <div id="lightboxOverlay" onclick="closeLightbox()">
     <button id="lightboxClose" onclick="closeLightbox()" title="Close">✕</button>
     <img id="lightboxImg" src="" alt="Payment Screenshot" onclick="event.stopPropagation()">
+  </div>
+
+  <!-- Event Editor Modal (Create / Edit) -->
+  <div class="modal-overlay" id="eventEditorModal" style="display:none;">
+    <div class="modal-card" style="width: min(840px, 95vw); max-height: 90vh;">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;" id="eventModalKicker">EVENT MANAGEMENT</div>
+          <div style="font-size:18px; font-weight:800; color:#f7eee1;" id="eventModalHeading">Create New Event</div>
+        </div>
+        <button class="modal-close" onclick="closeEventModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px 24px;">
+        <!-- Tab Bar -->
+        <div class="modal-tab-bar">
+          <button type="button" class="modal-tab-btn active" id="tabBtnEvtBasic" onclick="switchEvtModalTab('basic')">1. Basic Info</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtDateTime" onclick="switchEvtModalTab('datetime')">2. Date &amp; Time</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtVenue" onclick="switchEvtModalTab('venue')">3. Venue</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtPricing" onclick="switchEvtModalTab('pricing')">4. Pricing &amp; UPI</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtMedia" onclick="switchEvtModalTab('media')">5. Media &amp; Posters</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtReg" onclick="switchEvtModalTab('reg')">6. Registration</button>
+          <button type="button" class="modal-tab-btn" id="tabBtnEvtSocial" onclick="switchEvtModalTab('social')">7. Social &amp; Contact</button>
+        </div>
+
+        <form id="eventEditorForm" onsubmit="saveEventForm(event)">
+          <!-- TAB 1: BASIC INFO -->
+          <div id="evtTabContentBasic">
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Event Slug (Unique URL identifier) <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtSlug" placeholder="e.g. open-mic-delhi-2027" required pattern="[a-z0-9\-]+" title="Lowercase letters, numbers, and hyphens only">
+                <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">URL will be: /event/{slug}</small>
+              </div>
+              <div>
+                <label class="admin-label">Event Status <span style="color:#e4ad57;">*</span></label>
+                <select class="admin-select" id="evtStatus" required>
+                  <option value="Draft">Draft (Hidden from public listings)</option>
+                  <option value="Registration Open">Registration Open (Accepting bookings)</option>
+                  <option value="Registration Closed">Registration Closed (Sold out / closed)</option>
+                  <option value="Event Completed">Event Completed (Certificates &amp; gallery live)</option>
+                  <option value="Archived">Archived (Past edition history)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Event Name <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtName" placeholder="e.g. Online Open Mic 2026" required>
+              </div>
+              <div>
+                <label class="admin-label">Event Display Title <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtTitle" placeholder="e.g. Online Open Mic — 23 September" required>
+              </div>
+            </div>
+
+            <label class="admin-label">Short Description / Subtitle</label>
+            <input type="text" class="admin-input" id="evtShortDescription" placeholder="e.g. An intimate platform celebrating poetry, storytelling, and music.">
+
+            <label class="admin-label">Full Event Description</label>
+            <textarea class="admin-textarea" id="evtDescription" rows="4" placeholder="Detailed event narrative, themes, stage details, what creators can expect..."></textarea>
+          </div>
+
+          <!-- TAB 2: DATE & TIME -->
+          <div id="evtTabContentDateTime" style="display:none;">
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Display Date <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtDate" placeholder="e.g. 23 September 2026" required>
+              </div>
+              <div>
+                <label class="admin-label">Display Time <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtTime" placeholder="e.g. 7:30 PM IST" required>
+              </div>
+            </div>
+
+            <div class="form-grid-3">
+              <div>
+                <label class="admin-label">Start Time</label>
+                <input type="text" class="admin-input" id="evtStartTime" placeholder="e.g. 19:30">
+              </div>
+              <div>
+                <label class="admin-label">End Time</label>
+                <input type="text" class="admin-input" id="evtEndTime" placeholder="e.g. 21:30">
+              </div>
+              <div>
+                <label class="admin-label">Timezone</label>
+                <input type="text" class="admin-input" id="evtTimezone" value="IST (GMT+5:30)">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Registration Opening Date</label>
+                <input type="text" class="admin-input" id="evtRegOpeningDate" placeholder="e.g. 1 September 2026">
+              </div>
+              <div>
+                <label class="admin-label">Registration Closing Date</label>
+                <input type="text" class="admin-input" id="evtRegClosingDate" placeholder="e.g. 22 September 2026">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: VENUE -->
+          <div id="evtTabContentVenue" style="display:none;">
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Venue Name <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtVenue" placeholder="e.g. Online (Google Meet) or The Piano Man" required>
+              </div>
+              <div>
+                <label class="admin-label">City <span style="color:#e4ad57;">*</span></label>
+                <input type="text" class="admin-input" id="evtCity" placeholder="e.g. New Delhi, Mumbai, Online" required>
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">State / Region</label>
+                <input type="text" class="admin-input" id="evtState" placeholder="e.g. Delhi, Maharashtra">
+              </div>
+              <div>
+                <label class="admin-label">Google Maps URL</label>
+                <input type="url" class="admin-input" id="evtGoogleMapsUrl" placeholder="https://maps.google.com/...">
+              </div>
+            </div>
+
+            <label class="admin-label">Full Venue Address</label>
+            <textarea class="admin-textarea" id="evtVenueAddress" rows="2" placeholder="e.g. Commercial Complex B 6/7/8 Safdarjung Enclave, New Delhi"></textarea>
+
+            <label class="admin-label">Venue Image URL (Optional)</label>
+            <input type="text" class="admin-input" id="evtVenueImage" placeholder="https://... or /assets/...">
+          </div>
+
+          <!-- TAB 4: PRICING & PAYMENT -->
+          <div id="evtTabContentPricing" style="display:none;">
+            <div class="form-grid-3">
+              <div>
+                <label class="admin-label">Registration Fee <span style="color:#e4ad57;">*</span></label>
+                <input type="number" class="admin-input" id="evtFee" min="0" value="79" required>
+              </div>
+              <div>
+                <label class="admin-label">Currency</label>
+                <input type="text" class="admin-input" id="evtCurrency" value="₹">
+              </div>
+              <div>
+                <label class="admin-label">Early-Bird / Discount Price (Optional)</label>
+                <input type="number" class="admin-input" id="evtEarlyBirdPrice" placeholder="e.g. 49">
+              </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px;">
+                <input type="checkbox" id="evtIsRegistrationFeeEnabled" checked>
+                <span>Enable Entry Fee Collection for this event (uncheck for free events)</span>
+              </label>
+            </div>
+
+            <label class="admin-label">Allowed Performance Categories (Comma-separated)</label>
+            <input type="text" class="admin-input" id="evtAllowedCategories" value="Poetry & Shayari, Storytelling, Stand-up Comedy, Music & Vocals, Spoken Word, Other">
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">UPI Payee Name</label>
+                <input type="text" class="admin-input" id="evtPayeeName" value="Preeti Yadav / Offstage Creators">
+              </div>
+              <div>
+                <label class="admin-label">UPI ID</label>
+                <input type="text" class="admin-input" id="evtUpiId" value="preetiyadav15071985@okaxis">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Payment QR Image URL</label>
+                <input type="text" class="admin-input" id="evtPaymentQr" value="/assets/payment-qr.jpeg">
+              </div>
+              <div>
+                <label class="admin-label">Payment Instructions</label>
+                <input type="text" class="admin-input" id="evtPaymentInstructions" value="Pay via Google Pay, PhonePe, Paytm, or BHIM, then enter your UTR and upload screenshot.">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 5: MEDIA & POSTERS -->
+          <div id="evtTabContentMedia" style="display:none;">
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Main Event Poster URL</label>
+                <input type="text" class="admin-input" id="evtPosterUrl" value="/assets/poster.jpeg" placeholder="/assets/poster.jpeg">
+              </div>
+              <div>
+                <label class="admin-label">Event Banner / Wide Poster URL</label>
+                <input type="text" class="admin-input" id="evtBannerUrl" placeholder="https://... or /assets/...">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Event Logo URL</label>
+                <input type="text" class="admin-input" id="evtLogoUrl" value="/assets/logo.png">
+              </div>
+              <div>
+                <label class="admin-label">Promotional Video / Reel Link</label>
+                <input type="url" class="admin-input" id="evtPromoVideoUrl" placeholder="https://www.instagram.com/reel/... or YouTube">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 6: REGISTRATION SETTINGS -->
+          <div id="evtTabContentReg" style="display:none;">
+            <div style="margin-bottom:16px;">
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px;">
+                <input type="checkbox" id="evtIsRegistrationOpen" checked>
+                <span style="font-weight:700;">Accepting Registrations (Enable / Disable registration form)</span>
+              </label>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Registration Button Text</label>
+                <input type="text" class="admin-input" id="evtRegButtonText" value="RESERVE PERFORMANCE SLOT">
+              </div>
+              <div>
+                <label class="admin-label">Maximum Registrations (0 for unlimited)</label>
+                <input type="number" class="admin-input" id="evtMaxRegistrations" value="50">
+              </div>
+            </div>
+
+            <label class="admin-label">Registration Confirmation Message</label>
+            <textarea class="admin-textarea" id="evtConfirmationMessage" rows="2" placeholder="Your performance registration has been received! Our curators are reviewing your submission."></textarea>
+
+            <label class="admin-label">Performance Guidelines</label>
+            <textarea class="admin-textarea" id="evtPerformanceGuidelines" rows="2" placeholder="5–7 minute performance slot. Maintain artistic respect and creative honesty."></textarea>
+          </div>
+
+          <!-- TAB 7: SOCIAL & CONTACT -->
+          <div id="evtTabContentSocial" style="display:none;">
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Contact Email</label>
+                <input type="email" class="admin-input" id="evtContactEmail" value="support@offstagecreators.com">
+              </div>
+              <div>
+                <label class="admin-label">Contact Phone</label>
+                <input type="text" class="admin-input" id="evtContactPhone" placeholder="+91 99999 99999">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">Instagram URL</label>
+                <input type="url" class="admin-input" id="evtInstagram" value="https://www.instagram.com/offstagecreators/">
+              </div>
+              <div>
+                <label class="admin-label">YouTube URL</label>
+                <input type="url" class="admin-input" id="evtYoutube" placeholder="https://youtube.com/@offstagecreators">
+              </div>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label class="admin-label">WhatsApp Group / Contact Link</label>
+                <input type="url" class="admin-input" id="evtWhatsapp" placeholder="https://chat.whatsapp.com/...">
+              </div>
+              <div>
+                <label class="admin-label">Google Meet Session Link</label>
+                <input type="url" class="admin-input" id="evtGoogleMeetLink" placeholder="https://meet.google.com/xxx-yyyy-zzz">
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions" style="justify-content:space-between; margin-top:16px;">
+            <button type="button" class="action-btn btn-view" onclick="closeEventModal()">Cancel</button>
+            <div style="display:flex; gap:10px;">
+              <button type="submit" class="cta" id="btnSaveEvent">✓ Save Event</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Duplicate Event Modal -->
+  <div class="modal-overlay" id="duplicateEventModal" style="display:none;">
+    <div class="modal-card" style="width: min(520px, 92vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">DUPLICATE EVENT TEMPLATE</div>
+          <div style="font-size:17px; font-weight:800; color:#f7eee1;">Clone Event as Template</div>
+        </div>
+        <button class="modal-close" onclick="closeDuplicateModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <p style="color:#d5cbbd; font-size:13.5px; line-height:1.6; margin-top:0;">
+          Clones pricing, venue defaults, guidelines, email templates, and settings. <b>No participants, registrations, or certificates are cloned.</b>
+        </p>
+
+        <div style="background:#110f0d; border:1px solid #2a231c; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px;">
+          <span style="color:#8e8477;">Source Event:</span>
+          <span style="color:#e4ad57; font-weight:700; margin-left:6px;" id="dupSourceEventDisplay">—</span>
+        </div>
+
+        <form id="duplicateEventForm" onsubmit="submitDuplicateEvent(event)">
+          <input type="hidden" id="dupSourceSlug">
+
+          <label class="admin-label">New Event Slug <span style="color:#e4ad57;">*</span></label>
+          <input type="text" class="admin-input" id="dupNewSlug" placeholder="e.g. open-mic-delhi-2027" required pattern="[a-z0-9\-]+">
+
+          <label class="admin-label">New Event Name <span style="color:#e4ad57;">*</span></label>
+          <input type="text" class="admin-input" id="dupNewName" placeholder="e.g. Open Mic Delhi 2027" required>
+
+          <label class="admin-label">New Event Display Title</label>
+          <input type="text" class="admin-input" id="dupNewTitle" placeholder="e.g. Open Mic Delhi 2027 — Live in Safdarjung">
+
+          <label class="admin-label">New Event Date</label>
+          <input type="text" class="admin-input" id="dupNewDate" placeholder="e.g. 15 March 2027">
+
+          <div class="modal-actions" style="padding:16px 0 0; border-top:1px solid #2a231c; justify-content:flex-end;">
+            <button type="button" class="action-btn btn-view" onclick="closeDuplicateModal()">Cancel</button>
+            <button type="submit" class="cta" id="btnConfirmDuplicate">⧉ Clone Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Winner & Achievement Modal -->
+  <div class="modal-overlay" id="winnerModal" style="display:none;">
+    <div class="modal-card" style="width: min(540px, 92vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">OFFICIAL CERTIFICATE CREDENTIAL</div>
+          <div style="font-size:17px; font-weight:800; color:#f7eee1;">Assign Achievement / Winner</div>
+        </div>
+        <button class="modal-close" onclick="closeWinnerModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <div style="background:#110f0d; border:1px solid #2a231c; border-radius:8px; padding:12px; margin-bottom:18px; font-size:13px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+            <span style="color:#8e8477;">Performer:</span>
+            <span style="color:#f7eee1; font-weight:700;" id="winnerModalPerformerName">—</span>
+          </div>
+          <div style="display:flex; justify-content:space-between;">
+            <span style="color:#8e8477;">Registration ID:</span>
+            <span style="color:#e4ad57; font-family:monospace;" id="winnerModalRegId">—</span>
+          </div>
+        </div>
+
+        <form id="winnerForm" onsubmit="submitWinnerForm(event)">
+          <input type="hidden" id="winnerTargetRegId">
+
+          <label class="admin-label">Position / Credential Level <span style="color:#e4ad57;">*</span></label>
+          <select class="admin-select" id="winnerPositionSelect">
+            <option value="WINNER">WINNER (First Place / Excellence Medallion)</option>
+            <option value="RUNNER UP">RUNNER UP (Distinction / Recognition)</option>
+            <option value="SPECIAL RECOGNITION">SPECIAL RECOGNITION (Judges' Choice)</option>
+            <option value="PARTICIPANT">PARTICIPANT (Official Participation Certificate)</option>
+          </select>
+
+          <label class="admin-label">Certificate Title</label>
+          <input type="text" class="admin-input" id="winnerCertTitle" value="CERTIFICATE OF EXCELLENCE">
+
+          <label class="admin-label">Achievement Badge Text</label>
+          <input type="text" class="admin-input" id="winnerBadgeText" value="✦ 1ST PLACE WINNER — OUTSTANDING ARTISTRY ✦">
+
+          <label class="admin-label">Official Citation Text</label>
+          <textarea class="admin-textarea" id="winnerCitationText" rows="3" placeholder="For poetic excellence, heartfelt stage delivery, and resonant storytelling at Offstage Creators."></textarea>
+
+          <div class="modal-actions" style="padding:16px 0 0; border-top:1px solid #2a231c; justify-content:flex-end;">
+            <button type="button" class="action-btn btn-view" onclick="closeWinnerModal()">Cancel</button>
+            <button type="submit" class="cta" id="btnSaveWinner">✓ Issue Award &amp; Update Certificate</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <script src="/js/admin.js"></script>
