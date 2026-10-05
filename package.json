@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
-    "test": "node tests/run_all.js"
+    "test": "node tests/run_all.js",
+    "test:sync": "node tests/test_sync_and_banner.js"
   },
   "keywords": [
     "offstage-creators",

@@ -137,6 +137,9 @@ app.get('/api/config', async (req, res) => {
   const eventObj = activeEvent || config.EVENT;
   const isCompleted = activeEvent ? (activeEvent.status === 'event_completed') : true;
 
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.json({
     success: true,
     event: {
@@ -193,21 +196,34 @@ async function sendHydratedHtml(filePath, req, res, targetSlug = null) {
       html = html.replace('</head>', `${injection}\n</head>`);
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.send(html);
   } catch (_) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.sendFile(filePath);
   }
 }
 
+function sendNoCacheFile(filePath, res) {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  return res.sendFile(filePath);
+}
+
 app.get('/', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), req, res));
-app.get(['/events', '/all-events'], (req, res) => res.sendFile(path.join(publicDir, 'events.html')));
+app.get(['/events', '/all-events'], (req, res) => sendNoCacheFile(path.join(publicDir, 'events.html'), res));
 app.get(['/register', '/registration'], (req, res) => sendHydratedHtml(path.join(publicDir, 'register.html'), req, res));
-app.get('/registration/:id', (req, res) => res.sendFile(path.join(publicDir, 'registration.html')));
-app.get(['/registration/success', '/success'], (req, res) => res.sendFile(path.join(publicDir, 'success.html')));
-app.get('/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certificate.html')));
-app.get(['/gallery', '/event-gallery'], (req, res) => res.sendFile(path.join(publicDir, 'gallery.html')));
-app.get('/scanner', (req, res) => res.sendFile(path.join(publicDir, 'scanner.html')));
-app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
+app.get('/registration/:id', (req, res) => sendNoCacheFile(path.join(publicDir, 'registration.html'), res));
+app.get(['/registration/success', '/success'], (req, res) => sendNoCacheFile(path.join(publicDir, 'success.html'), res));
+app.get('/certificate', (req, res) => sendNoCacheFile(path.join(publicDir, 'certificate.html'), res));
+app.get(['/gallery', '/event-gallery'], (req, res) => sendNoCacheFile(path.join(publicDir, 'gallery.html'), res));
+app.get('/scanner', (req, res) => sendNoCacheFile(path.join(publicDir, 'scanner.html'), res));
+app.get('/admin', (req, res) => sendNoCacheFile(path.join(publicDir, 'admin.html'), res));
 
 // ─── Scalable Event-Specific URLs (Requirement 4) ─────────────────────────────
 app.get('/event/:slug', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), req, res, req.params.slug));

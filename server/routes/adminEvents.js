@@ -30,6 +30,46 @@ function requireAdmin(req, res, next) {
 
 router.use(requireAdmin);
 
+// Ensure no-cache on all admin event endpoints so changes reflect immediately
+router.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
+function resolveEventMedia(evt) {
+  if (!evt) return {
+    bannerUrl: '/assets/event-poster.png',
+    posterUrl: '/assets/event-poster.png',
+    banner: '/assets/event-poster.png',
+    poster: '/assets/event-poster.png',
+    image: '/assets/event-poster.png',
+    coverImage: '/assets/event-poster.png',
+    poster_url: '/assets/event-poster.png',
+    banner_url: '/assets/event-poster.png'
+  };
+
+  const isBroken = (u) => !u || typeof u !== 'string' || u.trim() === '' || u.includes('/assets/poster.jpeg');
+  const rawPoster = isBroken(evt.poster_url || evt.posterUrl) ? null : String(evt.poster_url || evt.posterUrl).trim();
+  const rawBanner = isBroken(evt.banner_url || evt.bannerUrl) ? null : String(evt.banner_url || evt.bannerUrl).trim();
+  const defaultAsset = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+
+  const banner = rawBanner || rawPoster || defaultAsset;
+  const poster = rawPoster || rawBanner || defaultAsset;
+
+  return {
+    bannerUrl: banner,
+    posterUrl: poster,
+    banner,
+    poster,
+    image: banner,
+    coverImage: banner,
+    poster_url: poster,
+    banner_url: banner
+  };
+}
+
 function slugify(text) {
   return String(text || '')
     .toLowerCase()
@@ -71,6 +111,11 @@ router.get('/', async (req, res) => {
           : (evt.allowed_categories || []);
       } catch (_) {}
 
+      const media = resolveEventMedia(evt);
+      const dateStr = evt.event_date || '';
+      const timeStr = evt.start_time ? (evt.end_time ? `${evt.start_time} – ${evt.end_time}` : evt.start_time) : (evt.time || '');
+      const venueStr = evt.venue_name || '';
+
       return {
         id: evt.id,
         slug: evt.slug,
@@ -83,19 +128,28 @@ router.get('/', async (req, res) => {
         status: evt.status,
         isActive: Boolean(evt.is_active),
         isPublished: Boolean(evt.is_published),
-        eventDate: evt.event_date || '',
+        date: dateStr,
+        eventDate: dateStr,
+        time: timeStr,
         startTime: evt.start_time || '',
         endTime: evt.end_time || '',
         timezone: evt.timezone || 'IST (GMT+5:30)',
-        venueName: evt.venue_name || '',
+        venue: venueStr,
+        venueName: venueStr,
         venueAddress: evt.venue_address || '',
         city: evt.city || '',
         state: evt.state || '',
         fee: Number(evt.fee || 79),
         currency: evt.currency || 'INR',
         upiId: evt.upi_id || 'preetiyadav15071985@okaxis',
-        posterUrl: evt.poster_url || '/assets/event-poster.png',
-        bannerUrl: evt.banner_url || '',
+        posterUrl: media.posterUrl,
+        bannerUrl: media.bannerUrl,
+        poster_url: media.poster_url,
+        banner_url: media.banner_url,
+        banner: media.banner,
+        poster: media.poster,
+        image: media.image,
+        coverImage: media.coverImage,
         regEnabled: Boolean(evt.reg_enabled),
         regButtonText: evt.reg_button_text || 'REGISTER AS PERFORMER',
         maxRegistrations: Number(evt.max_registrations || 0),
@@ -105,6 +159,9 @@ router.get('/', async (req, res) => {
         externalPlatformNotes: evt.external_platform_notes || '',
         externalOpenNewTab: evt.external_open_new_tab !== 0,
         allowedCategories,
+        registrationCount: totalReg?.c || 0,
+        pendingCount: pendingReg?.c || 0,
+        approvedCount: approvedReg?.c || 0,
         stats: {
           total: totalReg?.c || 0,
           pending: pendingReg?.c || 0,
@@ -154,18 +211,31 @@ router.get('/:slug', async (req, res) => {
       get(`SELECT COUNT(*) as c FROM registrations WHERE event_id = ? AND reg_status = 'APPROVED'`, [evt.slug])
     ]);
 
+    const media = resolveEventMedia(evt);
+    const dateStr = evt.event_date || '';
+    const timeStr = evt.start_time ? (evt.end_time ? `${evt.start_time} – ${evt.end_time}` : evt.start_time) : (evt.time || '');
+    const venueStr = evt.venue_name || '';
+
     return res.json({
       success: true,
       event: {
         ...evt,
-        posterUrl: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
-        poster_url: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
-        venue: evt.venue_name || '',
-        venueName: evt.venue_name || '',
+        posterUrl: media.posterUrl,
+        bannerUrl: media.bannerUrl,
+        poster_url: media.poster_url,
+        banner_url: media.banner_url,
+        banner: media.banner,
+        poster: media.poster,
+        image: media.image,
+        coverImage: media.coverImage,
+        venue: venueStr,
+        venueName: venueStr,
         venueAddress: evt.venue_address || '',
-        date: evt.event_date || '',
-        eventDate: evt.event_date || '',
-        time: evt.start_time ? (evt.end_time ? `${evt.start_time} – ${evt.end_time}` : evt.start_time) : (evt.time || ''),
+        date: dateStr,
+        eventDate: dateStr,
+        time: timeStr,
+        startTime: evt.start_time || '',
+        endTime: evt.end_time || '',
         fee: Number(evt.fee !== undefined ? evt.fee : 79),
         isActive: evt.is_active === 1 ? 1 : 0,
         isPublished: Boolean(evt.is_published),
@@ -181,6 +251,8 @@ router.get('/:slug', async (req, res) => {
         allowedCategories,
         pricingTiers,
         otherLinks,
+        registrationCount: totalReg?.c || 0,
+        approvedCount: approvedReg?.c || 0,
         stats: {
           total: totalReg?.c || 0,
           approved: approvedReg?.c || 0
@@ -234,7 +306,13 @@ router.post('/', async (req, res) => {
     const eventDate = (b.eventDate || b.date || '').trim();
     const startTime = (b.startTime || b.time || '').trim();
     const endTime = (b.endTime || '').trim();
-    const posterUrl = (b.posterUrl || b.poster || '/assets/event-poster.png').trim();
+    const media = resolveEventMedia({
+      slug,
+      poster_url: b.posterUrl || b.poster,
+      banner_url: b.bannerUrl || b.banner
+    });
+    const posterUrl = media.posterUrl;
+    const bannerUrl = media.bannerUrl;
     const fee = b.fee !== undefined ? Number(b.fee) : 79;
     const status = b.status || (isActive ? 'Registration Open' : 'Draft');
     const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : 1);
@@ -297,7 +375,7 @@ router.post('/', async (req, res) => {
         b.isPaid !== undefined ? (b.isPaid ? 1 : 0) : 1, fee, b.currency || 'INR', pricingTiersJson, b.earlyBirdFee ? Number(b.earlyBirdFee) : null,
         b.upiId || 'preetiyadav15071985@okaxis', b.payeeName || 'Preeti Yadav / Offstage Creators', b.qrAssetPath || '/assets/payment-qr.jpeg',
         b.paymentInstructions || 'Pay registration fee via UPI and upload proof.',
-        posterUrl, b.bannerUrl || posterUrl, b.logoUrl || '/assets/logo.png', b.promoVideoUrl || '',
+        posterUrl, bannerUrl, b.logoUrl || '/assets/logo.png', b.promoVideoUrl || '',
         regEnabled, b.registrationButtonText || b.regButtonText || 'REGISTER AS PERFORMER', Number(b.maxRegistrations || 0), b.confirmationMessage || 'Thank you for registering!',
         categoriesJson, b.contactEmail || 'offstagecreators77@gmail.com', b.contactPhone || '',
         b.instagramUrl || 'https://www.instagram.com/offstagecreators/', b.youtubeUrl || '', b.whatsappUrl || '', b.meetLink || '', otherLinksJson,
@@ -351,10 +429,13 @@ router.put('/:slug', async (req, res) => {
     const eventDate = b.eventDate !== undefined ? b.eventDate : (b.date !== undefined ? b.date : existing.event_date);
     const startTime = b.startTime !== undefined ? b.startTime : (b.time !== undefined ? b.time : existing.start_time);
     const endTime = b.endTime !== undefined ? b.endTime : existing.end_time;
-    let posterUrl = b.posterUrl !== undefined ? b.posterUrl : (b.poster !== undefined ? b.poster : existing.poster_url);
-    if (!posterUrl || posterUrl === '/assets/poster.jpeg') {
-      posterUrl = (existing.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
-    }
+    const media = resolveEventMedia({
+      slug: existing.slug,
+      poster_url: b.posterUrl !== undefined ? b.posterUrl : (b.poster !== undefined ? b.poster : existing.poster_url),
+      banner_url: b.bannerUrl !== undefined ? b.bannerUrl : (b.banner !== undefined ? b.banner : existing.banner_url)
+    });
+    const posterUrl = media.posterUrl;
+    const bannerUrl = media.bannerUrl;
     const fee = b.fee !== undefined ? Number(b.fee) : existing.fee;
     const status = b.status !== undefined ? b.status : existing.status;
     const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : existing.reg_enabled);
@@ -425,7 +506,7 @@ router.put('/:slug', async (req, res) => {
         b.qrAssetPath !== undefined ? b.qrAssetPath : existing.qr_asset_path,
         b.paymentInstructions !== undefined ? b.paymentInstructions : existing.payment_instructions,
         posterUrl,
-        b.bannerUrl !== undefined ? b.bannerUrl : existing.banner_url,
+        bannerUrl,
         b.logoUrl !== undefined ? b.logoUrl : existing.logo_url,
         b.promoVideoUrl !== undefined ? b.promoVideoUrl : existing.promo_video_url,
         regEnabled,
@@ -555,10 +636,13 @@ router.post('/:slug/set-active', async (req, res) => {
     await run(`UPDATE events SET is_active = 0`);
     await run(`UPDATE events SET is_active = 1, updated_at = ? WHERE id = ?`, [new Date().toISOString(), evt.id]);
 
+    const updated = await getEventBySlug(evt.slug);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     return res.json({
       success: true,
       message: `"${evt.name}" is now the active event on the website.`,
-      activeSlug: evt.slug
+      activeSlug: evt.slug,
+      event: updated
     });
   } catch (err) {
     console.error('[Admin Events] Set active error:', err);

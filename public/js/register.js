@@ -81,7 +81,10 @@
       const endpoint = targetEventSlug
         ? `/api/events/${encodeURIComponent(targetEventSlug)}`
         : '/api/events/active';
-      const res = await fetch(endpoint);
+      const res = await fetch(endpoint, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.event) {

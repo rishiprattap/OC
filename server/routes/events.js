@@ -6,6 +6,14 @@ const express = require('express');
 const router = express.Router();
 const { getActiveEvent, getEventBySlug, listEvents, all } = require('../db');
 
+// Ensure no-cache on all public dynamic events endpoints so updates reflect immediately
+router.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 function formatEventPublic(evt) {
   if (!evt) return null;
   let allowedCategories = [];
@@ -57,6 +65,14 @@ function formatEventPublic(evt) {
       ? 'Registration is currently disabled'
       : 'Register directly with Offstage Creators');
 
+  const isBroken = (u) => !u || typeof u !== 'string' || u.trim() === '' || u.includes('/assets/poster.jpeg');
+  const rawPoster = isBroken(evt.poster_url || evt.posterUrl) ? null : String(evt.poster_url || evt.posterUrl).trim();
+  const rawBanner = isBroken(evt.banner_url || evt.bannerUrl) ? null : String(evt.banner_url || evt.bannerUrl).trim();
+  const defaultAsset = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+
+  const banner = rawBanner || rawPoster || defaultAsset;
+  const poster = rawPoster || rawBanner || defaultAsset;
+
   return {
     id: evt.id,
     slug: evt.slug,
@@ -97,9 +113,14 @@ function formatEventPublic(evt) {
       qrAssetPath: evt.qr_asset_path || '/assets/payment-qr.jpeg',
       amount: Number(evt.fee || 79)
     },
-    paymentInstructions: evt.payment_instructions || 'Pay via UPI using any payment app. Enter UTR and upload screenshot.',
-    posterUrl: (evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : ((evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png'),
-    bannerUrl: (evt.banner_url && evt.banner_url !== '/assets/poster.jpeg') ? evt.banner_url : ((evt.poster_url && evt.poster_url !== '/assets/poster.jpeg') ? evt.poster_url : '/assets/event-poster.png'),
+    posterUrl: poster,
+    bannerUrl: banner,
+    poster_url: poster,
+    banner_url: banner,
+    banner,
+    poster,
+    image: banner,
+    coverImage: banner,
     logoUrl: evt.logo_url || '/assets/logo.png',
     promoVideoUrl: evt.promo_video_url || '',
     registrationProvider,

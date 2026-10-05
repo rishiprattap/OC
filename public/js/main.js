@@ -254,7 +254,10 @@
         ? `/api/events/${encodeURIComponent(targetSlug)}`
         : '/api/events/active';
 
-      const res = await fetch(endpoint);
+      const res = await fetch(endpoint, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
       if (!res.ok) throw new Error('API response not ok');
       const data = await res.json();
       if (!data.success || !data.event) throw new Error('No event returned');

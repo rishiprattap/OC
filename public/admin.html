@@ -315,7 +315,12 @@
     .event-card.is-active { border-color: #e4ad57; box-shadow: 0 0 20px rgba(228, 173, 87, 0.15); }
     .event-thumb {
       width: 100px; height: 130px; object-fit: cover; border-radius: 8px;
-      background: #0d0c0a; border: 1px solid #2a231c; flex-shrink: 0;
+      background: #1a1612; border: 1px solid #2a231c; flex-shrink: 0;
+      display: block; transition: opacity 0.2s ease;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
     }
     .event-info { flex: 1; min-width: 0; }
     .event-title-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }

@@ -17,12 +17,15 @@
   // ── Admin Fetch Helper (supports session & secret header on Vercel) ───────────
   function adminFetch(url, options = {}) {
     const headers = { ...(options.headers || {}) };
+    headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+    headers['Pragma'] = 'no-cache';
     const adminKey = sessionStorage.getItem('oc_admin_key');
     if (adminKey) {
       headers['x-admin-secret'] = adminKey;
       headers['x-admin-password'] = adminKey;
     }
     return fetch(url, {
+      cache: 'no-store',
       ...options,
       headers,
       credentials: 'include'
@@ -2029,6 +2032,19 @@
   }
 
   window.loadEventsTab = async function () {
+    const wrapper = document.getElementById('eventsListWrapper');
+    if (wrapper && (!adminEvents || adminEvents.length === 0)) {
+      wrapper.innerHTML = `
+        <div class="event-card-skeleton" style="background:#141210; border:1px solid #2a231c; border-radius:12px; padding:20px; margin-bottom:16px; display:flex; gap:20px; align-items:flex-start;">
+          <div style="width:100px; height:130px; border-radius:8px; background:linear-gradient(90deg, #1a1612 25%, #252019 50%, #1a1612 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; flex-shrink:0;"></div>
+          <div style="flex:1;">
+            <div style="height:20px; width:220px; border-radius:4px; background:#1e1a15; margin-bottom:12px;"></div>
+            <div style="height:14px; width:340px; border-radius:4px; background:#1a1612; margin-bottom:16px;"></div>
+            <div style="height:14px; width:80%; border-radius:4px; background:#1a1612; margin-bottom:8px;"></div>
+          </div>
+        </div>
+      `;
+    }
     await loadAdminEventsList();
     renderEventsList(eventsTabFilter);
   };
@@ -2076,10 +2092,11 @@
       const isCurrentActive = Boolean(evt.isActive);
       const isSelectedContext = activeAdminEventId === evt.slug;
       const statusClass = 'badge-' + (evt.status || 'Draft').replace(/[^a-zA-Z0-9]/g, '');
+      const bannerSrc = evt.bannerUrl || evt.posterUrl || evt.banner_url || evt.poster_url || evt.image || '/assets/event-poster.png';
 
       return `
         <div class="event-card ${isCurrentActive ? 'is-active' : ''}" style="${isSelectedContext ? 'box-shadow: 0 0 0 2px #e4ad57;' : ''}">
-          <img src="${evt.posterUrl || '/assets/poster.jpeg'}" alt="${escHtml(evt.name)}" class="event-thumb" onerror="this.src='/assets/poster.jpeg'">
+          <img src="${bannerSrc}" alt="${escHtml(evt.name || evt.title || 'Event')}" class="event-thumb" onerror="this.onerror=null; this.src='/assets/event-poster.png';">
 
           <div class="event-info">
             <div class="event-title-row">
@@ -2237,7 +2254,8 @@
     document.getElementById('evtPayeeName').value = 'Preeti Yadav / Offstage Creators';
     document.getElementById('evtUpiId').value = 'preetiyadav15071985@okaxis';
     document.getElementById('evtPaymentQr').value = '/assets/payment-qr.jpeg';
-    document.getElementById('evtPosterUrl').value = '/assets/poster.jpeg';
+    document.getElementById('evtPosterUrl').value = '/assets/event-poster.png';
+    if (document.getElementById('evtBannerUrl')) document.getElementById('evtBannerUrl').value = '/assets/event-poster.png';
     document.getElementById('evtLogoUrl').value = '/assets/logo.png';
     document.getElementById('evtIsRegistrationOpen').checked = true;
     document.getElementById('evtIsRegistrationFeeEnabled').checked = true;
@@ -2319,12 +2337,14 @@
       document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || evt.payment_instructions || '';
 
       // Tab 5: Media
-      let poster = evt.posterUrl || evt.poster_url;
-      if (!poster || poster === '/assets/poster.jpeg') {
-        poster = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
-      }
+      const defaultAsset = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+      let poster = evt.posterUrl || evt.poster_url || evt.bannerUrl || evt.banner_url || defaultAsset;
+      if (poster === '/assets/poster.jpeg') poster = defaultAsset;
+      let banner = evt.bannerUrl || evt.banner_url || poster || defaultAsset;
+      if (banner === '/assets/poster.jpeg') banner = poster;
+
       document.getElementById('evtPosterUrl').value = poster;
-      document.getElementById('evtBannerUrl').value = evt.bannerUrl || evt.banner_url || poster;
+      document.getElementById('evtBannerUrl').value = banner;
       document.getElementById('evtLogoUrl').value = evt.logoUrl || evt.logo_url || '/assets/logo.png';
       document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || evt.promo_video_url || '';
 
@@ -2451,9 +2471,14 @@
       }
     }
 
+    const defaultAsset = (slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
     let posterUrl = (document.getElementById('evtPosterUrl').value || '').trim();
     if (!posterUrl || posterUrl === '/assets/poster.jpeg') {
-      posterUrl = (slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
+      posterUrl = defaultAsset;
+    }
+    let bannerUrl = (document.getElementById('evtBannerUrl')?.value || '').trim();
+    if (!bannerUrl || bannerUrl === '/assets/poster.jpeg') {
+      bannerUrl = posterUrl;
     }
 
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
