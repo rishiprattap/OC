@@ -289,8 +289,11 @@
         const previewImages = data.images.slice(0, 4);
         const grid = document.createElement('div');
         grid.style.display = 'grid';
-        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))';
+        grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))';
         grid.style.gap = '16px';
+        grid.style.width = '100%';
+        grid.style.maxWidth = '100%';
+        grid.style.boxSizing = 'border-box';
 
         previewImages.forEach(img => {
           const a = document.createElement('a');

@@ -71,8 +71,8 @@
       <div class="hero-content">
         <div class="hero-title-group">
           <p class="kicker orange" id="heroKicker">OFFSTAGE CREATORS PRESENTS</p>
-          <h1 id="heroTitle"><span class="skeleton-shimmer skeleton-text" style="width: 280px; height: 52px; margin-bottom: 8px;"></span><br><span class="skeleton-shimmer skeleton-text" style="width: 220px; height: 52px;"></span></h1>
-          <p class="hero-quote" id="heroQuote"><span class="skeleton-shimmer skeleton-text" style="width: 320px; height: 18px;"></span></p>
+          <h1 id="heroTitle"><span class="skeleton-shimmer skeleton-text" style="max-width: 100%; width: 280px; height: 52px; margin-bottom: 8px;"></span><br><span class="skeleton-shimmer skeleton-text" style="max-width: 100%; width: 220px; height: 52px;"></span></h1>
+          <p class="hero-quote" id="heroQuote"><span class="skeleton-shimmer skeleton-text" style="max-width: 100%; width: 320px; height: 18px;"></span></p>
           <p class="badge badge-gold" id="heroBadgeNotice" style="margin-top: 6px; display: none;"></p>
         </div>
 
@@ -176,13 +176,13 @@
     </section>
 
     <!-- EVENT GALLERY PREVIEW SECTION -->
-    <section class="gallery-section" id="gallery" style="padding: 70px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: rgba(18, 15, 12, 0.65);">
-      <div style="width: min(1200px, calc(100% - 32px)); margin: 0 auto;">
-        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+    <section class="gallery-section" id="gallery">
+      <div class="gallery-preview-container">
+        <div class="gallery-preview-header">
           <div>
             <p class="kicker orange" style="margin-bottom: 8px;">MEMORIES &amp; HIGHLIGHTS</p>
-            <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: clamp(36px, 5vw, 54px); margin: 0; line-height: 1;">Event <em>Gallery</em></h2>
-            <p style="color: #a8a096; margin: 8px 0 0; font-size: 15px;">Moments from Offstage Creators — Capturing the voices, expressions, and memories from our stage.</p>
+            <h2 class="gallery-preview-title">Event <em>Gallery</em></h2>
+            <p class="gallery-preview-subtitle">Moments from Offstage Creators — Capturing the voices, expressions, and memories from our stage.</p>
           </div>
           <div>
             <a href="/gallery" class="cta cta-secondary">VIEW FULL GALLERY →</a>
@@ -190,7 +190,7 @@
         </div>
 
         <div id="homeGalleryContainer">
-          <div style="text-align: center; padding: 48px 20px; background: #141210; border: 1px dashed var(--line); border-radius: 12px; color: #8e8477;">
+          <div class="gallery-preview-placeholder">
             <span style="font-size: 40px; display: block; margin-bottom: 10px;">📷</span>
             <strong style="color: #f7eee1; font-size: 18px; display: block; margin-bottom: 6px;">Moments from Offstage Creators</strong>
             <p style="margin: 0 0 20px; font-size: 14px; max-width: 480px; margin-left: auto; margin-right: auto;">
@@ -265,19 +265,42 @@
 
   <!-- FOOTER -->
   <footer class="site-footer">
-    <div class="footer-left">
-      <span>© 2026 Offstage Creators. All rights reserved.</span>
-      <span>•</span>
-      <span>Built with ♡ for the creative community.</span>
+    <!-- Desktop Footer -->
+    <div class="footer-desktop">
+      <div class="footer-left">
+        <span class="footer-copy">© 2026 Offstage Creators. All rights reserved.</span>
+        <span class="footer-sep">•</span>
+        <span class="footer-tagline">Built with ♡ for the creative community.</span>
+      </div>
+      <div class="footer-nav">
+        <a href="/">Home</a>
+        <a href="/events">All Events</a>
+        <a href="/gallery">Event Gallery</a>
+        <a href="/certificate">Certificate</a>
+        <a href="/scanner" class="footer-secondary">Event Scanner</a>
+        <a href="/admin" class="footer-secondary">Admin</a>
+        <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" class="footer-secondary">Instagram ↗</a>
+      </div>
     </div>
-    <div class="footer-nav">
-      <a href="/">Home</a>
-      <a href="/events">All Events</a>
-      <a href="/gallery">Event Gallery</a>
-      <a href="/certificate">Certificate</a>
-      <a href="/scanner">Event Scanner</a>
-      <a href="/admin">Admin</a>
-      <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Instagram ↗</a>
+
+    <!-- Dedicated Mobile Footer -->
+    <div class="footer-mobile">
+      <div class="footer-mobile-nav">
+        <div class="footer-mobile-row">
+          <a href="/">Home</a>
+          <span class="footer-mobile-sep">|</span>
+          <a href="/events">All Events</a>
+        </div>
+        <div class="footer-mobile-row">
+          <a href="/gallery">Event Gallery</a>
+          <span class="footer-mobile-sep">|</span>
+          <a href="/certificate">Certificate</a>
+        </div>
+      </div>
+      <div class="footer-mobile-copy">
+        <p>Copyright © 2026 Offstage Creators. All rights reserved.</p>
+        <p>Built with ♡ for the creative community.</p>
+      </div>
     </div>
   </footer>
 
