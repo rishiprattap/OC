@@ -98,11 +98,15 @@ router.post('/', async (req, res) => {
         });
       }
 
-      if (!targetEvent.reg_enabled || ['registration_closed', 'event_completed', 'archived', 'draft'].includes(targetEvent.status)) {
-        if (targetEvent.status === 'event_completed') {
+      const normStatus = String(targetEvent.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+      const isStatusOpen = normStatus === 'registrationopen' || normStatus === 'open';
+      const isStatusClosed = ['registrationclosed', 'eventcompleted', 'archived', 'draft'].includes(normStatus);
+
+      if ((!isStatusOpen && !targetEvent.reg_enabled) || isStatusClosed) {
+        if (normStatus === 'eventcompleted') {
           return res.status(403).json({ success: false, error: 'This event has concluded. Registrations are closed.' });
         }
-        if (targetEvent.status === 'draft') {
+        if (normStatus === 'draft') {
           return res.status(403).json({ success: false, error: 'This event is in draft mode and not yet accepting registrations.' });
         }
         return res.status(403).json({ success: false, error: 'Registration is currently closed for this event.' });

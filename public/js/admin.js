@@ -2374,7 +2374,8 @@
       if (maxRegBlock) maxRegBlock.style.display = (provider === 'internal') ? 'block' : 'none';
       updateExternalAdminPreview();
 
-      document.getElementById('evtIsRegistrationOpen').checked = evt.isRegistrationOpen !== false && evt.reg_enabled !== 0;
+      const isStatusOpen = matchedStatus === 'Registration Open' || ['registration open', 'registration_open', 'open'].includes(String(evt.status || '').toLowerCase().trim());
+      document.getElementById('evtIsRegistrationOpen').checked = isStatusOpen || (evt.isRegistrationOpen !== false && evt.reg_enabled !== 0);
       document.getElementById('evtRegButtonText').value = evt.registrationButtonText || evt.reg_button_text || 'REGISTER NOW';
       document.getElementById('evtMaxRegistrations').value = evt.maxRegistrations || evt.max_registrations || 50;
       document.getElementById('evtConfirmationMessage').value = evt.confirmationMessage || evt.confirmation_message || '';
@@ -2521,7 +2522,7 @@
       externalPlatformName,
       externalPlatformNotes,
       externalOpenNewTab,
-      isRegistrationOpen: document.getElementById('evtIsRegistrationOpen').checked,
+      isRegistrationOpen: document.getElementById('evtStatus').value === 'Registration Open' || document.getElementById('evtIsRegistrationOpen').checked,
       registrationButtonText: document.getElementById('evtRegButtonText').value.trim(),
       maxRegistrations: Number(document.getElementById('evtMaxRegistrations').value) || 0,
       confirmationMessage: document.getElementById('evtConfirmationMessage').value.trim(),

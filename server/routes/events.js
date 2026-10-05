@@ -42,7 +42,8 @@ function formatEventPublic(evt) {
   const normalizedStatus = String(evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
   const isOpenStatus = normalizedStatus === 'registrationopen' || normalizedStatus === 'open';
   const isComingSoon = normalizedStatus === 'comingsoon' || normalizedStatus === 'draft';
-  const isRegistrationOpen = Boolean(evt.reg_enabled && isOpenStatus);
+  const isClosedStatus = normalizedStatus === 'registrationclosed' || normalizedStatus === 'eventcompleted' || normalizedStatus === 'archived';
+  const isRegistrationOpen = isOpenStatus && !isClosedStatus;
 
   const provider = String(evt.registration_provider || 'internal').toLowerCase();
   const registrationProvider = ['internal', 'external', 'disabled'].includes(provider) ? provider : 'internal';
@@ -132,7 +133,7 @@ function formatEventPublic(evt) {
     externalPlatformNotes,
     externalOpenNewTab,
     registrationMethodNotice,
-    registrationEnabled: Boolean(evt.reg_enabled),
+    registrationEnabled: Boolean(isOpenStatus || evt.reg_enabled),
     registrationOpen: isRegistrationOpen && registrationProvider !== 'disabled',
     isRegistrationOpen: isRegistrationOpen && registrationProvider !== 'disabled',
     registrationStatus: (isRegistrationOpen && registrationProvider !== 'disabled') ? 'OPEN' : 'CLOSED',

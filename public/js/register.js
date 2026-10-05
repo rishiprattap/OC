@@ -151,10 +151,14 @@
 
     // Provider and Status Checks
     const provider = evt.registrationProvider || 'internal';
-    const isClosed = evt.isRegistrationOpen === false ||
-      evt.status === 'Registration Closed' ||
-      evt.status === 'Event Completed' ||
-      evt.status === 'Archived';
+    const normStatus = String(evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+    const isOpenStatus = normStatus === 'registrationopen' || normStatus === 'open';
+    const isClosed = !isOpenStatus && (
+      evt.isRegistrationOpen === false ||
+      normStatus === 'registrationclosed' ||
+      normStatus === 'eventcompleted' ||
+      normStatus === 'archived'
+    );
 
     const extBox = document.getElementById('externalRegistrationBox');
 

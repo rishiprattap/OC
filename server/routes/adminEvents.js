@@ -438,7 +438,15 @@ router.put('/:slug', async (req, res) => {
     const bannerUrl = media.bannerUrl;
     const fee = b.fee !== undefined ? Number(b.fee) : existing.fee;
     const status = b.status !== undefined ? b.status : existing.status;
-    const regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : existing.reg_enabled);
+    let regEnabled = b.regEnabled !== undefined ? (b.regEnabled ? 1 : 0) : (b.isRegistrationOpen !== undefined ? (b.isRegistrationOpen ? 1 : 0) : existing.reg_enabled);
+    const normalizedStatus = String(status || '').toLowerCase().replace(/[\s_-]+/g, '');
+    if (normalizedStatus === 'registrationopen' || normalizedStatus === 'open') {
+      if (b.registrationProvider !== 'disabled') {
+        regEnabled = 1;
+      }
+    } else if (['registrationclosed', 'eventcompleted', 'archived'].includes(normalizedStatus)) {
+      regEnabled = 0;
+    }
 
     const registrationProvider = b.registrationProvider !== undefined
       ? (['internal', 'external', 'disabled'].includes(b.registrationProvider) ? b.registrationProvider : 'internal')
@@ -661,7 +669,12 @@ router.post('/:slug/status', async (req, res) => {
     const evt = await getEventBySlug(req.params.slug);
     if (!evt) return res.status(404).json({ success: false, error: 'Event not found.' });
 
-    await run(`UPDATE events SET status = ?, updated_at = ? WHERE id = ?`, [status, new Date().toISOString(), evt.id]);
+    const normalized = String(status || '').toLowerCase().replace(/[\s_-]+/g, '');
+    const isOpen = normalized === 'registrationopen' || normalized === 'open';
+    const isClosed = ['registrationclosed', 'eventcompleted', 'archived'].includes(normalized);
+    const regEnabled = isOpen ? 1 : (isClosed ? 0 : evt.reg_enabled);
+
+    await run(`UPDATE events SET status = ?, reg_enabled = ?, updated_at = ? WHERE id = ?`, [status, regEnabled, new Date().toISOString(), evt.id]);
 
     return res.json({ success: true, message: `Status updated to ${status}.`, status });
   } catch (err) {
