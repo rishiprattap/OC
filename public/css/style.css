@@ -894,3 +894,63 @@ button {
     align-items: flex-start;
   }
 }
+
+/* ==========================================================================
+   SKELETON / SHIMMER LOADING STATES (ZERO-FLASH)
+   ========================================================================== */
+@keyframes oc-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, rgba(26, 23, 20, 0.7) 20%, rgba(48, 42, 35, 0.95) 50%, rgba(26, 23, 20, 0.7) 80%);
+  background-size: 200% 100%;
+  animation: oc-shimmer 1.6s infinite linear;
+  border-radius: 6px;
+  display: inline-block;
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.skeleton-text {
+  height: 0.9em;
+  min-width: 60px;
+  vertical-align: middle;
+}
+
+.hero-section.is-loading #heroPosterImg {
+  opacity: 0;
+}
+
+.hero-section.is-loading .hero-poster-badge {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hero-section.is-loading .hero-actions {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hero-section.is-loading .hero-note {
+  opacity: 0;
+}
+
+.hero-section.is-loaded #heroPosterImg {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}
+
+.hero-section.is-loaded .hero-poster-badge,
+.hero-section.is-loaded .hero-actions,
+.hero-section.is-loaded .hero-note {
+  opacity: 1;
+  transition: opacity 0.35s ease;
+}

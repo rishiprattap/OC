@@ -91,7 +91,7 @@ const adminLoginLimiter = rateLimit({
 
 // ─── Static Files ─────────────────────────────────────────────────────────────
 const publicDir = path.join(__dirname, '..', 'public');
-app.use(express.static(publicDir));
+app.use(express.static(publicDir, { index: false }));
 app.use('/assets', express.static(path.join(publicDir, 'assets')));
 
 // Vercel Analytics stub for local dev
@@ -170,11 +170,38 @@ app.get('/api/config', async (req, res) => {
   });
 });
 
-// ─── Frontend HTML Routes ─────────────────────────────────────────────────────
+// ─── Frontend HTML Routes & SSR Hydration ─────────────────────────────────────
+const fs = require('fs');
+const { getActiveEvent, getEventBySlug } = require('./db');
+const { formatEventPublic } = require('./routes/events');
 
-app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+async function sendHydratedHtml(filePath, req, res, targetSlug = null) {
+  try {
+    let html = fs.readFileSync(filePath, 'utf8');
+    let evt = null;
+    const slug = targetSlug || req.query.event || null;
+    if (slug) {
+      evt = await getEventBySlug(slug);
+    }
+    if (!evt) {
+      evt = await getActiveEvent();
+    }
+    if (evt) {
+      const publicEvt = formatEventPublic(evt);
+      const safeJson = JSON.stringify(publicEvt).replace(/</g, '\\u003c');
+      const injection = `<script id="__INITIAL_EVENT__">window.__INITIAL_EVENT__ = ${safeJson};</script>`;
+      html = html.replace('</head>', `${injection}\n</head>`);
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (_) {
+    return res.sendFile(filePath);
+  }
+}
+
+app.get('/', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), req, res));
 app.get(['/events', '/all-events'], (req, res) => res.sendFile(path.join(publicDir, 'events.html')));
-app.get(['/register', '/registration'], (req, res) => res.sendFile(path.join(publicDir, 'register.html')));
+app.get(['/register', '/registration'], (req, res) => sendHydratedHtml(path.join(publicDir, 'register.html'), req, res));
 app.get('/registration/:id', (req, res) => res.sendFile(path.join(publicDir, 'registration.html')));
 app.get(['/registration/success', '/success'], (req, res) => res.sendFile(path.join(publicDir, 'success.html')));
 app.get('/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certificate.html')));
@@ -183,13 +210,13 @@ app.get('/scanner', (req, res) => res.sendFile(path.join(publicDir, 'scanner.htm
 app.get('/admin', (req, res) => res.sendFile(path.join(publicDir, 'admin.html')));
 
 // ─── Scalable Event-Specific URLs (Requirement 4) ─────────────────────────────
-app.get('/event/:slug', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
-app.get('/event/:slug/register', (req, res) => res.sendFile(path.join(publicDir, 'register.html')));
+app.get('/event/:slug', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), req, res, req.params.slug));
+app.get('/event/:slug/register', (req, res) => sendHydratedHtml(path.join(publicDir, 'register.html'), req, res, req.params.slug));
 app.get('/event/:slug/gallery', (req, res) => res.sendFile(path.join(publicDir, 'gallery.html')));
 app.get('/event/:slug/certificate', (req, res) => res.sendFile(path.join(publicDir, 'certificate.html')));
 
 // Fallback — serve index.html
-app.get('*', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('*', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), req, res));
 
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

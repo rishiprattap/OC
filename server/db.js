@@ -36,7 +36,7 @@ const DEFAULT_EVENTS = [
     description: 'Whether it is an unread poem, an untold personal story, raw melodies, or laughs from everyday life — our online stage is ready for your craft.',
     short_description: 'A curated digital open mic celebrating poetry, storytelling, comedy, and music.',
     event_type: 'ONLINE',
-    status: 'event_completed',
+    status: 'registration_open',
     is_active: 1,
     is_published: 1,
     event_date: '23 September 2026',
@@ -64,7 +64,7 @@ const DEFAULT_EVENTS = [
     banner_url: '/assets/event-poster.png',
     logo_url: '/assets/logo.png',
     promo_video_url: '',
-    reg_enabled: 0,
+    reg_enabled: 1,
     reg_button_text: 'REGISTER AS PERFORMER',
     max_registrations: 50,
     confirmation_message: 'Thank you for registering for Offstage Creators Online Open Mic!',
@@ -239,7 +239,8 @@ function loadLocalStore() {
       { id: 9, hash: "16d3315151d5eb3a028e2315321244fe433224e0be2d3a3ab46f218e019e5119", event_name: 'ONLINE OPEN MIC 2026 (Edition 1)', created_at: new Date().toISOString() },
       { id: 10, hash: "74e0c4bc687027924b29d5c6cbe6157de16b1cc7253fc2bead217ca53ad6293a", event_name: 'ONLINE OPEN MIC 2026 (Edition 1)', created_at: new Date().toISOString() }
     ],
-    emailLogs: []
+    emailLogs: [],
+    otpSessions: []
   };
 
   try {
@@ -257,13 +258,27 @@ function loadLocalStore() {
           ...e
         })),
         registrations: parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations,
-        settings: { ...defaultStore.settings, ...(parsed.settings || {}) }
+        settings: { ...defaultStore.settings, ...(parsed.settings || {}) },
+        otpSessions: parsed.otpSessions || []
       };
     }
   } catch (err) {
     console.warn('[DB LocalStore] Notice loading local file store:', err.message);
   }
   return defaultStore;
+}
+
+let lastMtime = 0;
+function syncLocalStore() {
+  try {
+    if (fs.existsSync(localStorePath)) {
+      const stat = fs.statSync(localStorePath);
+      if (stat.mtimeMs !== lastMtime) {
+        lastMtime = stat.mtimeMs;
+        localStore = loadLocalStore();
+      }
+    }
+  } catch (_) {}
 }
 
 let localStore = loadLocalStore();
@@ -273,6 +288,8 @@ function saveLocalStore() {
     const dir = path.dirname(localStorePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(localStorePath, JSON.stringify(localStore, null, 2), 'utf8');
+    const stat = fs.statSync(localStorePath);
+    lastMtime = stat.mtimeMs;
   } catch (_) {}
 }
 
@@ -349,6 +366,7 @@ async function addColumnIfNotExists(table, columnDef) {
 // ─── Local Store Execution Handlers ───────────────────────────────────────────
 
 function handleLocalRun(sql, params = []) {
+  syncLocalStore();
   const sqlLower = sql.toLowerCase();
 
   // 1. Gallery
@@ -435,21 +453,29 @@ function handleLocalRun(sql, params = []) {
         r.id === targetParam
       );
       if (reg) {
-        if (sqlLower.includes('reg_status = ?') && sqlLower.includes('approved_at')) {
-          reg.reg_status = params[0];
-          reg.payment_status = params[1] || 'PAID';
-          reg.approved_at = params[2];
-          reg.approved_by = params[3];
-          reg.updated_at = params[4];
+        if (sqlLower.includes('approved_at')) {
+          reg.reg_status = 'APPROVED';
+          reg.payment_status = 'PAID';
+          if (sqlLower.includes("reg_status = 'approved'")) {
+            reg.approved_at = params[0];
+            reg.approved_by = params[1] || 'admin';
+            reg.updated_at = params[2] || params[0];
+          } else {
+            reg.reg_status = params[0] || 'APPROVED';
+            reg.payment_status = params[1] || 'PAID';
+            reg.approved_at = params[2];
+            reg.approved_by = params[3] || 'admin';
+            reg.updated_at = params[4] || params[2];
+          }
         } else if (sqlLower.includes('rejected_at = ?')) {
           reg.reg_status = 'REJECTED';
           reg.rejected_at = params[0];
           reg.rejected_reason = params[1];
           reg.updated_at = params[2];
-        } else if (sqlLower.includes('checked_in = ?')) {
-          reg.checked_in = Number(params[0]);
-          reg.checkin_at = params[1];
-          reg.updated_at = params[2];
+        } else if (sqlLower.includes('checked_in')) {
+          reg.checked_in = 1;
+          reg.checkin_at = params[0] || new Date().toISOString();
+          reg.updated_at = params[1] || reg.checkin_at;
         } else if (sqlLower.includes('certificate_eligible = ?')) {
           reg.certificate_eligible = Number(params[0]);
           reg.updated_at = params[1];
@@ -594,7 +620,18 @@ function handleLocalRun(sql, params = []) {
     return { lastID: null, changes: evt ? 1 : 0 };
   }
 
-  if (sqlLower.includes('update events set') && (sqlLower.includes('where id = ?') || sqlLower.includes('where slug = ?'))) {
+  if (sqlLower.includes('update events set') && sqlLower.includes("slug = 'online-open-mic-2026'")) {
+    const evt = localStore.events.find(e => e.slug === 'online-open-mic-2026');
+    if (evt) {
+      if (sqlLower.includes("status = 'registration_open'")) evt.status = 'registration_open';
+      if (sqlLower.includes("reg_enabled = 1")) evt.reg_enabled = 1;
+      if (sqlLower.includes("registration_provider = 'internal'")) evt.registration_provider = 'internal';
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
+  }
+
+  if (sqlLower.includes('update events set') && params.length >= 50 && (sqlLower.includes('where id = ?') || sqlLower.includes('where slug = ?'))) {
     const target = String(params[params.length - 1] || '');
     const evt = localStore.events.find(e => String(e.id) === target || e.slug.toLowerCase() === target.toLowerCase());
     if (evt) {
@@ -686,15 +723,72 @@ function handleLocalRun(sql, params = []) {
   }
 
   // 7. OTP Sessions
-  if (sqlLower.includes('insert into otp_sessions') || sqlLower.includes('otp_sessions')) {
-    return { lastID: 1, changes: 1 };
+  if (sqlLower.includes('delete from otp_sessions')) {
+    if (sqlLower.includes('where email = ?')) {
+      const email = String(params[0] || '').toLowerCase();
+      localStore.otpSessions = (localStore.otpSessions || []).filter(s => s.email !== email);
+      saveLocalStore();
+    } else if (sqlLower.includes('where id = ?')) {
+      const id = params[0];
+      localStore.otpSessions = (localStore.otpSessions || []).filter(s => s.id !== id);
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
+  }
+
+  if (sqlLower.includes('insert into otp_sessions')) {
+    const list = localStore.otpSessions || [];
+    const id = list.length > 0 ? Math.max(...list.map(s => s.id || 0)) + 1 : 1;
+    const session = {
+      id,
+      email: String(params[0] || '').toLowerCase(),
+      registration_id: params[1],
+      otp_hash: params[2],
+      otp_salt: params[3],
+      expires_at: params[4],
+      attempts: 0,
+      last_sent_at: params[5],
+      verified: 0,
+      created_at: params[6] || new Date().toISOString()
+    };
+    list.push(session);
+    localStore.otpSessions = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
+  }
+
+  if (sqlLower.includes('update otp_sessions')) {
+    const list = localStore.otpSessions || [];
+    if (sqlLower.includes('attempts = attempts + 1')) {
+      const id = params[params.length - 1];
+      const s = list.find(sess => sess.id === id);
+      if (s) s.attempts = (s.attempts || 0) + 1;
+      saveLocalStore();
+    } else if (sqlLower.includes('verified = 1')) {
+      const id = params[params.length - 1];
+      const s = list.find(sess => sess.id === id);
+      if (s) s.verified = 1;
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
   }
 
   return { lastID: 1, changes: 1 };
 }
 
 function handleLocalGet(sql, params = []) {
+  syncLocalStore();
   const sqlLower = sql.toLowerCase();
+
+  // OTP Sessions
+  if (sqlLower.includes('from otp_sessions')) {
+    const email = String(params[0] || '').toLowerCase();
+    const list = (localStore.otpSessions || []).filter(s => s.email === email);
+    if (sqlLower.includes('verified = 0')) {
+      return list.filter(s => !s.verified).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+    }
+    return list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+  }
 
   // Settings
   if (sqlLower.includes('from app_settings where key = ?')) {
@@ -716,7 +810,11 @@ function handleLocalGet(sql, params = []) {
 
   // Event by slug or ID
   if (sqlLower.includes('from events') && (sqlLower.includes('slug') || sqlLower.includes('id'))) {
-    const querySlug = String(params[0] || '').trim().toLowerCase();
+    let querySlug = String(params[0] || '').trim().toLowerCase();
+    if (!querySlug) {
+      const match = sql.match(/slug\s*=\s*'([^']+)'/i) || sql.match(/id\s*=\s*(\d+)/i);
+      if (match) querySlug = match[1].toLowerCase();
+    }
     const found = localStore.events.find(e => 
       e.slug.toLowerCase() === querySlug || 
       String(e.id) === querySlug
@@ -765,10 +863,14 @@ function handleLocalGet(sql, params = []) {
     if (sqlLower.includes('email = ?')) {
       const email = String(params[params.length - 1] || '').trim().toLowerCase();
       const eventId = params.length > 1 ? params[0] : null;
-      return localStore.registrations.find(r => 
-        r.email.toLowerCase() === email && 
-        (!eventId || r.event_id === eventId)
-      ) || null;
+      return localStore.registrations.find(r => {
+        if (!r || !r.email) return false;
+        if (r.email.toLowerCase() !== email) return false;
+        if (eventId && r.event_id && r.event_id !== eventId) return false;
+        if (sqlLower.includes("reg_status in ('approved', 'verified')") && !['APPROVED', 'VERIFIED'].includes(r.reg_status)) return false;
+        if (sqlLower.includes("reg_status = 'pending_verification'") && r.reg_status !== 'PENDING_VERIFICATION') return false;
+        return true;
+      }) || null;
     }
     return localStore.registrations[0] || null;
   }
@@ -796,6 +898,7 @@ function handleLocalGet(sql, params = []) {
 }
 
 function handleLocalAll(sql, params = []) {
+  syncLocalStore();
   const sqlLower = sql.toLowerCase();
 
   // Events list
@@ -972,6 +1075,7 @@ const initSchema = async () => {
           allowed_categories, contact_email, contact_phone,
           instagram_url, youtube_url, whatsapp_url, meet_link, other_links,
           certificate_enabled, certificate_title, certificate_bg_url,
+          registration_provider, external_registration_url, external_platform_name, external_platform_notes, external_open_new_tab,
           created_at, updated_at
         ) VALUES (
           ?, ?, ?, ?, ?, ?,
@@ -986,6 +1090,7 @@ const initSchema = async () => {
           ?, ?, ?,
           ?, ?, ?, ?, ?,
           ?, ?, ?,
+          ?, ?, ?, ?, ?,
           ?, ?
         ) ON CONFLICT (slug) DO NOTHING`,
         [
@@ -1001,6 +1106,7 @@ const initSchema = async () => {
           evt.allowed_categories, evt.contact_email, evt.contact_phone,
           evt.instagram_url, evt.youtube_url, evt.whatsapp_url, evt.meet_link, evt.other_links,
           evt.certificate_enabled, evt.certificate_title, evt.certificate_bg_url,
+          evt.registration_provider, evt.external_registration_url, evt.external_platform_name, evt.external_platform_notes, evt.external_open_new_tab,
           evt.created_at, evt.updated_at
         ]
       );

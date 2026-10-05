@@ -36,10 +36,215 @@
     });
   }
 
-  // 3. Dynamic Active Event Loader (Requirement 2 & 4)
+  // 3. Dynamic Active Event Loader & Zero-Flash Hydration
+  function applyEventToUI(evt) {
+    if (!evt) return;
+
+    const heroSection = document.getElementById('openmic');
+
+    // Update Document Title
+    if (evt.title || evt.name) {
+      document.title = `${evt.title || evt.name} | Offstage Creators`;
+    }
+
+    // 1. Poster & Badge
+    const posterImg = document.getElementById('heroPosterImg');
+    const posterSkeleton = document.getElementById('heroPosterSkeleton');
+    if (posterImg && evt.posterUrl) {
+      posterImg.onload = function () {
+        posterImg.style.opacity = '1';
+        if (posterSkeleton) posterSkeleton.style.display = 'none';
+      };
+      posterImg.src = evt.posterUrl;
+      posterImg.alt = evt.title || evt.name || 'Offstage Creators Event Poster';
+      if (posterImg.complete) {
+        posterImg.style.opacity = '1';
+        if (posterSkeleton) posterSkeleton.style.display = 'none';
+      }
+    } else if (posterSkeleton) {
+      posterSkeleton.style.display = 'none';
+    }
+
+    const posterBadge = document.getElementById('heroPosterBadge');
+    if (posterBadge) {
+      if (evt.status === 'event_completed' || evt.isCompleted) {
+        posterBadge.textContent = '✓ EVENT COMPLETED';
+        posterBadge.style.background = '#1b4d2e';
+        posterBadge.style.color = '#7ef5a7';
+        posterBadge.style.borderColor = '#2e8b57';
+      } else if (evt.registrationOpen) {
+        posterBadge.textContent = '● REGISTRATION OPEN';
+        posterBadge.style.background = '#2a2012';
+        posterBadge.style.color = '#e4ad57';
+        posterBadge.style.borderColor = '#e4ad57';
+      } else if (evt.status === 'registration_closed') {
+        posterBadge.textContent = '✕ REGISTRATIONS CLOSED';
+        posterBadge.style.background = '#2c140d';
+        posterBadge.style.color = '#e26947';
+        posterBadge.style.borderColor = '#e26947';
+      } else {
+        posterBadge.textContent = 'OFFSTAGE CREATORS';
+        posterBadge.style.background = '#1a1612';
+        posterBadge.style.color = '#8e8477';
+        posterBadge.style.borderColor = '#2a231c';
+      }
+      posterBadge.style.opacity = '1';
+    }
+
+    // 2. Titles & Subtitle
+    const heroTitle = document.getElementById('heroTitle');
+    if (heroTitle && (evt.title || evt.name)) {
+      const displayTitle = evt.title || evt.name;
+      const words = displayTitle.split(' ');
+      if (words.length > 1) {
+        heroTitle.innerHTML = `${words[0]}<br><span>${words.slice(1).join(' ')}</span>`;
+      } else {
+        heroTitle.textContent = displayTitle;
+      }
+    }
+
+    const heroQuote = document.getElementById('heroQuote');
+    if (heroQuote) {
+      const quoteText = evt.subtitle || evt.shortDescription || evt.description;
+      if (quoteText) {
+        heroQuote.textContent = `“${quoteText}”`;
+        heroQuote.style.display = 'block';
+      } else {
+        heroQuote.style.display = 'none';
+      }
+    }
+
+    const heroBadgeNotice = document.getElementById('heroBadgeNotice');
+    if (heroBadgeNotice) {
+      if (evt.status === 'event_completed' || evt.isCompleted) {
+        heroBadgeNotice.textContent = '✦ Event Concluded • Download official certificates & browse moments below';
+        heroBadgeNotice.style.display = 'inline-block';
+      } else if (evt.registrationOpen) {
+        heroBadgeNotice.textContent = `✦ Registrations Open • ${evt.isPaid ? '₹' + evt.fee : 'Free'} Entry • Limited Performer Slots`;
+        heroBadgeNotice.style.display = 'inline-block';
+      } else {
+        heroBadgeNotice.style.display = 'none';
+      }
+    }
+
+    // 3. Meta strip
+    const metaDateVal = document.getElementById('metaDateVal');
+    if (metaDateVal) {
+      metaDateVal.textContent = (evt.date || evt.eventDate || 'TBA') + (evt.isCompleted ? ' (Completed)' : '');
+    }
+
+    const metaTimeVal = document.getElementById('metaTimeVal');
+    if (metaTimeVal) {
+      metaTimeVal.textContent = evt.time || evt.startTime || 'Evening';
+    }
+
+    const metaVenueVal = document.getElementById('metaVenueVal');
+    if (metaVenueVal) {
+      const venueText = evt.venue
+        ? (evt.city && !evt.venue.includes(evt.city) ? `${evt.venue}, ${evt.city}` : evt.venue)
+        : (evt.venueName || 'Online (Google Meet)');
+      metaVenueVal.textContent = venueText;
+    }
+
+    const metaFeeVal = document.getElementById('metaFeeVal');
+    if (metaFeeVal) {
+      metaFeeVal.textContent = evt.isPaid ? `₹${evt.fee}` : 'FREE';
+    }
+
+    // Registration Provider Notice
+    const regNoticeEl = document.getElementById('heroRegProviderNotice');
+    const regNoticeTextEl = document.getElementById('heroRegProviderNoticeText');
+    if (regNoticeEl && regNoticeTextEl) {
+      if (evt.registrationMethodNotice && !evt.isCompleted) {
+        regNoticeTextEl.textContent = evt.registrationMethodNotice;
+        regNoticeEl.style.display = 'block';
+      } else {
+        regNoticeEl.style.display = 'none';
+      }
+    }
+
+    // 4. Hero Action CTAs
+    const ctaPrimary = document.getElementById('heroCtaPrimary');
+    const ctaPrimaryText = document.getElementById('heroCtaPrimaryText');
+    const ctaSecondary = document.getElementById('heroCtaSecondary');
+    const ctaSecondaryText = document.getElementById('heroCtaSecondaryText');
+
+    if (ctaPrimary && ctaPrimaryText) {
+      ctaPrimary.removeAttribute('target');
+      ctaPrimary.removeAttribute('rel');
+      ctaPrimary.style.opacity = '1';
+
+      if (evt.registrationOpen) {
+        if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
+          ctaPrimary.href = evt.externalRegistrationUrl;
+          if (evt.externalOpenNewTab !== false) {
+            ctaPrimary.setAttribute('target', '_blank');
+            ctaPrimary.setAttribute('rel', 'noopener noreferrer');
+          }
+          ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW ↗';
+        } else {
+          ctaPrimary.href = `/register?event=${encodeURIComponent(evt.slug)}`;
+          ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW';
+        }
+        ctaPrimary.style.display = 'inline-flex';
+      } else if (evt.isCompleted) {
+        ctaPrimary.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
+        ctaPrimaryText.textContent = 'DOWNLOAD CERTIFICATE';
+        ctaPrimary.style.display = 'inline-flex';
+      } else {
+        ctaPrimary.href = `/events`;
+        ctaPrimaryText.textContent = 'VIEW ALL EVENTS';
+        ctaPrimary.style.opacity = '0.9';
+        ctaPrimary.style.display = 'inline-flex';
+      }
+    }
+
+    if (ctaSecondary && ctaSecondaryText) {
+      ctaSecondary.href = `/gallery?event=${encodeURIComponent(evt.slug)}`;
+      ctaSecondaryText.textContent = 'VIEW EVENT GALLERY';
+    }
+
+    // 5. Update nav bar CTA button
+    const navRegBtn = document.querySelector('.nav-reg-btn');
+    if (navRegBtn) {
+      navRegBtn.removeAttribute('target');
+      navRegBtn.removeAttribute('rel');
+      if (evt.registrationOpen) {
+        if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
+          navRegBtn.href = evt.externalRegistrationUrl;
+          if (evt.externalOpenNewTab !== false) {
+            navRegBtn.setAttribute('target', '_blank');
+            navRegBtn.setAttribute('rel', 'noopener noreferrer');
+          }
+          navRegBtn.textContent = 'REGISTER ↗';
+        } else {
+          navRegBtn.href = `/register?event=${encodeURIComponent(evt.slug)}`;
+          navRegBtn.textContent = 'REGISTER';
+        }
+      } else if (evt.isCompleted) {
+        navRegBtn.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
+        navRegBtn.textContent = 'GET CERTIFICATE';
+      }
+    }
+
+    // Reveal hero section smoothly
+    if (heroSection) {
+      heroSection.classList.remove('is-loading');
+      heroSection.classList.add('is-loaded');
+    }
+
+    // 6. Home Gallery Preview scoped to this event
+    initHomeGallery(evt.slug);
+  }
+
   async function loadActiveEvent() {
+    // If SSR or server pre-injected event data, hydrate immediately with zero delay
+    if (window.__INITIAL_EVENT__ && typeof window.__INITIAL_EVENT__ === 'object') {
+      applyEventToUI(window.__INITIAL_EVENT__);
+      return;
+    }
+
     try {
-      // Determine if a specific event is requested via URL: /event/:slug or ?event=:slug
       const pathParts = window.location.pathname.split('/').filter(Boolean);
       const isEventPath = pathParts[0] === 'event' && pathParts[1] && pathParts[1] !== 'active';
       const searchParam = new URLSearchParams(window.location.search).get('event');
@@ -50,180 +255,18 @@
         : '/api/events/active';
 
       const res = await fetch(endpoint);
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('API response not ok');
       const data = await res.json();
-      if (!data.success || !data.event) return;
+      if (!data.success || !data.event) throw new Error('No event returned');
 
-      const evt = data.event;
-
-      // Update Document Title
-      if (evt.title) {
-        document.title = `${evt.title} | Offstage Creators`;
-      }
-
-      // 1. Poster & Badge
-      const posterImg = document.getElementById('heroPosterImg');
-      if (posterImg && evt.posterUrl) {
-        posterImg.src = evt.posterUrl;
-        posterImg.alt = evt.title || 'Offstage Creators Event Poster';
-      }
-
-      const posterBadge = document.getElementById('heroPosterBadge');
-      if (posterBadge) {
-        if (evt.status === 'event_completed') {
-          posterBadge.textContent = '✓ EVENT COMPLETED';
-          posterBadge.style.background = '#1b4d2e';
-          posterBadge.style.color = '#7ef5a7';
-          posterBadge.style.borderColor = '#2e8b57';
-        } else if (evt.registrationOpen) {
-          posterBadge.textContent = '● REGISTRATION OPEN';
-          posterBadge.style.background = '#2a2012';
-          posterBadge.style.color = '#e4ad57';
-          posterBadge.style.borderColor = '#e4ad57';
-        } else if (evt.status === 'registration_closed') {
-          posterBadge.textContent = '✕ REGISTRATIONS CLOSED';
-          posterBadge.style.background = '#2c140d';
-          posterBadge.style.color = '#e26947';
-          posterBadge.style.borderColor = '#e26947';
-        } else if (evt.status === 'draft') {
-          posterBadge.textContent = 'DRAFT / COMING SOON';
-          posterBadge.style.background = '#1a1612';
-          posterBadge.style.color = '#8e8477';
-          posterBadge.style.borderColor = '#2a231c';
-        }
-      }
-
-      // 2. Titles & Subtitle
-      const heroTitle = document.getElementById('heroTitle');
-      if (heroTitle && evt.title) {
-        const words = evt.title.split(' ');
-        if (words.length > 1) {
-          heroTitle.innerHTML = `${words[0]}<br><span>${words.slice(1).join(' ')}</span>`;
-        } else {
-          heroTitle.textContent = evt.title;
-        }
-      }
-
-      const heroQuote = document.getElementById('heroQuote');
-      if (heroQuote && (evt.subtitle || evt.shortDescription)) {
-        heroQuote.textContent = `“${evt.subtitle || evt.shortDescription}”`;
-      }
-
-      const heroBadgeNotice = document.getElementById('heroBadgeNotice');
-      if (heroBadgeNotice) {
-        if (evt.status === 'event_completed') {
-          heroBadgeNotice.textContent = '✦ Event Concluded • Download official certificates & browse moments below';
-        } else if (evt.registrationOpen) {
-          heroBadgeNotice.textContent = `✦ Registrations Open • ₹${evt.fee} Entry • Limited Performer Slots`;
-        } else {
-          heroBadgeNotice.textContent = '✦ Official Offstage Creators Community Event';
-        }
-      }
-
-      // 3. Meta strip
-      const metaDateVal = document.getElementById('metaDateVal');
-      if (metaDateVal && evt.date) {
-        metaDateVal.textContent = evt.date + (evt.isCompleted ? ' (Completed)' : '');
-      }
-
-      const metaTimeVal = document.getElementById('metaTimeVal');
-      if (metaTimeVal && evt.time) {
-        metaTimeVal.textContent = evt.time;
-      }
-
-      const metaVenueVal = document.getElementById('metaVenueVal');
-      if (metaVenueVal) {
-        const venueText = evt.venue
-          ? (evt.city && !evt.venue.includes(evt.city) ? `${evt.venue}, ${evt.city}` : evt.venue)
-          : 'Online (Google Meet)';
-        metaVenueVal.textContent = venueText;
-      }
-
-      const metaFeeVal = document.getElementById('metaFeeVal');
-      if (metaFeeVal) {
-        metaFeeVal.textContent = evt.isPaid ? `₹${evt.fee}` : 'FREE';
-      }
-
-      // Registration Provider Notice
-      const regNoticeEl = document.getElementById('heroRegProviderNotice');
-      const regNoticeTextEl = document.getElementById('heroRegProviderNoticeText');
-      if (regNoticeEl && regNoticeTextEl) {
-        if (evt.registrationMethodNotice && !evt.isCompleted) {
-          regNoticeTextEl.textContent = evt.registrationMethodNotice;
-          regNoticeEl.style.display = 'block';
-        } else {
-          regNoticeEl.style.display = 'none';
-        }
-      }
-
-      // 4. Hero Action CTAs
-      const ctaPrimary = document.getElementById('heroCtaPrimary');
-      const ctaPrimaryText = document.getElementById('heroCtaPrimaryText');
-      const ctaSecondary = document.getElementById('heroCtaSecondary');
-      const ctaSecondaryText = document.getElementById('heroCtaSecondaryText');
-
-      if (ctaPrimary && ctaPrimaryText) {
-        ctaPrimary.removeAttribute('target');
-        ctaPrimary.removeAttribute('rel');
-        ctaPrimary.style.opacity = '1';
-
-        if (evt.registrationOpen) {
-          if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
-            ctaPrimary.href = evt.externalRegistrationUrl;
-            if (evt.externalOpenNewTab !== false) {
-              ctaPrimary.setAttribute('target', '_blank');
-              ctaPrimary.setAttribute('rel', 'noopener noreferrer');
-            }
-            ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW ↗';
-          } else {
-            ctaPrimary.href = `/register?event=${encodeURIComponent(evt.slug)}`;
-            ctaPrimaryText.textContent = evt.registrationButtonText || 'REGISTER NOW';
-          }
-          ctaPrimary.style.display = 'inline-flex';
-        } else if (evt.isCompleted) {
-          ctaPrimary.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
-          ctaPrimaryText.textContent = 'DOWNLOAD CERTIFICATE';
-          ctaPrimary.style.display = 'inline-flex';
-        } else {
-          ctaPrimary.href = `#openmic`;
-          ctaPrimaryText.textContent = 'REGISTRATION CLOSED';
-          ctaPrimary.style.opacity = '0.7';
-        }
-      }
-
-      if (ctaSecondary && ctaSecondaryText) {
-        ctaSecondary.href = `/gallery?event=${encodeURIComponent(evt.slug)}`;
-        ctaSecondaryText.textContent = 'VIEW EVENT GALLERY';
-      }
-
-      // 5. Update nav bar CTA button if registration open
-      const navRegBtn = document.querySelector('.nav-reg-btn');
-      if (navRegBtn) {
-        navRegBtn.removeAttribute('target');
-        navRegBtn.removeAttribute('rel');
-        if (evt.registrationOpen) {
-          if (evt.isExternalRegistration && evt.externalRegistrationUrl) {
-            navRegBtn.href = evt.externalRegistrationUrl;
-            if (evt.externalOpenNewTab !== false) {
-              navRegBtn.setAttribute('target', '_blank');
-              navRegBtn.setAttribute('rel', 'noopener noreferrer');
-            }
-            navRegBtn.textContent = 'REGISTER ↗';
-          } else {
-            navRegBtn.href = `/register?event=${encodeURIComponent(evt.slug)}`;
-            navRegBtn.textContent = 'REGISTER';
-          }
-        } else if (evt.isCompleted) {
-          navRegBtn.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;
-          navRegBtn.textContent = 'GET CERTIFICATE';
-        }
-      }
-
-      // 6. Home Gallery Preview scoped to this event
-      initHomeGallery(evt.slug);
-
+      applyEventToUI(data.event);
     } catch (err) {
       console.warn('[Main] Notice during event hydration:', err);
+      const heroSection = document.getElementById('openmic');
+      if (heroSection) {
+        heroSection.classList.remove('is-loading');
+        heroSection.classList.add('is-loaded');
+      }
     }
   }
 

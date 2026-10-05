@@ -113,6 +113,9 @@ async function runPlatformTests() {
   console.log('========================================================\n');
 
   try {
+    // Ensure active event is open for registration testing
+    await run("UPDATE events SET status = 'registration_open', reg_enabled = 1, registration_provider = 'internal' WHERE slug = 'online-open-mic-2026'");
+
     // ─── 1. CONFIG & PUBLIC ENDPOINTS ──────────────────────────────────────
     console.log('>>> [1/7] Testing Config & Session Endpoints...');
     const configRes = await request({ path: '/api/config' });
@@ -160,6 +163,9 @@ async function runPlatformTests() {
         terms: true
       }
     });
+    if (regRes.status !== 201) {
+      console.log('Registration response:', regRes.status, regRes.json);
+    }
     assert(regRes.status === 201, 'Registration created with HTTP 201');
     assert(Boolean(regRes.json?.registrationId), 'Returns unique registrationId');
     const suiteRegId = regRes.json?.registrationId;

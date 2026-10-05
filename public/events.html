@@ -639,64 +639,32 @@
         });
       }
 
-      // Initial Seed Data (ensures instantaneous rendering even before API response)
-      const seedEvents = [
-        {
-          id: 1,
-          slug: 'online-open-mic-2026',
-          name: 'Online Open Mic 2026',
-          title: 'Online Open Mic',
-          subtitle: '“ek lafz. ek awaaz. aur ek shaam.”',
-          description: 'A curated digital open mic celebrating poetry, storytelling, comedy, and music. Performed live over Google Meet with community listeners across the country.',
-          eventType: 'ONLINE',
-          status: 'event_completed',
-          eventDate: '23 September 2026',
-          startTime: '7:30 PM',
-          endTime: '9:30 PM',
-          timezone: 'IST',
-          venue: 'Online (Google Meet)',
-          venueName: 'Online (Google Meet)',
-          venueAddress: 'Google Meet link provided to confirmed artists',
-          city: 'Online',
-          fee: 79,
-          posterUrl: '/assets/event-poster.png',
-          registrationProvider: 'internal',
-          isCompleted: true,
-          isRegistrationOpen: false,
-          certificateEnabled: true,
-          winnerNotice: 'Winner: Suhavani Kaur'
-        },
-        {
-          id: 2,
-          slug: 'delhi-adhure-musafir-2026',
-          name: 'Adhure Musafir — Delhi Show',
-          title: 'Adhure Musafir',
-          subtitle: 'A Poetry, Storytelling & Humour Showcase',
-          description: 'Live poetry, storytelling, and comedy showcase in New Delhi. An intimate live gathering at The Comedy Theatre, Hauz Khas.',
-          eventType: 'OFFLINE',
-          status: 'event_completed',
-          eventDate: '4 October 2026',
-          startTime: '3:30 PM',
-          endTime: '6:00 PM',
-          timezone: 'IST',
-          venue: 'The Comedy Theatre, Hauz Khas',
-          venueName: 'The Comedy Theatre',
-          venueAddress: 'Hauz Khas Village, New Delhi, Delhi 110016',
-          city: 'New Delhi',
-          fee: 199,
-          posterUrl: '/assets/adhure-musafir-poster.png',
-          registrationProvider: 'external',
-          externalRegistrationUrl: 'https://in.bookmyshow.com/events/adhure-musafir/ET00515735',
-          externalPlatformName: 'BookMyShow',
-          isCompleted: true,
-          isRegistrationOpen: false,
-          certificateEnabled: true
-        }
-      ];
-
-      let allEvents = [...seedEvents];
+      let allEvents = [];
       let currentFilter = 'all';
       let searchQuery = '';
+
+      function renderSkeleton() {
+        const grid = document.getElementById('eventsGrid');
+        if (!grid) return;
+        grid.innerHTML = Array(3).fill(0).map(() => `
+          <div class="event-card skeleton-card" style="pointer-events: none;">
+            <div class="card-poster-wrap">
+              <div class="skeleton-shimmer" style="width: 100%; height: 100%; position: absolute; inset: 0;"></div>
+            </div>
+            <div class="card-content">
+              <div class="skeleton-shimmer skeleton-text" style="width: 80px; height: 12px; margin-bottom: 8px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 85%; height: 28px; margin-bottom: 12px;"></div>
+              <div class="skeleton-shimmer skeleton-text" style="width: 65%; height: 14px; margin-bottom: 20px;"></div>
+              <div class="card-meta-list" style="border-color: rgba(255,255,255,0.06);">
+                <div class="skeleton-shimmer skeleton-text" style="width: 50%; height: 14px; margin-bottom: 8px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width: 60%; height: 14px; margin-bottom: 8px;"></div>
+                <div class="skeleton-shimmer skeleton-text" style="width: 55%; height: 14px;"></div>
+              </div>
+              <div class="skeleton-shimmer" style="width: 100%; height: 42px; border-radius: 8px;"></div>
+            </div>
+          </div>
+        `).join('');
+      }
 
       // Normalize completion status
       function isEventCompleted(evt) {
@@ -992,22 +960,36 @@
         });
       }
 
-      // Initial Render with seeds
-      updateCounters(allEvents);
-      renderEvents();
+      // Render skeleton state immediately on load (never flash old/stale events)
+      renderSkeleton();
 
       // Fetch live data from /api/events
       fetch('/api/events')
         .then(res => res.json())
         .then(data => {
-          if (data && data.success && Array.isArray(data.events) && data.events.length > 0) {
+          if (data && data.success && Array.isArray(data.events)) {
             allEvents = data.events;
             updateCounters(allEvents);
+            renderEvents();
+          } else {
             renderEvents();
           }
         })
         .catch(err => {
-          console.log('[Events] Using local pre-rendered events store');
+          console.error('[Events] Error loading events:', err);
+          const grid = document.getElementById('eventsGrid');
+          if (grid) {
+            grid.innerHTML = `
+              <div class="empty-events">
+                <span class="icon">⚠️</span>
+                <h3 style="color:#f7eee1; font-family:'Cormorant Garamond',serif; font-size:26px; margin:0 0 8px;">Unable to Load Events</h3>
+                <p style="margin:0 0 16px;">Please check your connection and try refreshing.</p>
+                <button class="btn-action btn-secondary" onclick="location.reload()" style="display:inline-flex; width:auto;">
+                  Retry ↻
+                </button>
+              </div>
+            `;
+          }
         });
 
       // Track page view

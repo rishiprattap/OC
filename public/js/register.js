@@ -71,6 +71,12 @@
   const targetEventSlug = pathMatch ? pathMatch[1] : (queryParamSlug || null);
 
   async function initEventData() {
+    if (window.__INITIAL_EVENT__ && typeof window.__INITIAL_EVENT__ === 'object') {
+      currentEvent = window.__INITIAL_EVENT__;
+      applyEventToUI(currentEvent);
+      return;
+    }
+
     try {
       const endpoint = targetEventSlug
         ? `/api/events/${encodeURIComponent(targetEventSlug)}`
