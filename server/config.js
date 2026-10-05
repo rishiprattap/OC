@@ -41,8 +41,8 @@ module.exports = {
   EVENT: {
     id: 'online-open-mic-2026',
     title: 'Online Open Mic 2026',
-    date: '23 September',
-    time: '7:30 PM IST',
+    date: '7 October',
+    time: '6:00 PM IST',
     fee: 79,
     voice: 'Tomboy',
     tagline: 'ek lafz. ek awaaz. aur ek shaam.'
