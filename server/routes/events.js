@@ -109,8 +109,8 @@ function formatEventPublic(evt) {
     pricingTiers,
     earlyBirdFee: evt.early_bird_fee ? Number(evt.early_bird_fee) : null,
     upi: {
-      upiId: evt.upi_id || 'preetiyadav15071985@okaxis',
-      payeeName: evt.payee_name || 'Preeti Yadav / Offstage Creators',
+      upiId: evt.upi_id || 'rishiprattap@fam',
+      payeeName: evt.payee_name || 'Rishi Pratap',
       qrAssetPath: evt.qr_asset_path || '/assets/payment-qr.jpeg',
       amount: Number(evt.fee || 79)
     },

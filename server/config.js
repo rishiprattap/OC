@@ -22,8 +22,8 @@ module.exports = {
   OPEN_MIC_FEE_INR: parseInt(process.env.OPEN_MIC_FEE_INR, 10) || 79,
 
   UPI: {
-    upiId: 'preetiyadav15071985@okaxis',
-    payeeName: 'Preeti Yadav / Offstage Creators',
+    upiId: 'rishiprattap@fam',
+    payeeName: 'Rishi Pratap',
     qrAssetPath: '/assets/payment-qr.jpeg',
     amount: 79
   },

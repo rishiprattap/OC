@@ -157,7 +157,7 @@ async function runLiveAudit() {
     test('Public Config API (/api/config) returns HTTP 200 OK', configRes.status === 200 && configRes.json);
     test('Event is Online Open Mic 2026', configRes.json && configRes.json.event && configRes.json.event.title === 'Online Open Mic 2026');
     test('Registration fee is exactly ₹79', configRes.json && configRes.json.fee === 79);
-    test('UPI ID is preetiyadav15071985@okaxis', configRes.json && configRes.json.upi && configRes.json.upi.upiId === 'preetiyadav15071985@okaxis');
+    test('UPI ID is rishiprattap@fam', configRes.json && configRes.json.upi && configRes.json.upi.upiId === 'rishiprattap@fam');
     test('Payment QR asset is configured', configRes.json && configRes.json.upi && configRes.json.upi.qrAssetPath === '/assets/payment-qr.jpeg');
     test('Config API NEVER leaks ADMIN_SECRET', !configRes.body.includes(ADMIN_KEY) && !configRes.body.includes('ADMIN_SECRET'));
     test('Config API NEVER leaks mail credentials', !configRes.body.includes('MAIL_PASSWORD') && !configRes.body.includes('password'));

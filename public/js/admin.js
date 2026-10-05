@@ -2251,8 +2251,8 @@
     if (slugInput) slugInput.readOnly = false;
     document.getElementById('evtFee').value = '79';
     document.getElementById('evtCurrency').value = '₹';
-    document.getElementById('evtPayeeName').value = 'Preeti Yadav / Offstage Creators';
-    document.getElementById('evtUpiId').value = 'preetiyadav15071985@okaxis';
+    document.getElementById('evtPayeeName').value = 'Rishi Pratap';
+    document.getElementById('evtUpiId').value = 'rishiprattap@fam';
     document.getElementById('evtPaymentQr').value = '/assets/payment-qr.jpeg';
     document.getElementById('evtPosterUrl').value = '/assets/event-poster.png';
     if (document.getElementById('evtBannerUrl')) document.getElementById('evtBannerUrl').value = '/assets/event-poster.png';
@@ -2331,8 +2331,8 @@
       document.getElementById('evtEarlyBirdPrice').value = evt.earlyBirdPrice || '';
       document.getElementById('evtIsRegistrationFeeEnabled').checked = evt.isRegistrationFeeEnabled !== false;
       document.getElementById('evtAllowedCategories').value = Array.isArray(evt.allowedCategories) ? evt.allowedCategories.join(', ') : (evt.allowedCategories || '');
-      document.getElementById('evtPayeeName').value = evt.payeeName || evt.payee_name || 'Preeti Yadav / Offstage Creators';
-      document.getElementById('evtUpiId').value = evt.upiId || evt.upi_id || 'preetiyadav15071985@okaxis';
+      document.getElementById('evtPayeeName').value = evt.payeeName || evt.payee_name || 'Rishi Pratap';
+      document.getElementById('evtUpiId').value = evt.upiId || evt.upi_id || 'rishiprattap@fam';
       document.getElementById('evtPaymentQr').value = evt.paymentQr || evt.qr_asset_path || '/assets/payment-qr.jpeg';
       document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || evt.payment_instructions || '';
 
