@@ -276,45 +276,7 @@
     } catch (_) {}
   }
 
-  // 5. Delhi Show Countdown Timer
-  function initDelhiCountdown() {
-    const daysEl = document.getElementById('cdDays');
-    const hoursEl = document.getElementById('cdHours');
-    const minsEl = document.getElementById('cdMins');
-    const secsEl = document.getElementById('cdSecs');
-    const container = document.getElementById('delhiCountdown');
-
-    if (!container || !daysEl) return;
-
-    const targetDate = new Date('2026-10-04T15:30:00+05:30').getTime();
-
-    function updateTimer() {
-      const now = new Date().getTime();
-      const diff = targetDate - now;
-
-      if (diff <= 0) {
-        container.innerHTML = '<div style="font-family:\'Cormorant Garamond\',serif;font-size:22px;color:#e4ad57;font-weight:700;width:100%;text-align:center;padding:10px 0;">✦ SHOW IS LIVE / DOORS OPEN ✦</div>';
-        return;
-      }
-
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const secs = Math.floor((diff % (1000 * 60)) / 1000);
-
-      daysEl.textContent = String(days).padStart(2, '0');
-      hoursEl.textContent = String(hours).padStart(2, '0');
-      minsEl.textContent = String(mins).padStart(2, '0');
-      secsEl.textContent = String(secs).padStart(2, '0');
-    }
-
-    updateTimer();
-    setInterval(updateTimer, 1000);
-  }
-
-  initDelhiCountdown();
-
-  // 6. Analytics
+  // 5. Analytics
   if (typeof window.trackEvent === 'function') {
     window.trackEvent('online_open_mic_viewed');
 
@@ -323,13 +285,6 @@
         window.trackEvent('registration_cta_clicked');
       });
     });
-
-    const bmsBtn = document.querySelector('.bms-btn');
-    if (bmsBtn) {
-      bmsBtn.addEventListener('click', () => {
-        window.trackEvent('delhi_event_ticket_clicked');
-      });
-    }
   }
 
 })();

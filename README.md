@@ -45,11 +45,6 @@ Offstage Creators is a creative community platform for poets, storytellers, stan
    - **Fee**: ₹79 only
    - **Perks**: 5–7 minute performance slot, live audience, verified participation certificate.
    - **Route**: [`/register`](http://localhost:3000/register)
-2. **Event #2: Adhure Musafir (Delhi Ground Show)**
-   - **Date**: 4 October 2026
-   - **Time**: 3:30 PM onwards
-   - **Venue**: The Comedy Theatre, Hauz Khas, New Delhi
-   - **Ticketing**: Direct BookMyShow partnership ([ET00515735](https://in.bookmyshow.com/events/adhure-musafir/ET00515735)).
 
 ---
 
