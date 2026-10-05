@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="All Events — Discover upcoming online open mics, offline stage showcases, and past editions of Offstage Creators.">
+  <title>All Events | Offstage Creators</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Vercel Web Analytics & Speed Insights -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+  <script src="/js/analytics.js"></script>
+
+  <style>
+    .events-page {
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 44px 0 90px;
+    }
+
+    .events-header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .events-header h1 {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: clamp(46px, 6.5vw, 80px);
+      line-height: 0.95;
+      margin: 12px 0 16px;
+      font-weight: 700;
+    }
+
+    .events-header h1 em {
+      color: #e5dac9;
+      font-style: italic;
+    }
+
+    .events-header p {
+      color: #a8a096;
+      max-width: 620px;
+      margin: 0 auto;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* Filter & Controls Bar */
+    .controls-wrapper {
+      background: rgba(20, 18, 15, 0.75);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 36px;
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .filter-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--line);
+      color: #a8a096;
+      padding: 8px 16px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-pill:hover {
+      color: #f7eee1;
+      border-color: rgba(228, 173, 87, 0.4);
+      background: rgba(228, 173, 87, 0.08);
+    }
+
+    .filter-pill.active {
+      background: #e26947;
+      border-color: #e26947;
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(226, 105, 71, 0.35);
+    }
+
+    .filter-count {
+      background: rgba(0, 0, 0, 0.25);
+      padding: 2px 7px;
+      border-radius: 12px;
+      font-size: 11px;
+    }
+
+    .search-box {
+      position: relative;
+      min-width: 240px;
+      flex: 1;
+      max-width: 340px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: #0e0c0a;
+      border: 1px solid var(--line);
+      border-radius: 100px;
+      padding: 10px 16px 10px 38px;
+      color: #f7eee1;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s ease;
+      font-family: inherit;
+    }
+
+    .search-box input:focus {
+      border-color: #e4ad57;
+      box-shadow: 0 0 0 2px rgba(228, 173, 87, 0.15);
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      fill: #8e8477;
+    }
+
+    /* Events Grid */
+    .events-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 30px;
+    }
+
+    @media (max-width: 480px) {
+      .events-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Event Card */
+    .event-card {
+      background: #141210;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .event-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(228, 173, 87, 0.4);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(228, 173, 87, 0.08);
+    }
+
+    .card-poster-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      overflow: hidden;
+      background: #090807;
+    }
+
+    .card-poster-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.4s ease;
+      display: block;
+    }
+
+    .event-card:hover .card-poster-wrap img {
+      transform: scale(1.03);
+    }
+
+    .poster-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(180deg, rgba(14, 12, 10, 0.2) 0%, rgba(14, 12, 10, 0.85) 100%);
+    }
+
+    .poster-badges {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      z-index: 2;
+    }
+
+    .badge-status {
+      padding: 5px 12px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      backdrop-filter: blur(6px);
+    }
+
+    .badge-status.open {
+      background: rgba(27, 77, 46, 0.9);
+      color: #7ef5a7;
+      border: 1px solid #2e8b57;
+    }
+
+    .badge-status.completed {
+      background: rgba(22, 20, 18, 0.85);
+      color: #cda45b;
+      border: 1px solid rgba(205, 164, 91, 0.4);
+    }
+
+    .badge-status.closed {
+      background: rgba(60, 20, 20, 0.85);
+      color: #f79494;
+      border: 1px solid rgba(220, 70, 70, 0.4);
+    }
+
+    .badge-type {
+      background: rgba(10, 9, 8, 0.75);
+      color: #dfd4c4;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Card Content */
+    .card-content {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .card-kicker {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.16em;
+      color: #e26947;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .card-title {
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 28px;
+      line-height: 1.15;
+      margin: 0 0 8px;
+      color: #f7eee1;
+      font-weight: 700;
+    }
+
+    .card-subtitle {
+      font-size: 13.5px;
+      color: #9f9588;
+      font-style: italic;
+      margin-bottom: 18px;
+      line-height: 1.45;
+    }
+
+    .card-meta-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 16px 0;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 22px;
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13.5px;
+      color: #ded3c3;
+    }
+
+    .meta-row i {
+      color: #e4ad57;
+      font-style: normal;
+      font-size: 16px;
+      width: 20px;
+      text-align: center;
+    }
+
+    .meta-row b {
+      color: #f7eee1;
+      font-weight: 600;
+    }
+
+    .meta-row span.sub {
+      color: #8e8477;
+      font-size: 12px;
+      margin-left: 4px;
+    }
+
+    .card-actions {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-action {
+      flex: 1;
+      text-align: center;
+      padding: 11px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: #e26947;
+      color: #ffffff;
+      border: none;
+    }
+
+    .btn-primary:hover {
+      background: #f07755;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.04);
+      color: #ded3c3;
+      border: 1px solid var(--line);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      border-color: rgba(228, 173, 87, 0.4);
+    }
+
+    .btn-details {
+      background: transparent;
+      border: 1px dashed rgba(238, 226, 199, 0.18);
+      color: #a8a096;
+      font-size: 11.5px;
+      padding: 8px 12px;
+    }
+
+    .btn-details:hover {
+      border-color: #e4ad57;
+      color: #e4ad57;
+      background: rgba(228, 173, 87, 0.05);
+    }
+
+    /* Empty state */
+    .empty-events {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 60px 20px;
+      background: #141210;
+      border: 1px dashed var(--line);
+      border-radius: 16px;
+      color: #8e8477;
+    }
+
+    .empty-events span.icon {
+      font-size: 44px;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    /* Modal for Event Details */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.82);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: #141210;
+      border: 1px solid rgba(205, 164, 91, 0.35);
+      border-radius: 18px;
+      max-width: 680px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+      position: relative;
+    }
+
+    .modal-head {
+      position: relative;
+      padding: 28px 28px 20px;
+      border-bottom: 1px solid var(--line);
+      background: #181512;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--line);
+      color: #ded3c3;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.2s ease;
+    }
+
+    .modal-close:hover {
+      background: #e26947;
+      color: #ffffff;
+      border-color: #e26947;
+    }
+
+    .modal-body {
+      padding: 28px;
+      color: #dfd4c4;
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    .modal-body h4 {
+      color: #f7eee1;
+      margin: 20px 0 8px;
+      font-family: "Cormorant Garamond", Georgia, serif;
+      font-size: 20px;
+    }
+
+    .modal-body p {
+      margin: 0 0 14px;
+      color: #a8a096;
+    }
+
+    .modal-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      background: #0d0c0a;
+      padding: 16px;
+      border-radius: 10px;
+      margin: 18px 0;
+      border: 1px solid var(--line);
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a class="active" href="/events">Events</a>
+        <a href="/gallery">Event Gallery</a>
+        <a href="/certificate">Certificate</a>
+        <a href="/#about">About</a>
+      </nav>
+
+      <div class="nav-actions">
+        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
+          ◎
+        </a>
+        <a class="cta nav-reg-btn" href="/certificate">
+          GET CERTIFICATE
+        </a>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle navigation menu">
+          ☰
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-drawer" id="mobileDrawer">
+    <a href="/">Home</a>
+    <a href="/events" style="color: #e4ad57; font-weight: 700;">All Events ↗</a>
+    <a href="/gallery">Event Gallery ↗</a>
+    <a href="/certificate" style="color: #e26947; font-weight: 700;">Download Certificate ↗</a>
+    <a href="/#about">About Us</a>
+    <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Follow on Instagram ↗</a>
+  </div>
+
+  <main class="events-page">
+    <!-- HERO HEADER -->
+    <header class="events-header">
+      <p class="kicker orange" style="margin-bottom: 8px;">CURATED STAGES &amp; SHOWCASES</p>
+      <h1>All <em>Events</em></h1>
+      <p>
+        Explore upcoming online open mics, on-ground poetry and comedy showcases, and browse our completed editions across India.
+      </p>
+    </header>
+
+    <!-- FILTER & SEARCH BAR -->
+    <div class="controls-wrapper">
+      <div class="filter-tabs" id="filterTabs">
+        <button class="filter-pill active" data-filter="all">
+          All Events <span class="filter-count" id="countAll">0</span>
+        </button>
+        <button class="filter-pill" data-filter="upcoming">
+          Upcoming &amp; Live <span class="filter-count" id="countUpcoming">0</span>
+        </button>
+        <button class="filter-pill" data-filter="past">
+          Past Editions <span class="filter-count" id="countPast">0</span>
+        </button>
+        <button class="filter-pill" data-filter="online">
+          Online
+        </button>
+        <button class="filter-pill" data-filter="offline">
+          On-Ground
+        </button>
+      </div>
+
+      <div class="search-box">
+        <svg viewBox="0 0 24 24">
+          <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="eventSearchInput" placeholder="Search events by title, city, or venue...">
+      </div>
+    </div>
+
+    <!-- EVENTS GRID CONTAINER -->
+    <div class="events-grid" id="eventsGrid">
+      <!-- Populated dynamically via JS with instant fallback below -->
+    </div>
+  </main>
+
+  <!-- EVENT DETAILS MODAL -->
+  <div class="modal-backdrop" id="eventModal">
+    <div class="modal-card">
+      <div class="modal-head">
+        <button class="modal-close" id="modalCloseBtn" aria-label="Close modal">✕</button>
+        <span class="card-kicker" id="modalKicker">EVENT OVERVIEW</span>
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 32px; margin: 6px 0 0; color: #f7eee1;" id="modalTitle">Event Title</h2>
+        <div style="margin-top: 10px; display: flex; gap: 8px;" id="modalBadges"></div>
+      </div>
+      <div class="modal-body" id="modalBody">
+        <!-- Injected dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-left">
+      <span>© 2026 Offstage Creators. All rights reserved.</span>
+      <span>•</span>
+      <span>Built with ♡ for the creative community.</span>
+    </div>
+    <div class="footer-nav">
+      <a href="/">Home</a>
+      <a href="/events">All Events</a>
+      <a href="/gallery">Event Gallery</a>
+      <a href="/certificate">Certificate</a>
+      <a href="/scanner">Event Scanner</a>
+      <a href="/admin">Admin</a>
+      <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Instagram ↗</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // Mobile Drawer Toggle
+      const mobileToggle = document.getElementById('mobileToggle');
+      const mobileDrawer = document.getElementById('mobileDrawer');
+      if (mobileToggle && mobileDrawer) {
+        mobileToggle.addEventListener('click', () => {
+          mobileDrawer.classList.toggle('open');
+        });
+      }
+
+      // Initial Seed Data (ensures instantaneous rendering even before API response)
+      const seedEvents = [
+        {
+          id: 1,
+          slug: 'online-open-mic-2026',
+          name: 'Online Open Mic 2026',
+          title: 'Online Open Mic',
+          subtitle: '“ek lafz. ek awaaz. aur ek shaam.”',
+          description: 'A curated digital open mic celebrating poetry, storytelling, comedy, and music. Performed live over Google Meet with community listeners across the country.',
+          eventType: 'ONLINE',
+          status: 'event_completed',
+          eventDate: '23 September 2026',
+          startTime: '7:30 PM',
+          endTime: '9:30 PM',
+          timezone: 'IST',
+          venue: 'Online (Google Meet)',
+          venueName: 'Online (Google Meet)',
+          venueAddress: 'Google Meet link provided to confirmed artists',
+          city: 'Online',
+          fee: 79,
+          posterUrl: '/assets/event-poster.png',
+          registrationProvider: 'internal',
+          isCompleted: true,
+          isRegistrationOpen: false,
+          certificateEnabled: true,
+          winnerNotice: 'Winner: Suhavani Kaur'
+        },
+        {
+          id: 2,
+          slug: 'delhi-adhure-musafir-2026',
+          name: 'Adhure Musafir — Delhi Show',
+          title: 'Adhure Musafir',
+          subtitle: 'A Poetry, Storytelling & Humour Showcase',
+          description: 'Live poetry, storytelling, and comedy showcase in New Delhi. An intimate live gathering at The Comedy Theatre, Hauz Khas.',
+          eventType: 'OFFLINE',
+          status: 'event_completed',
+          eventDate: '4 October 2026',
+          startTime: '3:30 PM',
+          endTime: '6:00 PM',
+          timezone: 'IST',
+          venue: 'The Comedy Theatre, Hauz Khas',
+          venueName: 'The Comedy Theatre',
+          venueAddress: 'Hauz Khas Village, New Delhi, Delhi 110016',
+          city: 'New Delhi',
+          fee: 199,
+          posterUrl: '/assets/adhure-musafir-poster.png',
+          registrationProvider: 'external',
+          externalRegistrationUrl: 'https://in.bookmyshow.com/events/adhure-musafir/ET00515735',
+          externalPlatformName: 'BookMyShow',
+          isCompleted: true,
+          isRegistrationOpen: false,
+          certificateEnabled: true
+        }
+      ];
+
+      let allEvents = [...seedEvents];
+      let currentFilter = 'all';
+      let searchQuery = '';
+
+      // Normalize completion status
+      function isEventCompleted(evt) {
+        if (evt.isCompleted === true) return true;
+        const s = String(evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+        return s === 'eventcompleted' || s === 'completed' || s === 'concluded' || s === 'past';
+      }
+
+      function isEventOpen(evt) {
+        if (isEventCompleted(evt)) return false;
+        if (evt.registrationProvider === 'disabled') return false;
+        const s = String(evt.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+        return s === 'registrationopen' || s === 'open' || s === 'active' || Boolean(evt.isRegistrationOpen);
+      }
+
+      // Update counter pills
+      function updateCounters(list) {
+        const total = list.length;
+        const upcoming = list.filter(e => !isEventCompleted(e)).length;
+        const past = list.filter(e => isEventCompleted(e)).length;
+
+        const countAll = document.getElementById('countAll');
+        const countUpcoming = document.getElementById('countUpcoming');
+        const countPast = document.getElementById('countPast');
+
+        if (countAll) countAll.textContent = total;
+        if (countUpcoming) countUpcoming.textContent = upcoming;
+        if (countPast) countPast.textContent = past;
+      }
+
+      // Render the events grid
+      function renderEvents() {
+        const grid = document.getElementById('eventsGrid');
+        if (!grid) return;
+
+        let filtered = allEvents.filter(evt => {
+          // Search query check
+          if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            const titleMatch = (evt.title || evt.name || '').toLowerCase().includes(q);
+            const venueMatch = (evt.venue || evt.venueName || evt.city || '').toLowerCase().includes(q);
+            const descMatch = (evt.description || evt.subtitle || '').toLowerCase().includes(q);
+            if (!titleMatch && !venueMatch && !descMatch) return false;
+          }
+
+          // Filter tabs
+          const completed = isEventCompleted(evt);
+          const type = String(evt.eventType || 'ONLINE').toUpperCase();
+
+          if (currentFilter === 'upcoming') {
+            return !completed;
+          } else if (currentFilter === 'past') {
+            return completed;
+          } else if (currentFilter === 'online') {
+            return type === 'ONLINE';
+          } else if (currentFilter === 'offline') {
+            return type === 'OFFLINE' || type === 'ON-GROUND' || type === 'HYBRID';
+          }
+          return true;
+        });
+
+        if (filtered.length === 0) {
+          grid.innerHTML = `
+            <div class="empty-events">
+              <span class="icon">🎭</span>
+              <h3 style="color:#f7eee1; font-family:'Cormorant Garamond',serif; font-size:26px; margin:0 0 8px;">No Events Found</h3>
+              <p style="margin:0 0 16px;">We couldn't find any events matching your selected filter or search term.</p>
+              <button class="btn-action btn-secondary" onclick="window.resetEventsFilter()" style="display:inline-flex; width:auto;">
+                Reset Filters
+              </button>
+            </div>
+          `;
+          return;
+        }
+
+        grid.innerHTML = filtered.map(evt => {
+          const completed = isEventCompleted(evt);
+          const open = isEventOpen(evt);
+          const type = String(evt.eventType || 'ONLINE').toUpperCase();
+          const poster = evt.posterUrl || evt.bannerUrl || '/assets/event-poster.png';
+          const title = evt.title || evt.name || 'Offstage Creators Event';
+          const subtitle = evt.subtitle || (type === 'ONLINE' ? 'Online Open Mic Edition' : 'Live Showcase');
+          const dateStr = evt.eventDate || evt.date || 'To be announced';
+          const timeStr = evt.startTime ? `${evt.startTime} ${evt.endTime ? '– ' + evt.endTime : ''} ${evt.timezone || 'IST'}` : (evt.time || 'Evening');
+          const venueStr = evt.venue || evt.venueName || (type === 'ONLINE' ? 'Online (Google Meet)' : 'New Delhi');
+          const feeStr = evt.fee ? `₹${evt.fee}` : 'Free';
+
+          let statusBadgeHtml = '';
+          if (completed) {
+            statusBadgeHtml = `<span class="badge-status completed">✓ Concluded</span>`;
+          } else if (open) {
+            statusBadgeHtml = `<span class="badge-status open">● Registration Open</span>`;
+          } else {
+            statusBadgeHtml = `<span class="badge-status closed">Closed</span>`;
+          }
+
+          const typeBadgeHtml = `<span class="badge-type">${type === 'ONLINE' ? 'ONLINE OPEN MIC' : 'ON-GROUND SHOW'}</span>`;
+
+          // Buttons
+          let actionBtns = '';
+          if (open) {
+            if (evt.registrationProvider === 'external' && evt.externalRegistrationUrl) {
+              const platform = evt.externalPlatformName || 'BookMyShow';
+              actionBtns = `
+                <a class="btn-action btn-primary" href="${evt.externalRegistrationUrl}" target="_blank" rel="noopener">
+                  Book on ${platform} ↗
+                </a>
+              `;
+            } else {
+              actionBtns = `
+                <a class="btn-action btn-primary" href="/register?event=${encodeURIComponent(evt.slug)}">
+                  Register as Artist →
+                </a>
+              `;
+            }
+          } else if (completed) {
+            actionBtns = `
+              <div class="action-row">
+                <a class="btn-action btn-secondary" href="/gallery">
+                  View Gallery ↗
+                </a>
+                <a class="btn-action btn-secondary" href="/certificate?event=${encodeURIComponent(evt.slug)}">
+                  Certificate ↗
+                </a>
+              </div>
+            `;
+          } else {
+            actionBtns = `
+              <span class="btn-action btn-secondary" style="opacity: 0.65; cursor: default;">
+                Registration Closed
+              </span>
+            `;
+          }
+
+          return `
+            <article class="event-card" data-slug="${evt.slug}">
+              <div class="card-poster-wrap">
+                <img src="${poster}" alt="${title}" loading="lazy" onerror="this.onerror=null;this.src='/assets/event-poster.png';">
+                <div class="poster-overlay"></div>
+                <div class="poster-badges">
+                  ${statusBadgeHtml}
+                  ${typeBadgeHtml}
+                </div>
+              </div>
+
+              <div class="card-content">
+                <div class="card-kicker">${evt.city || (type === 'ONLINE' ? 'VIRTUAL' : 'INDIA')}</div>
+                <h3 class="card-title">${title}</h3>
+                <p class="card-subtitle">${subtitle}</p>
+
+                <div class="card-meta-list">
+                  <div class="meta-row">
+                    <i>📅</i>
+                    <div><b>${dateStr}</b></div>
+                  </div>
+                  <div class="meta-row">
+                    <i>⏰</i>
+                    <div><b>${timeStr}</b></div>
+                  </div>
+                  <div class="meta-row">
+                    <i>📍</i>
+                    <div><b>${venueStr}</b></div>
+                  </div>
+                  <div class="meta-row">
+                    <i>🎟️</i>
+                    <div><b>${feeStr}</b> <span class="sub">${evt.earlyBirdFee ? `(Early Bird: ₹${evt.earlyBirdFee})` : ''}</span></div>
+                  </div>
+                </div>
+
+                <div class="card-actions">
+                  ${actionBtns}
+                  <button class="btn-action btn-details" onclick="window.openEventDetails('${evt.slug}')">
+                    View Event Details ℹ
+                  </button>
+                </div>
+              </div>
+            </article>
+          `;
+        }).join('');
+      }
+
+      // Filter Pill Event Listeners
+      const filterTabs = document.getElementById('filterTabs');
+      if (filterTabs) {
+        filterTabs.querySelectorAll('.filter-pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            filterTabs.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.getAttribute('data-filter');
+            renderEvents();
+          });
+        });
+      }
+
+      // Search Box Event Listener
+      const searchInput = document.getElementById('eventSearchInput');
+      if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+          searchQuery = e.target.value.trim();
+          renderEvents();
+        });
+      }
+
+      // Reset filters helper
+      window.resetEventsFilter = function () {
+        currentFilter = 'all';
+        searchQuery = '';
+        if (searchInput) searchInput.value = '';
+        if (filterTabs) {
+          filterTabs.querySelectorAll('.filter-pill').forEach(b => {
+            b.classList.toggle('active', b.getAttribute('data-filter') === 'all');
+          });
+        }
+        renderEvents();
+      };
+
+      // Modal Handler
+      const eventModal = document.getElementById('eventModal');
+      const modalCloseBtn = document.getElementById('modalCloseBtn');
+      const modalTitle = document.getElementById('modalTitle');
+      const modalKicker = document.getElementById('modalKicker');
+      const modalBadges = document.getElementById('modalBadges');
+      const modalBody = document.getElementById('modalBody');
+
+      window.openEventDetails = function (slug) {
+        const evt = allEvents.find(e => e.slug === slug);
+        if (!evt) return;
+
+        const completed = isEventCompleted(evt);
+        const open = isEventOpen(evt);
+        const type = String(evt.eventType || 'ONLINE').toUpperCase();
+
+        if (modalTitle) modalTitle.textContent = evt.title || evt.name;
+        if (modalKicker) modalKicker.textContent = type === 'ONLINE' ? 'ONLINE OPEN MIC' : 'ON-GROUND SHOWCASE';
+
+        if (modalBadges) {
+          modalBadges.innerHTML = `
+            <span class="badge-status ${completed ? 'completed' : (open ? 'open' : 'closed')}">
+              ${completed ? '✓ Concluded' : (open ? '● Registration Open' : 'Closed')}
+            </span>
+            <span class="badge-type">${type}</span>
+          `;
+        }
+
+        if (modalBody) {
+          modalBody.innerHTML = `
+            <p style="font-size:16px; color:#f7eee1; font-style:italic;">${evt.subtitle || ''}</p>
+            <p>${evt.description || 'Join Offstage Creators for an unforgettable experience of words, storytelling, and stage art.'}</p>
+
+            <div class="modal-meta-grid">
+              <div>
+                <small style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.1em; display:block;">Date</small>
+                <strong style="color:#f7eee1;">${evt.eventDate || evt.date || 'TBA'}</strong>
+              </div>
+              <div>
+                <small style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.1em; display:block;">Time</small>
+                <strong style="color:#f7eee1;">${evt.startTime || evt.time || '7:30 PM'}</strong>
+              </div>
+              <div>
+                <small style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.1em; display:block;">Venue</small>
+                <strong style="color:#f7eee1;">${evt.venue || evt.venueName || 'Online'}</strong>
+              </div>
+              <div>
+                <small style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.1em; display:block;">City / Format</small>
+                <strong style="color:#f7eee1;">${evt.city || 'National'}</strong>
+              </div>
+            </div>
+
+            ${evt.venueAddress ? `<p><b>Address:</b> ${evt.venueAddress}</p>` : ''}
+            ${evt.mapsUrl ? `<p><a href="${evt.mapsUrl}" target="_blank" rel="noopener" style="color:#e4ad57;">📍 Open Venue in Google Maps ↗</a></p>` : ''}
+
+            <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--line); display:flex; gap:12px; flex-wrap:wrap;">
+              ${open ? (
+                evt.registrationProvider === 'external' ? 
+                  `<a class="btn-action btn-primary" href="${evt.externalRegistrationUrl}" target="_blank" rel="noopener" style="flex:1;">Book on ${evt.externalPlatformName || 'BookMyShow'} ↗</a>` :
+                  `<a class="btn-action btn-primary" href="/register?event=${encodeURIComponent(evt.slug)}" style="flex:1;">Register Now →</a>`
+              ) : ''}
+              ${completed ? `
+                <a class="btn-action btn-secondary" href="/gallery" style="flex:1;">Browse Photo Gallery ↗</a>
+                <a class="btn-action btn-secondary" href="/certificate?event=${encodeURIComponent(evt.slug)}" style="flex:1;">Download Certificate ↗</a>
+              ` : ''}
+            </div>
+          `;
+        }
+
+        if (eventModal) eventModal.classList.add('open');
+      };
+
+      if (modalCloseBtn && eventModal) {
+        modalCloseBtn.addEventListener('click', () => eventModal.classList.remove('open'));
+        eventModal.addEventListener('click', (e) => {
+          if (e.target === eventModal) eventModal.classList.remove('open');
+        });
+      }
+
+      // Initial Render with seeds
+      updateCounters(allEvents);
+      renderEvents();
+
+      // Fetch live data from /api/events
+      fetch('/api/events')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.success && Array.isArray(data.events) && data.events.length > 0) {
+            allEvents = data.events;
+            updateCounters(allEvents);
+            renderEvents();
+          }
+        })
+        .catch(err => {
+          console.log('[Events] Using local pre-rendered events store');
+        });
+
+      // Track page view
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('all_events_page_viewed');
+      }
+    })();
+  </script>
+</body>
+</html>

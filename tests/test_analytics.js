@@ -13,6 +13,8 @@ const publicDir = path.join(__dirname, '..', 'public');
 // 1. Check HTML script inclusions
 const publicPages = [
   'index.html',
+  'events.html',
+  'gallery.html',
   'register.html',
   'success.html',
   'certificate.html',

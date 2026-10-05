@@ -173,6 +173,7 @@ app.get('/api/config', async (req, res) => {
 // ─── Frontend HTML Routes ─────────────────────────────────────────────────────
 
 app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get(['/events', '/all-events'], (req, res) => res.sendFile(path.join(publicDir, 'events.html')));
 app.get(['/register', '/registration'], (req, res) => res.sendFile(path.join(publicDir, 'register.html')));
 app.get('/registration/:id', (req, res) => res.sendFile(path.join(publicDir, 'registration.html')));
 app.get(['/registration/success', '/success'], (req, res) => res.sendFile(path.join(publicDir, 'success.html')));
