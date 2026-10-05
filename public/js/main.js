@@ -216,10 +216,10 @@
             navRegBtn.setAttribute('target', '_blank');
             navRegBtn.setAttribute('rel', 'noopener noreferrer');
           }
-          navRegBtn.textContent = 'REGISTER ↗';
+          navRegBtn.textContent = 'REGISTER NOW ↗';
         } else {
           navRegBtn.href = `/register?event=${encodeURIComponent(evt.slug)}`;
-          navRegBtn.textContent = 'REGISTER';
+          navRegBtn.textContent = 'REGISTER NOW';
         }
       } else if (evt.isCompleted) {
         navRegBtn.href = `/certificate?event=${encodeURIComponent(evt.slug)}`;

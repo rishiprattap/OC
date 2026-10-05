@@ -142,7 +142,8 @@
 
   // ── Tab Navigation ────────────────────────────────────────────────────────────
   window.showTab = function (tabName) {
-    ['overview', 'events', 'registrations', 'pending', 'approved', 'certificates', 'emailCenter', 'settings', 'gallery'].forEach(name => {
+    if (tabName === 'settings') tabName = 'events';
+    ['overview', 'events', 'registrations', 'pending', 'approved', 'certificates', 'emailCenter', 'gallery'].forEach(name => {
       const el = document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1));
       if (el) el.style.display = 'none';
     });
@@ -160,7 +161,6 @@
     else if (tabName === 'approved') loadFiltered('APPROVED');
     else if (tabName === 'certificates') loadCertificatesTab();
     else if (tabName === 'emailCenter') initEmailCenter();
-    else if (tabName === 'settings') loadRegistrationSettings();
     else if (tabName === 'gallery') loadAdminGallery();
   };
 

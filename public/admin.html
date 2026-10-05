@@ -422,9 +422,6 @@
         <button class="admin-nav-item" data-tab="gallery" onclick="showTab('gallery')">
           <span class="nav-icon">🖼️</span> Event Gallery
         </button>
-        <button class="admin-nav-item" data-tab="settings" onclick="showTab('settings')">
-          <span class="nav-icon">⚙️</span> Registration Settings
-        </button>
       </nav>
       <button class="logout-btn" id="logoutBtn">⟵ Logout</button>
     </aside>
@@ -811,32 +808,6 @@
               <div class="empty-state"><p>Loading email history…</p></div>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- ── REGISTRATION SETTINGS TAB ───────────────────── -->
-      <div id="tabSettings" style="display:none;">
-        <div style="margin-bottom:24px;">
-          <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Registration Settings</h1>
-          <p style="color:#8e8477; font-size:13px; margin:0;">Control public performer registration intake and submission availability.</p>
-        </div>
-
-        <div class="panel-card" style="max-width: 640px;">
-          <div class="panel-title">Registration Status</div>
-          <div style="display:flex; align-items:center; gap: 16px; margin: 20px 0;">
-            <div id="settingsStatusBadge" class="status-badge-lg open">🟢 OPEN</div>
-            <span style="font-size:14px; color:#d5cbbd;" id="settingsStatusText">Registrations are currently open for participants.</span>
-          </div>
-
-          <div style="background:#0d0c0a; border: 1px solid #2a231c; border-radius: 8px; padding: 16px; margin-bottom: 24px; font-size: 13px; color: #8e8477; line-height: 1.6;">
-            <strong style="color:#f7eee1;">When Registration is Closed:</strong><br>
-            • Public registration submissions on <code>/register</code> are immediately blocked.<br>
-            • Visitors will see: <em>“Registration is currently closed.”</em><br>
-            • All existing participant registrations, approvals, and data remain 100% safe, readable, and intact in the Admin Panel.<br>
-            • Reopening instantly restores the registration form.
-          </div>
-
-          <button type="button" class="cta" id="btnToggleRegStatus" onclick="promptToggleRegistrationStatus()">🔴 Close Registrations</button>
         </div>
       </div>
 
