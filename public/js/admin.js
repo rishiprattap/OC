@@ -914,6 +914,48 @@
     textarea.selectionStart = textarea.selectionEnd = start + placeholder.length;
   };
 
+  window.setEmailPreviewDevice = function (mode) {
+    const wrapper = document.getElementById('previewIframeWrapper');
+    const btnDesktop = document.getElementById('btnPreviewDesktop');
+    const btnMobile = document.getElementById('btnPreviewMobile');
+    if (!wrapper) return;
+
+    if (mode === 'mobile') {
+      wrapper.style.maxWidth = '390px';
+      if (btnMobile) {
+        btnMobile.style.background = '#e4ad57';
+        btnMobile.style.color = '#0d0c0a';
+      }
+      if (btnDesktop) {
+        btnDesktop.style.background = 'transparent';
+        btnDesktop.style.color = '#8e8477';
+      }
+    } else {
+      wrapper.style.maxWidth = '100%';
+      if (btnDesktop) {
+        btnDesktop.style.background = '#e4ad57';
+        btnDesktop.style.color = '#0d0c0a';
+      }
+      if (btnMobile) {
+        btnMobile.style.background = 'transparent';
+        btnMobile.style.color = '#8e8477';
+      }
+    }
+  };
+
+  function sanitizeForEmailPreview(html) {
+    if (!html) return '';
+    if (typeof DOMPurify !== 'undefined') {
+      return DOMPurify.sanitize(html, {
+        WHOLE_DOCUMENT: true,
+        USE_PROFILES: { html: true },
+        ADD_TAGS: ['html', 'head', 'body', 'style', 'meta', 'title', 'table', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'p', 'div', 'span', 'a', 'strong', 'b', 'em', 'i', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'img', 'center'],
+        ADD_ATTR: ['target', 'style', 'width', 'height', 'cellpadding', 'cellspacing', 'border', 'align', 'valign', 'bgcolor', 'src', 'alt', 'href', 'class', 'id', 'name', 'content']
+      });
+    }
+    return html;
+  }
+
   window.openPreviewCustomEmail = async function () {
     const subject = document.getElementById('customEmailSubject')?.value || '';
     const bodyContent = document.getElementById('customEmailBody')?.value || '';
@@ -950,7 +992,10 @@
       if (noteEl) noteEl.textContent = firstRegId ? `Previewing with data from ${firstRegId}` : 'Previewing with sample participant data';
 
       if (iframe) {
-        iframe.srcdoc = data.html;
+        iframe.srcdoc = sanitizeForEmailPreview(data.html);
+      }
+      if (typeof setEmailPreviewDevice === 'function') {
+        setEmailPreviewDevice('desktop');
       }
       if (modal) modal.style.display = 'flex';
     } catch (err) {
@@ -1173,7 +1218,10 @@
       if (noteEl) noteEl.textContent = firstRegId ? `Previewing with data from ${firstRegId}` : 'Previewing with sample participant data';
 
       if (iframe) {
-        iframe.srcdoc = data.html;
+        iframe.srcdoc = sanitizeForEmailPreview(data.html);
+      }
+      if (typeof setEmailPreviewDevice === 'function') {
+        setEmailPreviewDevice('desktop');
       }
       if (modal) modal.style.display = 'flex';
     } catch (err) {
@@ -1430,7 +1478,12 @@
 
   window.closeEmailPreviewModal = function () {
     const modal = document.getElementById('emailPreviewModal');
+    const iframe = document.getElementById('previewIframe');
     if (modal) modal.style.display = 'none';
+    if (iframe) iframe.srcdoc = '';
+    if (typeof setEmailPreviewDevice === 'function') {
+      setEmailPreviewDevice('desktop');
+    }
   };
 
   // ─── EVENT GALLERY ADMIN MANAGEMENT ──────────────────────────────────────────

@@ -811,13 +811,14 @@ function replacePlaceholders(templateText, reg = {}, event = null) {
   const eventTime = event ? (event.start_time ? (event.end_time ? `${event.start_time} – ${event.end_time}` : event.start_time) : event.time) : config.EVENT.time;
   const venue = event ? (event.venue_name || event.venue) : 'Online (Google Meet)';
   const venueAddress = event ? (event.venue_address || venue) : 'Online (Google Meet)';
-  const registrationFee = event && event.fee !== undefined ? `₹${event.fee}` : `₹${config.OPEN_MIC_FEE_INR || 79}`;
+  const registrationFee = (reg.amount !== undefined && reg.amount !== null) ? `₹${reg.amount}` : (event && event.fee !== undefined ? `₹${event.fee}` : `₹${config.OPEN_MIC_FEE_INR || 79}`);
   const certificateUrl = `${config.APP_URL}/certificate${regId ? `?regId=${encodeURIComponent(regId)}` : ''}`;
 
   let out = templateText
     .replace(/\{name\}/gi, name)
     .replace(/\{registration_id\}/gi, regId)
     .replace(/\{serial_no\}/gi, serialNo)
+    .replace(/\{serial_number\}/gi, serialNo)
     .replace(/\{category\}/gi, category)
     .replace(/\{entry\}/gi, entry)
     .replace(/\{city\}/gi, city)
@@ -827,16 +828,54 @@ function replacePlaceholders(templateText, reg = {}, event = null) {
     .replace(/\{venue\}/gi, venue)
     .replace(/\{venue_address\}/gi, venueAddress)
     .replace(/\{registration_fee\}/gi, registrationFee)
+    .replace(/\{refund_amount\}/gi, registrationFee)
+    .replace(/\{amount\}/gi, registrationFee)
+    .replace(/\{fee\}/gi, registrationFee)
     .replace(/\{certificate_url\}/gi, certificateUrl);
 
-  if (!regId) {
+  if (!regId && !/<\/?[a-z]/i.test(templateText)) {
     out = out.replace(/^[ \t]*Registration ID:[ \t]*\n?/gim, '');
   }
-  if (!category) {
+  if (!category && !/<\/?[a-z]/i.test(templateText)) {
     out = out.replace(/^[ \t]*Performance Category:[ \t]*\n?/gim, '');
   }
 
   return out;
+}
+
+function isHtmlContent(content) {
+  if (!content || typeof content !== 'string') return false;
+  const trimmed = content.trim();
+  return /<\/?[a-z][\s\S]*>/i.test(trimmed);
+}
+
+function isFullHtmlDocument(content) {
+  if (!content || typeof content !== 'string') return false;
+  const trimmed = content.trim();
+  return /^<!DOCTYPE\s+html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed);
+}
+
+function prepareEmailBody(content) {
+  if (!content || !content.trim()) return '';
+  const trimmed = content.trim();
+  // If the content is already HTML, NEVER run it through markdown conversion or regex tag modifications
+  if (isHtmlContent(trimmed)) {
+    return trimmed;
+  }
+  return formatRichEmailContent(trimmed);
+}
+
+function buildFullEmailHtml({ title, preheader, bodyContent }) {
+  const trimmed = (bodyContent || '').trim();
+  // If the body is already a complete HTML document, avoid double wrapping
+  if (isFullHtmlDocument(trimmed)) {
+    return trimmed;
+  }
+  return emailService.emailWrapper({
+    title,
+    preheader,
+    bodyContent: prepareEmailBody(trimmed)
+  });
 }
 
 function formatRichEmailContent(rawText) {
@@ -891,7 +930,7 @@ function formatRichEmailContent(rawText) {
   const formattedBlocks = blocks.map(block => {
     block = block.trim();
     if (!block) return '';
-    if (/^<(table|h2|h3|h4|div|p|ul|ol)/i.test(block)) {
+    if (/^<([a-z0-9]+)[\s>]/i.test(block)) {
       return block;
     }
     const inner = block.replace(/\n/g, '<br>');
@@ -913,7 +952,7 @@ function generateMeetHtml({ meetingTitle, meetLink, date, startTime, endTime, ti
   if (additionalMessage && additionalMessage.trim()) {
     formattedInstructions = `
       <div style="background:#181410; border:1px solid #2a231c; border-left:3px solid #e4ad57; border-radius:8px; padding:18px 22px; margin:22px 0 20px;">
-        ${formatRichEmailContent(additionalMessage)}
+        ${prepareEmailBody(additionalMessage)}
       </div>
     `;
   }
@@ -1113,27 +1152,33 @@ router.post('/email/preview', async (req, res) => {
     const eventObj = targetEventId ? await getEventBySlug(targetEventId) : await getActiveEvent();
 
     if (!reg) {
+      reg = await get(`SELECT * FROM registrations WHERE registration_id = 'OC-OM-436157FB'`);
+    }
+
+    if (!reg) {
       reg = {
-        full_name: 'John Doe',
-        registration_id: 'OC-OM-SAMPLE79',
-        id: 79,
-        category: 'Music / Singing',
-        performance_title: 'Acoustic Melody',
-        city: 'Mumbai',
+        full_name: 'Rishi',
+        registration_id: 'OC-OM-436157FB',
+        id: 24,
+        serial_number: 24,
+        category: 'Music & Vocals',
+        performance_title: 'Test 01',
+        city: 'Kanpur',
+        amount: 89,
         email: manualEmail || 'creator@example.com',
         event_id: eventObj ? eventObj.slug : 'online-open-mic-2026'
       };
     }
 
     let finalSubject = subject || '';
-    let renderedBodyHtml = '';
+    let fullHtml = '';
 
     if (type === 'meet') {
       finalSubject = replacePlaceholders(subject || `Google Meet Invitation: ${meetData?.meetingTitle || eventObj?.title || 'Online Open Mic'}`, reg, eventObj);
       const rawId = reg.id || '';
-      const serialNo = rawId ? String(rawId).padStart(6, '0') : '';
+      const serialNo = reg.serial_number ? String(reg.serial_number).padStart(6, '0') : (rawId ? String(rawId).padStart(6, '0') : '');
       const substitutedInstructions = replacePlaceholders(meetData?.additionalMessage || meetData?.customHtml || '', reg, eventObj);
-      renderedBodyHtml = generateMeetHtml({
+      const renderedBodyHtml = generateMeetHtml({
         meetingTitle: meetData?.meetingTitle || eventObj?.title,
         meetLink: meetData?.meetLink || eventObj?.meet_link,
         date: meetData?.date || eventObj?.event_date,
@@ -1146,17 +1191,20 @@ router.post('/email/preview', async (req, res) => {
         serialNo,
         category: reg.category
       });
+      fullHtml = buildFullEmailHtml({
+        title: finalSubject,
+        preheader: finalSubject,
+        bodyContent: renderedBodyHtml
+      });
     } else {
       finalSubject = replacePlaceholders(subject || `Message regarding ${eventObj?.title || 'Offstage Creators'}`, reg, eventObj);
       const substitutedBody = replacePlaceholders(bodyContent || '', reg, eventObj);
-      renderedBodyHtml = formatRichEmailContent(substitutedBody);
+      fullHtml = buildFullEmailHtml({
+        title: finalSubject,
+        preheader: finalSubject,
+        bodyContent: substitutedBody
+      });
     }
-
-    const fullHtml = emailService.emailWrapper({
-      title: finalSubject,
-      preheader: finalSubject,
-      bodyContent: renderedBodyHtml
-    });
 
     return res.json({ success: true, subject: finalSubject, html: fullHtml });
   } catch (err) {
@@ -1198,10 +1246,10 @@ router.post('/email/custom-send', async (req, res) => {
         const substitutedSubject = replacePlaceholders(subject, reg, regEvent);
         const substitutedBody = replacePlaceholders(bodyContent, reg, regEvent);
 
-        const html = emailService.emailWrapper({
+        const html = buildFullEmailHtml({
           title: substitutedSubject,
           preheader: substitutedSubject,
-          bodyContent: formatRichEmailContent(substitutedBody)
+          bodyContent: substitutedBody
         });
 
         await emailService.sendEmail({
@@ -1230,10 +1278,10 @@ router.post('/email/custom-send', async (req, res) => {
         const substitutedSubject = replacePlaceholders(subject, dummyReg, defaultEvent);
         const substitutedBody = replacePlaceholders(bodyContent, dummyReg, defaultEvent);
 
-        const html = emailService.emailWrapper({
+        const html = buildFullEmailHtml({
           title: substitutedSubject,
           preheader: substitutedSubject,
-          bodyContent: formatRichEmailContent(substitutedBody)
+          bodyContent: substitutedBody
         });
 
         await emailService.sendEmail({

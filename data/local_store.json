@@ -1,11 +1,6 @@
 {
   "events": [
     {
-      "registration_provider": "internal",
-      "external_registration_url": "",
-      "external_platform_name": "",
-      "external_platform_notes": "",
-      "external_open_new_tab": 1,
       "id": 1,
       "slug": "online-open-mic-2026",
       "name": "Online Open Mic 2026",
@@ -57,15 +52,15 @@
       "certificate_enabled": 1,
       "certificate_title": "CERTIFICATE OF PARTICIPATION",
       "certificate_bg_url": "",
+      "registration_provider": "internal",
+      "external_registration_url": "",
+      "external_platform_name": "",
+      "external_platform_notes": "",
+      "external_open_new_tab": 1,
       "created_at": "2026-09-01T00:00:00.000Z",
       "updated_at": "2026-09-24T00:00:00.000Z"
     },
     {
-      "registration_provider": "external",
-      "external_registration_url": "https://in.bookmyshow.com/events/adhure-musafir/ET00515735",
-      "external_platform_name": "BookMyShow",
-      "external_platform_notes": "BookMyShow official ticketing partner",
-      "external_open_new_tab": 1,
       "id": 2,
       "slug": "delhi-adhure-musafir-2026",
       "name": "Adhure Musafir — Delhi Show",
@@ -117,11 +112,38 @@
       "certificate_enabled": 1,
       "certificate_title": "CERTIFICATE OF ATTENDANCE",
       "certificate_bg_url": "",
+      "registration_provider": "external",
+      "external_registration_url": "https://in.bookmyshow.com/events/adhure-musafir/ET00515735",
+      "external_platform_name": "BookMyShow",
+      "external_platform_notes": "BookMyShow official ticketing partner",
+      "external_open_new_tab": 1,
       "created_at": "2026-09-10T00:00:00.000Z",
       "updated_at": "2026-09-24T00:00:00.000Z"
     }
   ],
   "registrations": [
+    {
+      "id": 24,
+      "serial_number": 24,
+      "registration_id": "OC-OM-436157FB",
+      "event_id": "online-open-mic-2026",
+      "full_name": "Rishi",
+      "phone": "9876543210",
+      "email": "rishi@example.com",
+      "city": "Kanpur",
+      "category": "Music & Vocals",
+      "instagram": "rishipratap",
+      "performance_title": "Test 01",
+      "performance_description": "",
+      "amount": 89,
+      "otp_verified": 1,
+      "reg_status": "CANCELLED",
+      "payment_status": "PAID",
+      "checked_in": 0,
+      "certificate_eligible": 0,
+      "created_at": "2026-10-07T10:00:00.000Z",
+      "updated_at": "2026-10-07T10:00:00.000Z"
+    },
     {
       "id": 1,
       "registration_id": "OC-OM-4892",
@@ -461,7 +483,7 @@
       "updated_at": "2026-09-24T20:28:15.226Z"
     },
     {
-      "id": 24,
+      "id": 32,
       "registration_id": "OC-OM-61989A01",
       "event_id": "online-open-mic-2026",
       "full_name": "Suite Performer",

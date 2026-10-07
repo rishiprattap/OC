@@ -915,17 +915,24 @@
 
   <!-- Email Preview Modal -->
   <div class="modal-overlay" id="emailPreviewModal" style="display:none;">
-    <div class="modal-card" style="width: min(720px, 95vw);">
-      <div class="modal-header">
+    <div class="modal-card" id="emailPreviewModalCard" style="width: min(840px, 95vw); max-height: 94vh; display: flex; flex-direction: column;">
+      <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
           <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">EMAIL PREVIEW</div>
           <div style="font-size:16px; font-weight:700; color:#f7eee1; margin-top:2px;" id="previewSubject">—</div>
         </div>
-        <button class="modal-close" onclick="closeEmailPreviewModal()">✕</button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <!-- Desktop / Mobile Viewport Switcher -->
+          <div style="display: inline-flex; background: #181410; border: 1px solid #2a231c; border-radius: 6px; padding: 2px;">
+            <button type="button" id="btnPreviewDesktop" class="action-btn" onclick="setEmailPreviewDevice('desktop')" style="padding: 5px 12px; font-size: 11px; background: #e4ad57; color: #0d0c0a; font-weight: 700; border: none; border-radius: 4px; cursor: pointer;">🖥️ Desktop</button>
+            <button type="button" id="btnPreviewMobile" class="action-btn" onclick="setEmailPreviewDevice('mobile')" style="padding: 5px 12px; font-size: 11px; background: transparent; color: #8e8477; font-weight: 700; border: none; border-radius: 4px; cursor: pointer;">📱 Mobile</button>
+          </div>
+          <button class="modal-close" onclick="closeEmailPreviewModal()">✕</button>
+        </div>
       </div>
-      <div class="modal-body" style="padding:16px;">
-        <div style="background:#0a0908; border:1px solid #2a231c; border-radius:8px; overflow:hidden;">
-          <iframe id="previewIframe" style="width:100%; height:480px; border:none; background:#0d0c0a;"></iframe>
+      <div class="modal-body" style="padding: 16px; flex: 1; overflow-y: auto;">
+        <div id="previewIframeWrapper" style="width: 100%; transition: max-width 0.25s ease; margin: 0 auto; background: #0a0908; border: 1px solid #2a231c; border-radius: 8px; overflow: hidden;">
+          <iframe id="previewIframe" sandbox="" style="width: 100%; min-height: 700px; height: 700px; border: none; background: #0d0c0a; display: block;"></iframe>
         </div>
       </div>
       <div class="modal-actions" style="justify-content:space-between; align-items:center;">
@@ -1433,6 +1440,7 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>
