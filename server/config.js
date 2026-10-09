@@ -17,6 +17,22 @@ module.exports = {
 
   // Session security
   SESSION_SECRET: process.env.SESSION_SECRET || 'change_this_in_production_please',
+  OTP_SECRET: process.env.OTP_SECRET || process.env.SESSION_SECRET || 'oc_otp_secure_hmac_secret',
+
+  // Resend API keys & sender identities (offstagecreators.in domain)
+  RESEND: {
+    domain: 'offstagecreators.in',
+    otpApiKey: process.env.RESEND_OTP_API_KEY || process.env.RESEND_API_KEY || '',
+    registrationApiKey: process.env.RESEND_REGISTRATION_API_KEY || process.env.RESEND_API_KEY || '',
+    eventUpdatesApiKey: process.env.RESEND_EVENT_UPDATES_API_KEY || process.env.RESEND_API_KEY || '',
+    defaultApiKey: process.env.RESEND_API_KEY || '',
+    senders: {
+      otp: 'Offstage Creators <verify@offstagecreators.in>',
+      registration: 'Offstage Creators <registrations@offstagecreators.in>',
+      events: 'Offstage Creators <events@offstagecreators.in>',
+      support: 'support@offstagecreators.in'
+    }
+  },
 
   // Event constants
   OPEN_MIC_FEE_INR: parseInt(process.env.OPEN_MIC_FEE_INR, 10) || 79,
@@ -34,7 +50,7 @@ module.exports = {
     secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER || '',
     password: (process.env.MAIL_PASSWORD || '').replace(/\s+/g, ''),
-    from: process.env.MAIL_FROM || process.env.MAIL_USER || '',
+    from: process.env.MAIL_FROM || 'Offstage Creators <registrations@offstagecreators.in>',
     fromName: process.env.MAIL_FROM_NAME || 'Offstage Creators'
   },
 
@@ -58,7 +74,7 @@ module.exports = {
   },
 
   // OTP settings
-  OTP_EXPIRY_MINUTES: 10,
+  OTP_EXPIRY_MINUTES: 5,
   OTP_MAX_ATTEMPTS: 5,
   OTP_RESEND_COOLDOWN_SECONDS: 60
 };

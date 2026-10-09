@@ -1,7 +1,8 @@
 /**
  * Offstage Creators — OTP Service
- * Handles generation, hashing, storage, verification, and rate limiting of OTPs.
- * All OTPs are cryptographically secure and stored as salted SHA-256 hashes.
+ * Handles generation, keyed HMAC hashing, storage, verification,
+ * rate limiting, and short-lived verification token issuance.
+ * All OTPs are cryptographically secure and stored as keyed HMAC-SHA256 hashes.
  */
 const crypto = require('crypto');
 const config = require('../config');
@@ -24,10 +25,11 @@ function generateSalt() {
 }
 
 /**
- * Hash an OTP with a given salt using SHA-256.
+ * Keyed HMAC-SHA256 hash using OTP_SECRET + per-session salt.
  */
 function hashOTP(otp, salt) {
-  return crypto.createHash('sha256').update(`${otp}:${salt}`).digest('hex');
+  const secret = config.OTP_SECRET || config.SESSION_SECRET || 'oc_otp_secure_hmac_secret';
+  return crypto.createHmac('sha256', secret).update(`${otp}:${salt}`).digest('hex');
 }
 
 /**
@@ -40,38 +42,94 @@ function verifyOTPHash(inputOtp, salt, expectedHash) {
   return crypto.timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(expectedHash, 'hex'));
 }
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
+/**
+ * Generate a signed, tamper-proof, short-lived registration authorization token.
+ */
+function generateVerificationToken(registrationId, email) {
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes validity
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const payload = `${registrationId}:${email.toLowerCase()}:${expiresAt}:${nonce}`;
+  const secret = config.OTP_SECRET || config.SESSION_SECRET || 'oc_otp_secure_hmac_secret';
+  const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  return Buffer.from(`${payload}:${sig}`).toString('base64url');
+}
+
+/**
+ * Validate a verification authorization token.
+ */
+function verifyVerificationToken(token, email, registrationId) {
+  if (!token || typeof token !== 'string') {
+    return { valid: false, reason: 'MISSING_TOKEN', message: 'Verification authorization token is required.' };
+  }
+  try {
+    const decoded = Buffer.from(token, 'base64url').toString('utf8');
+    const parts = decoded.split(':');
+    if (parts.length !== 5) {
+      return { valid: false, reason: 'MALFORMED_TOKEN', message: 'Invalid verification token format.' };
+    }
+    const [tRegId, tEmail, tExpires, tNonce, tSig] = parts;
+    const expiresAt = parseInt(tExpires, 10);
+
+    if (Date.now() > expiresAt) {
+      return { valid: false, reason: 'EXPIRED_TOKEN', message: 'Verification authorization has expired. Please verify your email again.' };
+    }
+
+    if (email && tEmail.toLowerCase() !== email.toLowerCase().trim()) {
+      return { valid: false, reason: 'EMAIL_MISMATCH', message: 'Token does not match the provided email.' };
+    }
+
+    if (registrationId && tRegId.toUpperCase() !== registrationId.toUpperCase().trim()) {
+      return { valid: false, reason: 'REG_ID_MISMATCH', message: 'Token does not match this registration ID.' };
+    }
+
+    const payload = `${tRegId}:${tEmail}:${tExpires}:${tNonce}`;
+    const secret = config.OTP_SECRET || config.SESSION_SECRET || 'oc_otp_secure_hmac_secret';
+    const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+    if (tSig.length !== expectedSig.length || !crypto.timingSafeEqual(Buffer.from(tSig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
+      return { valid: false, reason: 'INVALID_SIGNATURE', message: 'Invalid authorization token signature.' };
+    }
+
+    return { valid: true, registrationId: tRegId, email: tEmail, expiresAt };
+  } catch (err) {
+    return { valid: false, reason: 'TOKEN_PARSE_ERROR', message: 'Failed to verify authorization token.' };
+  }
+}
+
+// ─── Storage & Verification ───────────────────────────────────────────────────
 
 /**
  * Create a new OTP session for a registration.
- * Replaces any existing OTP session for this email.
+ * Replaces any existing unverified OTP session for this email.
  */
 async function storeOTP(email, registrationId, otp) {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanRegId = registrationId.trim().toUpperCase();
   const salt = generateSalt();
   const hash = hashOTP(otp, salt);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + config.OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
 
-  // Delete any existing OTP session for this email
-  await run(`DELETE FROM otp_sessions WHERE email = ?`, [email.toLowerCase()]);
+  // Invalidate any existing OTP session for this email
+  await run(`DELETE FROM otp_sessions WHERE email = ?`, [cleanEmail]);
 
   await run(
     `INSERT INTO otp_sessions (email, registration_id, otp_hash, otp_salt, expires_at, attempts, last_sent_at, verified, created_at)
      VALUES (?, ?, ?, ?, ?, 0, ?, 0, ?)`,
-    [email.toLowerCase(), registrationId, hash, salt, expiresAt, now.toISOString(), now.toISOString()]
+    [cleanEmail, cleanRegId, hash, salt, expiresAt, now.toISOString(), now.toISOString()]
   );
 
-  return { expiresAt };
+  return { expiresAt, expiryMinutes: config.OTP_EXPIRY_MINUTES };
 }
 
 /**
- * Check if we can send another OTP to this email (rate limit: 1 per cooldown period).
- * Returns { allowed: bool, secondsRemaining: number }
+ * Check if we can send another OTP to this email (resend cooldown).
  */
 async function canResend(email) {
+  const cleanEmail = email.trim().toLowerCase();
   const session = await get(
-    `SELECT last_sent_at FROM otp_sessions WHERE email = ? AND verified = 0`,
-    [email.toLowerCase()]
+    `SELECT last_sent_at FROM otp_sessions WHERE email = ? AND verified = 0 ORDER BY created_at DESC LIMIT 1`,
+    [cleanEmail]
   );
 
   if (!session) return { allowed: true, secondsRemaining: 0 };
@@ -89,23 +147,29 @@ async function canResend(email) {
 }
 
 /**
- * Verify an OTP entered by the user.
- * Returns { success: bool, reason: string }
+ * Verify an OTP entered by the user and issue an authorization token.
  */
 async function verifyOTP(email, inputOtp) {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanOtp = String(inputOtp || '').trim().replace(/\s/g, '');
+
+  if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+    return { success: false, reason: 'INVALID_FORMAT', message: 'Please enter a valid 6-digit verification code.' };
+  }
+
   const session = await get(
     `SELECT * FROM otp_sessions WHERE email = ? AND verified = 0 ORDER BY created_at DESC LIMIT 1`,
-    [email.toLowerCase()]
+    [cleanEmail]
   );
 
   if (!session) {
-    return { success: false, reason: 'NO_SESSION', message: 'No OTP found for this email. Please request a new OTP.' };
+    return { success: false, reason: 'NO_SESSION', message: 'No active verification code found for this email. Please request a new code.' };
   }
 
   // Check expiry
   if (new Date() > new Date(session.expires_at)) {
     await run(`DELETE FROM otp_sessions WHERE id = ?`, [session.id]);
-    return { success: false, reason: 'EXPIRED', message: 'Your OTP has expired. Please request a new one.' };
+    return { success: false, reason: 'EXPIRED', message: 'Your verification code has expired (5-minute limit). Please request a new code.' };
   }
 
   // Check attempt limit
@@ -114,36 +178,61 @@ async function verifyOTP(email, inputOtp) {
     return {
       success: false,
       reason: 'TOO_MANY_ATTEMPTS',
-      message: 'Too many incorrect attempts. Please request a new OTP.'
+      message: 'Too many incorrect attempts. For security, this code has been invalidated. Please request a new code.'
     };
   }
 
-  // Increment attempts
-  await run(`UPDATE otp_sessions SET attempts = attempts + 1 WHERE id = ?`, [session.id]);
+  // Increment attempts counter
+  const currentAttempts = (session.attempts || 0) + 1;
+  await run(`UPDATE otp_sessions SET attempts = ? WHERE id = ?`, [currentAttempts, session.id]);
 
   // Verify hash
-  const isValid = verifyOTPHash(inputOtp, session.otp_salt, session.otp_hash);
+  const isValid = verifyOTPHash(cleanOtp, session.otp_salt, session.otp_hash);
 
   if (!isValid) {
-    const attemptsLeft = config.OTP_MAX_ATTEMPTS - session.attempts - 1;
+    const attemptsLeft = config.OTP_MAX_ATTEMPTS - currentAttempts;
+    if (attemptsLeft <= 0) {
+      await run(`DELETE FROM otp_sessions WHERE id = ?`, [session.id]);
+      return {
+        success: false,
+        reason: 'TOO_MANY_ATTEMPTS',
+        message: 'Incorrect code. Maximum verification attempts reached. Please request a new code.'
+      };
+    }
     return {
       success: false,
       reason: 'INVALID_OTP',
-      message: attemptsLeft > 0
-        ? `Incorrect OTP. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`
-        : 'Incorrect OTP. You have used all attempts. Please request a new OTP.'
+      message: `Incorrect code. ${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining.`
     };
   }
 
-  // Mark as verified and clean up
-  await run(`UPDATE otp_sessions SET verified = 1 WHERE id = ?`, [session.id]);
+  // Generate short-lived authorization token
+  const token = generateVerificationToken(session.registration_id, cleanEmail);
+  const tokenExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+  // Mark as verified and store token
+  await run(
+    `UPDATE otp_sessions SET verified = 1, verification_token = ?, token_expires_at = ? WHERE id = ?`,
+    [token, tokenExpiresAt, session.id]
+  );
 
   return {
     success: true,
     registrationId: session.registration_id,
+    verificationToken: token,
     reason: 'OK',
-    message: 'OTP verified successfully.'
+    message: 'Email verified successfully.'
   };
+}
+
+/**
+ * Invalidate/consume a verification token once used.
+ */
+async function consumeVerificationToken(token) {
+  if (!token) return;
+  try {
+    await run(`DELETE FROM otp_sessions WHERE verification_token = ?`, [token]);
+  } catch (_) {}
 }
 
 /**
@@ -173,5 +262,8 @@ module.exports = {
   storeOTP,
   verifyOTP,
   canResend,
+  generateVerificationToken,
+  verifyVerificationToken,
+  consumeVerificationToken,
   getSessionStatus
 };

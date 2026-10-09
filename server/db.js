@@ -240,7 +240,9 @@ function loadLocalStore() {
       { id: 10, hash: "74e0c4bc687027924b29d5c6cbe6157de16b1cc7253fc2bead217ca53ad6293a", event_name: 'ONLINE OPEN MIC 2026 (Edition 1)', created_at: new Date().toISOString() }
     ],
     emailLogs: [],
-    otpSessions: []
+    otpSessions: [],
+    unsubscribedEmails: [],
+    emailCampaigns: []
   };
 
   try {
@@ -259,7 +261,9 @@ function loadLocalStore() {
         })),
         registrations: parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations,
         settings: { ...defaultStore.settings, ...(parsed.settings || {}) },
-        otpSessions: parsed.otpSessions || []
+        otpSessions: parsed.otpSessions || [],
+        unsubscribedEmails: parsed.unsubscribedEmails || [],
+        emailCampaigns: parsed.emailCampaigns || []
       };
     }
   } catch (err) {
@@ -499,6 +503,18 @@ function handleLocalRun(sql, params = []) {
           reg.otp_verified_at = params[0];
           reg.reg_status = 'VERIFIED';
           reg.updated_at = params[0];
+        } else if (sqlLower.includes('registration_email_sent_at = ?')) {
+          reg.registration_email_sent_at = params[0];
+          reg.updated_at = params[0];
+        } else if (sqlLower.includes('approval_email_sent_at = ?')) {
+          reg.approval_email_sent_at = params[0];
+          reg.updated_at = params[0];
+        } else if (sqlLower.includes('rejection_email_sent_at = ?')) {
+          reg.rejection_email_sent_at = params[0];
+          reg.updated_at = params[0];
+        } else if (sqlLower.includes('last_email_error = ?')) {
+          reg.last_email_error = params[0];
+          reg.updated_at = new Date().toISOString();
         }
         saveLocalStore();
       }
@@ -759,18 +775,64 @@ function handleLocalRun(sql, params = []) {
 
   if (sqlLower.includes('update otp_sessions')) {
     const list = localStore.otpSessions || [];
-    if (sqlLower.includes('attempts = attempts + 1')) {
-      const id = params[params.length - 1];
-      const s = list.find(sess => sess.id === id);
-      if (s) s.attempts = (s.attempts || 0) + 1;
-      saveLocalStore();
-    } else if (sqlLower.includes('verified = 1')) {
-      const id = params[params.length - 1];
-      const s = list.find(sess => sess.id === id);
-      if (s) s.verified = 1;
+    const id = params[params.length - 1];
+    const s = list.find(sess => sess.id === id);
+    if (s) {
+      if (sqlLower.includes('attempts = attempts + 1')) {
+        s.attempts = (s.attempts || 0) + 1;
+      } else if (sqlLower.includes('attempts = ?')) {
+        s.attempts = Number(params[0] || 0);
+      }
+      if (sqlLower.includes('verified = 1')) {
+        s.verified = 1;
+      }
+      if (sqlLower.includes('verification_token =')) {
+        s.verification_token = params[0];
+        s.token_expires_at = params[1];
+      }
       saveLocalStore();
     }
     return { lastID: null, changes: 1 };
+  }
+
+  // 8. Unsubscribed Emails
+  if (sqlLower.includes('insert into unsubscribed_emails')) {
+    const list = localStore.unsubscribedEmails || [];
+    const id = list.length > 0 ? Math.max(...list.map(u => u.id || 0)) + 1 : 1;
+    const email = String(params[0] || '').toLowerCase().trim();
+    if (!list.some(u => u.email === email)) {
+      list.push({ id, email, reason: params[1] || '', created_at: params[2] || new Date().toISOString() });
+      localStore.unsubscribedEmails = list;
+      saveLocalStore();
+    }
+    return { lastID: id, changes: 1 };
+  }
+
+  if (sqlLower.includes('delete from unsubscribed_emails')) {
+    const email = String(params[0] || '').toLowerCase().trim();
+    localStore.unsubscribedEmails = (localStore.unsubscribedEmails || []).filter(u => u.email !== email);
+    saveLocalStore();
+    return { lastID: null, changes: 1 };
+  }
+
+  // 9. Email Campaigns
+  if (sqlLower.includes('insert into email_campaigns')) {
+    const list = localStore.emailCampaigns || [];
+    const id = list.length > 0 ? Math.max(...list.map(c => c.id || 0)) + 1 : 1;
+    list.push({
+      id,
+      event_id: params[0],
+      campaign_type: params[1],
+      subject: params[2],
+      recipient_count: Number(params[3] || 0),
+      sent_count: Number(params[4] || 0),
+      failed_count: Number(params[5] || 0),
+      status: params[6] || 'COMPLETED',
+      created_at: params[7] || new Date().toISOString()
+    });
+    localStore.emailCampaigns = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
   }
 
   return { lastID: 1, changes: 1 };
@@ -782,12 +844,22 @@ function handleLocalGet(sql, params = []) {
 
   // OTP Sessions
   if (sqlLower.includes('from otp_sessions')) {
+    if (sqlLower.includes('verification_token =')) {
+      const token = params[0];
+      return (localStore.otpSessions || []).find(s => s.verification_token === token) || null;
+    }
     const email = String(params[0] || '').toLowerCase();
     const list = (localStore.otpSessions || []).filter(s => s.email === email);
     if (sqlLower.includes('verified = 0')) {
       return list.filter(s => !s.verified).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
     }
     return list.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+  }
+
+  // Unsubscribed Emails
+  if (sqlLower.includes('from unsubscribed_emails')) {
+    const email = String(params[0] || '').toLowerCase().trim();
+    return (localStore.unsubscribedEmails || []).find(u => u.email === email) || null;
   }
 
   // Settings
@@ -977,6 +1049,16 @@ function handleLocalAll(sql, params = []) {
   // Email logs
   if (sqlLower.includes('from email_logs')) {
     return [...localStore.emailLogs].reverse();
+  }
+
+  // Unsubscribed emails
+  if (sqlLower.includes('from unsubscribed_emails')) {
+    return [...(localStore.unsubscribedEmails || [])];
+  }
+
+  // Email campaigns
+  if (sqlLower.includes('from email_campaigns')) {
+    return [...(localStore.emailCampaigns || [])].reverse();
   }
 
   return [];
@@ -1190,6 +1272,8 @@ const initSchema = async () => {
         created_at TEXT NOT NULL
       )
     `);
+    await addColumnIfNotExists('otp_sessions', 'verification_token TEXT');
+    await addColumnIfNotExists('otp_sessions', 'token_expires_at TEXT');
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_sessions(email)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_reg_id ON otp_sessions(registration_id)`);
 
@@ -1209,6 +1293,33 @@ const initSchema = async () => {
     `);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_reg ON email_logs(registration_id)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_email_logs_type ON email_logs(email_type)`);
+
+    // ── Unsubscribed Emails & Email Preferences ─────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS unsubscribed_emails (
+        id SERIAL PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        reason TEXT,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_unsub_email ON unsubscribed_emails(email)`);
+
+    // ── Email Campaigns ─────────────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS email_campaigns (
+        id SERIAL PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        campaign_type TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        recipient_count INTEGER NOT NULL DEFAULT 0,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'COMPLETED',
+        created_at TEXT NOT NULL
+      )
+    `);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_campaigns_event ON email_campaigns(event_id)`);
 
     // ── Legacy certificates ─────────────────────────────────────────────────────
     await rawRun(`

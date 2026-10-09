@@ -249,6 +249,7 @@
   let activeRegistrationId = null;
   let activeEmail = null;
   let activeName = null;
+  let activeVerificationToken = null;
   let selectedScreenshotFile = null;
   let otpExpiresAt = null;
   let otpExpiryTimer = null;
@@ -655,6 +656,7 @@
 
       // Success — OTP verified
       setOTPSuccess();
+      activeVerificationToken = data.verificationToken || null;
 
       // Advance directly to Step 3: ₹79 Payment & Screenshot Submission
       goToStep(3);
@@ -741,9 +743,13 @@
         formData.append('registrationId', activeRegistrationId);
         formData.append('transactionId', utr);
         formData.append('screenshot', selectedScreenshotFile);
+        if (activeVerificationToken) {
+          formData.append('verificationToken', activeVerificationToken);
+        }
 
         const res = await fetch('/api/payments/submit-proof', {
           method: 'POST',
+          headers: activeVerificationToken ? { 'x-verification-token': activeVerificationToken } : {},
           body: formData
         });
 

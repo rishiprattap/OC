@@ -61,29 +61,30 @@ app.use(session({
 }));
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
+const isTest = process.env.NODE_ENV === 'test';
 
-// OTP endpoints: 10 requests per 15 minutes per IP
+// OTP endpoints: 10 requests per 15 minutes per IP (1000 in test mode)
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: isTest ? 1000 : 10,
   message: { success: false, error: 'Too many OTP requests. Please wait 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Registration endpoint: 20 per hour per IP
+// Registration endpoint: 20 per hour per IP (1000 in test mode)
 const registrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 20,
+  max: isTest ? 1000 : 20,
   message: { success: false, error: 'Too many registration attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Admin login: 10 attempts per 15 minutes per IP
+// Admin login: 10 attempts per 15 minutes per IP (1000 in test mode)
 const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: isTest ? 1000 : 10,
   message: { success: false, error: 'Too many login attempts. Please wait 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false

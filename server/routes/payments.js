@@ -10,6 +10,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { run, get } = require('../db');
 const config = require('../config');
+const otpService = require('../services/otp');
 
 const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
 
@@ -84,6 +85,24 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
 
     const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [cleanRegId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    // Enforce email verification — direct API calls cannot bypass OTP verification
+    if (reg.otp_verified !== 1 || reg.reg_status === 'PENDING_VERIFICATION') {
+      return res.status(403).json({
+        success: false,
+        error: 'Email verification is required before submitting payment proof. Please complete OTP verification first.'
+      });
+    }
+
+    // Verify authorization token if provided
+    const clientToken = req.headers['x-verification-token'] || req.body.verificationToken;
+    if (clientToken) {
+      const tokenResult = otpService.verifyVerificationToken(clientToken, reg.email, cleanRegId);
+      if (!tokenResult.valid) {
+        return res.status(403).json({ success: false, error: tokenResult.message });
+      }
+      await otpService.consumeVerificationToken(clientToken);
+    }
 
     if (reg.reg_status === 'APPROVED') {
       return res.status(400).json({ success: false, error: 'This registration is already approved.' });

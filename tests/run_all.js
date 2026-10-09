@@ -1,8 +1,26 @@
 // Offstage Creators — Master Test Runner
+process.env.NODE_ENV = 'test';
+const http = require('http');
+const app = require('../server/index');
+const config = require('../server/config');
 const runPlatformTests = require('./test_platform');
-const runEmailTests = require('./test_email_system');
-const runMeetTests = require('./test_meet_system');
-const runAnalyticsTests = require('./test_analytics');
+const runEmailOtpSystemTests = require('./test_email_otp_system');
+
+let serverInstance = null;
+
+function ensureServerRunning() {
+  return new Promise((resolve) => {
+    const testReq = http.request({ hostname: 'localhost', port: config.PORT, path: '/api/config', method: 'GET' }, () => {
+      resolve(false); // already running
+    });
+    testReq.on('error', () => {
+      serverInstance = app.listen(config.PORT, () => {
+        resolve(true); // started ephemeral server
+      });
+    });
+    testReq.end();
+  });
+}
 
 async function runMasterSuite() {
   console.log('\n======================================================');
@@ -12,26 +30,47 @@ async function runMasterSuite() {
   const startTime = Date.now();
   let allPassed = true;
 
-  console.log('>>> [1/2] EXECUTING REBUILT PLATFORM & REGISTRATION TESTS...');
-  const platformOk = await runPlatformTests();
-  if (!platformOk) allPassed = false;
-
-  console.log('\n>>> [2/2] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
-  let analyticsOk = false;
-  try {
-    require('./test_analytics');
-    analyticsOk = true;
-  } catch (e) {
-    console.error('Analytics test failed:', e.message);
+  const startedServer = await ensureServerRunning();
+  if (startedServer) {
+    console.log(`[Test Runner] Started ephemeral server on http://localhost:${config.PORT}`);
   }
-  if (!analyticsOk) allPassed = false;
+
+  let emailOtpOk = false;
+  let platformOk = false;
+  let analyticsOk = false;
+
+  try {
+    console.log('>>> [1/3] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
+    emailOtpOk = await runEmailOtpSystemTests();
+    if (!emailOtpOk) allPassed = false;
+
+    console.log('>>> [2/3] EXECUTING PLATFORM & REGISTRATION JOURNEY TESTS...');
+    platformOk = await runPlatformTests();
+    if (!platformOk) allPassed = false;
+
+    console.log('>>> [3/3] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
+    try {
+      require('./test_analytics');
+      analyticsOk = true;
+    } catch (e) {
+      console.error('Analytics test error:', e.message);
+    }
+    if (!analyticsOk) allPassed = false;
+
+  } finally {
+    if (serverInstance) {
+      serverInstance.close();
+      console.log('[Test Runner] Ephemeral server closed.');
+    }
+  }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
   console.log('\n======================================================');
   console.log('                   FINAL TEST SUMMARY                 ');
   console.log('======================================================');
-  console.log(`Platform & OTP Flow    : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Email, OTP & Alerts    : ${emailOtpOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Platform & User Flow   : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Analytics & Insights   : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Total Execution Time   : ${duration}s`);
   console.log('======================================================\n');
@@ -47,5 +86,6 @@ async function runMasterSuite() {
 
 runMasterSuite().catch(err => {
   console.error('Master runner fatal error:', err);
+  if (serverInstance) serverInstance.close();
   process.exit(1);
 });

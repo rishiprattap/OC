@@ -1,11 +1,29 @@
 /**
  * Offstage Creators — Admin & Public Sync & Banner Verification Test
  */
+process.env.NODE_ENV = 'test';
 const assert = require('assert');
-
+const http = require('http');
+const app = require('../server/index');
 const config = require('../server/config');
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = `http://localhost:${config.PORT || 3000}`;
 const ADMIN_SECRET = config.ADMIN_SECRET || process.env.ADMIN_SECRET || 'R!SHI88';
+
+let serverInstance = null;
+
+function ensureServerRunning() {
+  return new Promise((resolve) => {
+    const testReq = http.request({ hostname: 'localhost', port: config.PORT || 3000, path: '/api/config', method: 'GET' }, () => {
+      resolve(false);
+    });
+    testReq.on('error', () => {
+      serverInstance = app.listen(config.PORT || 3000, () => {
+        resolve(true);
+      });
+    });
+    testReq.end();
+  });
+}
 
 async function request(path, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -18,6 +36,7 @@ async function request(path, options = {}) {
 }
 
 async function run() {
+  await ensureServerRunning();
   console.log('======================================================');
   console.log('   TESTING ADMIN & PUBLIC EVENT SYNCHRONIZATION      ');
   console.log('======================================================\n');
@@ -135,9 +154,11 @@ async function run() {
   console.log('======================================================');
   console.log('   🎉 ALL SYNCHRONIZATION & BANNER TESTS PASSED!      ');
   console.log('======================================================');
+  if (serverInstance) serverInstance.close();
 }
 
 run().catch(err => {
   console.error('\n❌ TEST FAILED:', err);
+  if (serverInstance) serverInstance.close();
   process.exit(1);
 });

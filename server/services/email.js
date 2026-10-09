@@ -1,51 +1,100 @@
 /**
  * Offstage Creators — Email Service
- * Nodemailer-based SMTP service with professional HTML email templates.
- * All credentials loaded from environment variables — never hardcoded.
+ * Production custom-domain email system powered by Resend (with SMTP fallback for local dev).
+ *
+ * Sender identities:
+ *   OTP verification:                  Offstage Creators <verify@offstagecreators.in>
+ *   Registration confirmation/status:  Offstage Creators <registrations@offstagecreators.in>
+ *   Event updates and reminders:       Offstage Creators <events@offstagecreators.in>
+ *   Reply-to / support:                support@offstagecreators.in
+ *
+ * Separate API keys:
+ *   RESEND_OTP_API_KEY           -> verify@offstagecreators.in
+ *   RESEND_REGISTRATION_API_KEY  -> registrations@offstagecreators.in
+ *   RESEND_EVENT_UPDATES_API_KEY -> events@offstagecreators.in
+ *   (Falls back to RESEND_API_KEY if individual key is not set)
  */
+
+const { Resend } = require('resend');
 const nodemailer = require('nodemailer');
 const config = require('../config');
-const { run } = require('../db');
+const { run, get } = require('../db');
 
-// ─── Transporter ──────────────────────────────────────────────────────────────
+// ─── Resend Clients & Sender Resolution ────────────────────────────────────────
 
-function createTransporter() {
-  const { user, password, host, port, secure } = config.EMAIL;
+const resendClients = {
+  OTP: null,
+  REGISTRATION: null,
+  EVENTS: null,
+  DEFAULT: null
+};
 
-  if (!user || !password) {
-    console.warn('[Email] SMTP credentials not configured — emails will not be sent.');
-    console.warn('[Email] MAIL_USER:', user ? 'SET' : 'MISSING');
-    console.warn('[Email] MAIL_PASSWORD:', password ? 'SET' : 'MISSING');
-    return null;
+function getResendClient(category = 'DEFAULT') {
+  const cat = String(category).toUpperCase();
+  if (resendClients[cat]) return resendClients[cat];
+
+  let apiKey = '';
+  if (cat === 'OTP') {
+    apiKey = config.RESEND.otpApiKey || config.RESEND.defaultApiKey;
+  } else if (cat === 'REGISTRATION') {
+    apiKey = config.RESEND.registrationApiKey || config.RESEND.defaultApiKey;
+  } else if (cat === 'EVENTS') {
+    apiKey = config.RESEND.eventUpdatesApiKey || config.RESEND.defaultApiKey;
+  } else {
+    apiKey = config.RESEND.defaultApiKey || config.RESEND.otpApiKey || config.RESEND.registrationApiKey || config.RESEND.eventUpdatesApiKey;
   }
 
-  console.log(`[Email] Creating SMTP transporter — host:${host} port:${port} user:${user}`);
-
-  const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
-
-  if (isGmail) {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass: password },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 15000
-    });
+  if (apiKey && apiKey.trim() && !apiKey.startsWith('re_placeholder') && !apiKey.startsWith('changeme')) {
+    resendClients[cat] = new Resend(apiKey.trim());
+    return resendClients[cat];
   }
 
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465 || secure,
-    auth: { user, pass: password },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 15000
-  });
+  return null;
 }
 
-let transporter = createTransporter();
+function getSenderForCategory(category = 'DEFAULT') {
+  const cat = String(category).toUpperCase();
+  switch (cat) {
+    case 'OTP':
+      return config.RESEND.senders.otp;
+    case 'REGISTRATION':
+      return config.RESEND.senders.registration;
+    case 'EVENTS':
+      return config.RESEND.senders.events;
+    default:
+      return config.RESEND.senders.registration;
+  }
+}
+
+// ─── SMTP Fallback (for offline local development) ────────────────────────────
+
+let smtpTransporter = null;
+
+function getSmtpTransporter() {
+  if (smtpTransporter) return smtpTransporter;
+
+  const { user, password, host, port, secure } = config.EMAIL;
+  if (!user || !password) return null;
+
+  const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
+  if (isGmail) {
+    smtpTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass: password },
+      connectionTimeout: 10000
+    });
+  } else {
+    smtpTransporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465 || secure,
+      auth: { user, pass: password },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 10000
+    });
+  }
+  return smtpTransporter;
+}
 
 // ─── Audit Logging ────────────────────────────────────────────────────────────
 
@@ -57,42 +106,170 @@ async function logEmail({ registrationId, recipient, emailType, subject, status,
       [registrationId || null, recipient, emailType, subject, status, messageId || null, errorMessage || null]
     );
   } catch (err) {
-    console.error('[Email] Failed to write email log:', err.message);
+    console.error('[Email Audit] Notice writing email log:', err.message);
+  }
+}
+
+// ─── Unsubscribe Verification ─────────────────────────────────────────────────
+
+async function isEmailUnsubscribed(email) {
+  if (!email) return false;
+  try {
+    const row = await get(`SELECT id FROM unsubscribed_emails WHERE email = ?`, [email.trim().toLowerCase()]);
+    return Boolean(row);
+  } catch (_) {
+    return false;
   }
 }
 
 // ─── Core Send Function ───────────────────────────────────────────────────────
 
-async function sendEmail({ registrationId, to, subject, html, emailType }) {
-  if (!transporter) {
-    transporter = createTransporter();
-  }
-  if (!transporter) {
-    const errMsg = 'SMTP not configured — missing MAIL_USER or MAIL_PASSWORD';
-    console.error('[Email]', errMsg);
-    await logEmail({ registrationId, recipient: to, emailType, subject, status: 'FAILED', errorMessage: errMsg });
-    throw new Error(errMsg);
+/**
+ * Send an email through Resend using the correct sender and API key,
+ * with fallback to SMTP if Resend is unconfigured in development.
+ *
+ * @param {Object} params
+ * @param {string} params.to - Recipient email
+ * @param {string} params.subject - Email subject
+ * @param {string} params.html - HTML body
+ * @param {string} [params.text] - Plain text fallback
+ * @param {string} params.emailCategory - 'OTP' | 'REGISTRATION' | 'EVENTS'
+ * @param {string} params.emailType - Internal log tag (e.g. 'OTP_VERIFICATION')
+ * @param {string} [params.registrationId] - Optional registration ID
+ * @param {boolean} [params.isOptionalAnnouncement] - If true, checks unsubscribe list
+ */
+async function sendEmail({
+  to,
+  subject,
+  html,
+  text,
+  emailCategory = 'REGISTRATION',
+  emailType = 'NOTIFICATION',
+  registrationId = null,
+  isOptionalAnnouncement = false
+}) {
+  const cleanTo = String(to || '').trim().toLowerCase();
+  if (!cleanTo) {
+    throw new Error('Recipient email is required.');
   }
 
-  const fromField = config.EMAIL.fromName
-    ? `"${config.EMAIL.fromName}" <${config.EMAIL.from}>`
-    : config.EMAIL.from;
-
-  try {
-    const info = await transporter.sendMail({ from: fromField, to, subject, html });
-    console.log(`[Email] Sent ${emailType} to ${to} — MessageID: ${info.messageId}`);
-    await logEmail({ registrationId, recipient: to, emailType, subject, status: 'SENT', messageId: info.messageId });
-    return { success: true, messageId: info.messageId };
-  } catch (err) {
-    console.error(`[Email] Failed to send ${emailType} to ${to}:`, err.message);
-    await logEmail({ registrationId, recipient: to, emailType, subject, status: 'FAILED', errorMessage: err.message });
-    throw err;
+  // Check unsubscribe preferences for optional/promotional event messages
+  if (isOptionalAnnouncement) {
+    const unsubscribed = await isEmailUnsubscribed(cleanTo);
+    if (unsubscribed) {
+      console.log(`[Email] Skipping ${emailType} to ${cleanTo} — recipient has opted out.`);
+      await logEmail({
+        registrationId,
+        recipient: cleanTo,
+        emailType,
+        subject,
+        status: 'SKIPPED_OPTED_OUT',
+        errorMessage: 'Recipient has unsubscribed from optional event updates.'
+      });
+      return { success: true, skipped: true, reason: 'OPTED_OUT' };
+    }
   }
+
+  const sender = getSenderForCategory(emailCategory);
+  const replyTo = config.RESEND.senders.support;
+  const resend = getResendClient(emailCategory);
+
+  // 1. Try Resend if configured
+  if (resend) {
+    try {
+      const response = await resend.emails.send({
+        from: sender,
+        to: cleanTo,
+        reply_to: replyTo,
+        subject,
+        html,
+        text: text || stripHtmlToPlainText(html)
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Resend API returned an error.');
+      }
+
+      const messageId = response.data?.id || null;
+      console.log(`[Email / Resend] Sent ${emailType} (${emailCategory}) to ${cleanTo} — ID: ${messageId}`);
+      await logEmail({
+        registrationId,
+        recipient: cleanTo,
+        emailType,
+        subject,
+        status: 'SENT',
+        messageId
+      });
+      return { success: true, provider: 'resend', messageId };
+    } catch (err) {
+      console.error(`[Email / Resend] Failed to send ${emailType} to ${cleanTo}:`, err.message);
+      await logEmail({
+        registrationId,
+        recipient: cleanTo,
+        emailType,
+        subject,
+        status: 'FAILED',
+        errorMessage: err.message
+      });
+      throw err;
+    }
+  }
+
+  // 2. Fallback to SMTP for local development
+  const transporter = getSmtpTransporter();
+  if (transporter) {
+    try {
+      const info = await transporter.sendMail({
+        from: sender,
+        to: cleanTo,
+        replyTo,
+        subject,
+        html,
+        text: text || stripHtmlToPlainText(html)
+      });
+
+      console.log(`[Email / SMTP Fallback] Sent ${emailType} to ${cleanTo} — ID: ${info.messageId}`);
+      await logEmail({
+        registrationId,
+        recipient: cleanTo,
+        emailType,
+        subject,
+        status: 'SENT',
+        messageId: info.messageId
+      });
+      return { success: true, provider: 'smtp', messageId: info.messageId };
+    } catch (err) {
+      console.error(`[Email / SMTP Fallback] Failed to send ${emailType} to ${cleanTo}:`, err.message);
+      await logEmail({
+        registrationId,
+        recipient: cleanTo,
+        emailType,
+        subject,
+        status: 'FAILED',
+        errorMessage: err.message
+      });
+      throw err;
+    }
+  }
+
+  // 3. No email provider configured
+  const errMsg = 'No email provider configured. Please configure RESEND_OTP_API_KEY, RESEND_REGISTRATION_API_KEY, RESEND_EVENT_UPDATES_API_KEY, or RESEND_API_KEY in environment variables.';
+  console.warn(`[Email Warning] ${errMsg}`);
+  await logEmail({
+    registrationId,
+    recipient: cleanTo,
+    emailType,
+    subject,
+    status: 'NOT_CONFIGURED',
+    errorMessage: errMsg
+  });
+
+  return { success: false, notConfigured: true, error: errMsg };
 }
 
 // ─── HTML Email Wrapper ───────────────────────────────────────────────────────
 
-function emailWrapper({ title, preheader, bodyContent }) {
+function emailWrapper({ title, preheader, bodyContent, unsubscribeUrl = null }) {
   const year = new Date().getFullYear();
   return `<!DOCTYPE html>
 <html lang="en">
@@ -106,35 +283,35 @@ function emailWrapper({ title, preheader, bodyContent }) {
     .card { background: #141210; border: 1px solid #2a231c; border-radius: 12px; overflow: hidden; }
     .header { background: #181410; border-bottom: 1px solid #2a231c; padding: 28px 32px; text-align: center; }
     .logo-text { font-size: 11px; font-weight: 800; letter-spacing: 0.2em; color: #e4ad57; text-transform: uppercase; }
-    .logo-sub { font-size: 20px; font-weight: 700; color: #f7eee1; margin-top: 2px; }
-    .body { padding: 32px; }
+    .logo-sub { font-size: 20px; font-weight: 700; color: #f7eee1; margin-top: 4px; }
+    .body { padding: 32px; font-size: 14px; line-height: 1.7; color: #eee4d5; }
     .otp-box { background: #0a0908; border: 2px solid #e4ad57; border-radius: 10px; padding: 24px; text-align: center; margin: 24px 0; }
-    .otp-number { font-family: 'Courier New', monospace; font-size: 42px; font-weight: 900; letter-spacing: 0.2em; color: #e4ad57; }
-    .otp-label { font-size: 11px; color: #8e8477; text-transform: uppercase; letter-spacing: 0.15em; margin-top: 8px; }
+    .otp-number { font-family: 'Courier New', Courier, monospace; font-size: 42px; font-weight: 900; letter-spacing: 0.25em; color: #e4ad57; }
+    .otp-label { font-size: 11px; color: #8e8477; text-transform: uppercase; letter-spacing: 0.15em; margin-top: 8px; font-weight: 600; }
     .info-row { display: flex; justify-content: space-between; border-bottom: 1px solid #1e1a16; padding: 10px 0; font-size: 13px; }
     .info-label { color: #8e8477; }
     .info-value { color: #f7eee1; font-weight: 600; text-align: right; }
-    .cta-btn { display: inline-block; background: #e4ad57; color: #0d0c0a; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 14px 32px; border-radius: 6px; text-decoration: none; margin: 20px 0; }
-    .status-approved { background: rgba(110, 219, 140, 0.1); border: 1px solid rgba(110, 219, 140, 0.4); border-radius: 8px; padding: 16px 20px; color: #88f0a4; font-size: 13px; }
-    .status-rejected { background: rgba(226, 105, 71, 0.1); border: 1px solid rgba(226, 105, 71, 0.4); border-radius: 8px; padding: 16px 20px; color: #ff9e85; font-size: 13px; }
-    .reg-id { font-family: 'Courier New', monospace; font-size: 20px; font-weight: 800; color: #e4ad57; letter-spacing: 0.05em; }
+    .cta-btn { display: inline-block; background: #e4ad57; color: #0d0c0a !important; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 14px 28px; border-radius: 6px; text-decoration: none; margin: 22px 0 10px; }
+    .status-badge { display: inline-block; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 16px; }
+    .badge-approved { background: rgba(110, 219, 140, 0.15); border: 1px solid rgba(110, 219, 140, 0.4); color: #88f0a4; }
+    .badge-pending { background: rgba(228, 173, 87, 0.15); border: 1px solid rgba(228, 173, 87, 0.4); color: #e4ad57; }
+    .badge-rejected { background: rgba(226, 105, 71, 0.15); border: 1px solid rgba(226, 105, 71, 0.4); color: #ff9e85; }
+    .reg-id { font-family: 'Courier New', monospace; font-size: 18px; font-weight: 800; color: #e4ad57; letter-spacing: 0.05em; }
     .muted { color: #8e8477; font-size: 12px; line-height: 1.6; }
-    .footer { text-align: center; padding: 20px 32px; border-top: 1px solid #1e1a16; color: #5a5248; font-size: 11px; }
-    p { margin: 0 0 14px; line-height: 1.7; font-size: 14px; }
-    h2 { margin: 0 0 8px; font-size: 22px; font-weight: 700; color: #f7eee1; }
-    h3 { margin: 0 0 16px; font-size: 16px; font-weight: 700; color: #f7eee1; }
+    .footer { text-align: center; padding: 24px 32px; border-top: 1px solid #1e1a16; color: #706659; font-size: 11px; line-height: 1.6; }
+    a { color: #e4ad57; text-decoration: none; }
   </style>
 </head>
-<body style="margin:0; padding:0; background-color:#0d0c0a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#eee4d5; -webkit-font-smoothing:antialiased;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;color:#0d0c0a;">${preheader}</div>` : ''}
+<body style="margin:0; padding:0; background-color:#0d0c0a; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#eee4d5;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;color:#0d0c0a;font-size:1px;">${preheader}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0d0c0a; width:100%; margin:0; padding:0;">
     <tr>
       <td align="center" style="padding:32px 16px;">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:580px; width:100%; background-color:#141210; border:1px solid #2a231c; border-radius:12px; overflow:hidden;">
           <tr>
-            <td style="background-color:#181410; border-bottom:1px solid #2a231c; padding:28px 32px; text-align:center;">
+            <td style="background-color:#181410; border-bottom:1px solid #2a231c; padding:26px 32px; text-align:center;">
               <div style="font-size:11px; font-weight:800; letter-spacing:0.2em; color:#e4ad57; text-transform:uppercase;">Offstage Creators</div>
-              <div style="font-size:20px; font-weight:700; color:#f7eee1; margin-top:4px;">Online Open Mic ${year}</div>
+              <div style="font-size:19px; font-weight:700; color:#f7eee1; margin-top:4px;">Creative Stage &amp; Community</div>
             </td>
           </tr>
           <tr>
@@ -143,9 +320,11 @@ function emailWrapper({ title, preheader, bodyContent }) {
             </td>
           </tr>
           <tr>
-            <td style="text-align:center; padding:20px 32px; border-top:1px solid #1e1a16; color:#706659; font-size:11px; background-color:#141210; line-height:1.6;">
-              © ${year} Offstage Creators · Built with ♡ for the creative community<br>
-              <a href="https://www.instagram.com/offstagecreators/" target="_blank" style="color:#e4ad57; text-decoration:none; font-weight:600;">@offstagecreators</a>
+            <td style="text-align:center; padding:22px 32px; border-top:1px solid #1e1a16; color:#706659; font-size:11px; background-color:#141210; line-height:1.6;">
+              © ${year} Offstage Creators · All rights reserved.<br>
+              Official Support: <a href="mailto:support@offstagecreators.in" style="color:#e4ad57; text-decoration:none;">support@offstagecreators.in</a><br>
+              Instagram: <a href="https://www.instagram.com/offstagecreators/" target="_blank" style="color:#e4ad57; text-decoration:none;">@offstagecreators</a>
+              ${unsubscribeUrl ? `<br><br><a href="${unsubscribeUrl}" style="color:#8e8477; text-decoration:underline;">Unsubscribe from optional event updates</a>` : ''}
             </td>
           </tr>
         </table>
@@ -156,195 +335,471 @@ function emailWrapper({ title, preheader, bodyContent }) {
 </html>`;
 }
 
-// ─── Email Templates ──────────────────────────────────────────────────────────
+function stripHtmlToPlainText(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
+    .trim();
+}
+
+// ─── Concrete Email Handlers ──────────────────────────────────────────────────
 
 /**
  * Send OTP verification email.
+ * Subject strictly excludes OTP code. Code expires in 5 minutes.
  */
-async function sendOTPEmail({ registrationId, email, name, otp, expiryMinutes }) {
-  const subject = `Your Offstage Creators Verification Code: ${otp}`;
-  const html = emailWrapper({
-    title: 'Email Verification — Offstage Creators',
-    preheader: `Your OTP is ${otp}. Valid for ${expiryMinutes} minutes.`,
-    bodyContent: `
-      <h2>Verify Your Email</h2>
-      <p>Hi ${name || 'there'},</p>
-      <p>You're registering for the <strong>Online Open Mic 2026</strong>. Please use the code below to verify your email address and complete your registration.</p>
+async function sendOTPEmail({ registrationId, email, name, otp, expiryMinutes = 5, eventTitle = 'Offstage Creators Event' }) {
+  const subject = 'Your Offstage Creators verification code';
+  const preheader = `Your 6-digit verification code is ready. Valid for ${expiryMinutes} minutes.`;
 
-      <div class="otp-box">
-        <div class="otp-number">${otp}</div>
-        <div class="otp-label">Your One-Time Verification Code</div>
-      </div>
+  const bodyContent = `
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">Verify Your Email Address</h2>
+    <p>Hi ${name || 'Creator'},</p>
+    <p>You are reserving your performance spot for <strong>${eventTitle}</strong>. Please enter the verification code below to confirm your email and complete your registration:</p>
 
-      <div class="info-row">
-        <span class="info-label">Valid for</span>
-        <span class="info-value">${expiryMinutes} minutes</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Registration ID</span>
-        <span class="info-value" style="font-family:monospace;">${registrationId}</span>
-      </div>
+    <div class="otp-box">
+      <div class="otp-number">${otp}</div>
+      <div class="otp-label">One-Time Verification Code</div>
+    </div>
 
-      <p style="margin-top:20px;" class="muted">
-        This code expires in ${expiryMinutes} minutes. If you did not initiate this request, you can safely ignore this email.
-        Do NOT share this code with anyone.
-      </p>
-    `
+    <table width="100%" cellpadding="6" cellspacing="0" style="margin: 16px 0; border-top: 1px solid #1e1a16; border-bottom: 1px solid #1e1a16;">
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Registration Reference</td>
+        <td align="right" style="color:#f7eee1; font-family:monospace; font-weight:700; font-size:13px;">${registrationId}</td>
+      </tr>
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Code Validity</td>
+        <td align="right" style="color:#e4ad57; font-weight:700; font-size:13px;">${expiryMinutes} minutes</td>
+      </tr>
+    </table>
+
+    <p class="muted" style="margin-top:20px;">
+      ⚠️ <strong>Security Notice:</strong> This code expires in ${expiryMinutes} minutes. Do NOT share this code with anyone. Offstage Creators staff will never ask for your verification code. If you did not initiate this request, you can safely ignore this email.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+  const text = `Hi ${name || 'Creator'},\n\nYour Offstage Creators verification code is: ${otp}\n\nRegistration Reference: ${registrationId}\nValid for: ${expiryMinutes} minutes.\n\nDo not share this code with anyone.\nIf you did not initiate this request, please ignore this email.\n\nOffstage Creators Support: support@offstagecreators.in`;
+
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    text,
+    emailCategory: 'OTP',
+    emailType: 'OTP_VERIFICATION',
+    registrationId
   });
-
-  return sendEmail({ registrationId, to: email, subject, html, emailType: 'OTP_VERIFICATION' });
 }
 
 /**
- * Send registration confirmation email after OTP is verified.
+ * Send registration confirmation email after OTP verification.
  */
-async function sendRegistrationConfirmationEmail({ registrationId, email, name, category, performanceTitle, event }) {
+async function sendRegistrationConfirmationEmail({ registrationId, email, name, category, performanceTitle, event = {} }) {
   const appUrl = config.APP_URL;
   const regUrl = `${appUrl}/registration/${registrationId}`;
-  const subject = `Registration Confirmed — ${registrationId} | Offstage Creators`;
-  const html = emailWrapper({
-    title: 'Registration Confirmed — Offstage Creators',
-    preheader: `Your registration ${registrationId} is confirmed. See you on stage!`,
-    bodyContent: `
-      <h2>Registration Confirmed! ✦</h2>
-      <p>Hi ${name},</p>
-      <p>You are officially registered for the <strong>Online Open Mic 2026</strong>. Here are your registration details:</p>
+  const eventTitle = event.title || event.name || 'Online Open Mic 2026';
+  const eventDate = event.date || event.event_date || 'Upcoming';
+  const eventTime = event.time || event.start_time || 'TBA';
+  const venue = event.venue || event.venue_name || 'Online (Google Meet)';
 
-      <div class="info-row">
-        <span class="info-label">Registration ID</span>
-        <span class="info-value"><span class="reg-id">${registrationId}</span></span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Name</span>
-        <span class="info-value">${name}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Category</span>
-        <span class="info-value">${category}</span>
-      </div>
-      ${performanceTitle ? `<div class="info-row">
-        <span class="info-label">Performance Title</span>
-        <span class="info-value">${performanceTitle}</span>
-      </div>` : ''}
-      <div class="info-row">
-        <span class="info-label">Event Date</span>
-        <span class="info-value">${event.date} · ${event.time}</span>
-      </div>
+  const subject = `Your Offstage Creators registration confirmation — ${registrationId}`;
+  const preheader = `Your spot for ${eventTitle} is recorded under ${registrationId}. Review your registration details.`;
 
-      <p style="margin-top:20px;">Your registration is now under review by our organizers. You will receive an approval email once confirmed.</p>
-      <p>You can view your registration pass anytime at:</p>
-      <a href="${regUrl}" class="cta-btn">VIEW MY REGISTRATION PASS →</a>
+  const bodyContent = `
+    <div class="status-badge badge-pending">Registration Recorded · Under Review</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">Registration Confirmed! ✦</h2>
+    <p>Hi ${name || 'Creator'},</p>
+    <p>Your email has been verified and your registration for <strong>${eventTitle}</strong> is recorded in our system. Here is your summary:</p>
 
-      <p class="muted" style="margin-top:24px;">
-        Keep your Registration ID <strong>${registrationId}</strong> safe — you will need it for event entry.
-      </p>
-    `
+    <table width="100%" cellpadding="8" cellspacing="0" style="margin: 16px 0; border: 1px solid #2a231c; border-radius: 8px; background: #0e0c0a;">
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Registration ID</td>
+        <td align="right" style="color:#e4ad57; font-family:monospace; font-weight:800; font-size:15px;">${registrationId}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Performer Name</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${name}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Performance Category</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${category || 'General'}</td>
+      </tr>
+      ${performanceTitle ? `
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Performance Title</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${performanceTitle}</td>
+      </tr>` : ''}
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Event Schedule</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${eventDate} · ${eventTime}</td>
+      </tr>
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Venue / Stage</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${venue}</td>
+      </tr>
+    </table>
+
+    <p style="margin-top:20px;"><strong>Next steps:</strong></p>
+    <p style="color:#cfc5b6; font-size:13px; line-height:1.6;">
+      • Your registration pass and payment proof are being reviewed by the curation team.<br>
+      • Once approved, you will receive an official approval email and calendar link.<br>
+      • Verified attendees receive an official certificate after event participation.
+    </p>
+
+    <div style="text-align:center; margin:24px 0 16px;">
+      <a href="${regUrl}" class="cta-btn">VIEW REGISTRATION PASS →</a>
+    </div>
+
+    <p class="muted">
+      Keep your Registration ID <strong>${registrationId}</strong> safe. If you have questions or need changes, contact us at <a href="mailto:support@offstagecreators.in">support@offstagecreators.in</a>.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+  const text = `Hi ${name},\n\nYour registration for ${eventTitle} is confirmed!\n\nRegistration ID: ${registrationId}\nCategory: ${category}\nSchedule: ${eventDate} · ${eventTime}\nVenue: ${venue}\n\nView Pass: ${regUrl}\n\nQuestions? Contact: support@offstagecreators.in`;
+
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    text,
+    emailCategory: 'REGISTRATION',
+    emailType: 'REGISTRATION_CONFIRMATION',
+    registrationId
   });
-
-  return sendEmail({ registrationId, to: email, subject, html, emailType: 'REGISTRATION_CONFIRMATION' });
 }
 
 /**
  * Send approval email when admin approves a registration.
  */
-async function sendApprovalEmail({ registrationId, email, name, category, performanceTitle, event }) {
+async function sendApprovalEmail({ registrationId, email, name, category, performanceTitle, event = {} }) {
   const appUrl = config.APP_URL;
   const regUrl = `${appUrl}/registration/${registrationId}`;
-  const subject = `🎉 You're Approved! Registration ${registrationId} | Offstage Creators`;
-  const html = emailWrapper({
-    title: 'Registration Approved — Offstage Creators',
-    preheader: `Congratulations! Your registration for Online Open Mic is approved.`,
-    bodyContent: `
-      <div class="status-approved">
-        ✓ &nbsp;<strong>Your registration has been approved by the organizers!</strong>
-      </div>
+  const eventTitle = event.title || event.name || 'Online Open Mic 2026';
+  const eventDate = event.date || event.event_date || 'Upcoming';
+  const eventTime = event.time || event.start_time || 'TBA';
+  const venue = event.venue || event.venue_name || 'Online (Google Meet)';
 
-      <h2 style="margin-top:24px;">See You on Stage! 🎙️</h2>
-      <p>Hi ${name},</p>
-      <p>Great news! The Offstage Creators team has <strong>approved your registration</strong> for the Online Open Mic 2026. Your spot is confirmed.</p>
+  const subject = `Registration Approved — ${registrationId} | Offstage Creators`;
+  const preheader = `Congratulations ${name}! Your registration for ${eventTitle} has been approved.`;
 
-      <div class="info-row">
-        <span class="info-label">Registration ID</span>
-        <span class="info-value"><span class="reg-id">${registrationId}</span></span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Name</span>
-        <span class="info-value">${name}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">Category</span>
-        <span class="info-value">${category}</span>
-      </div>
-      ${performanceTitle ? `<div class="info-row">
-        <span class="info-label">Performance Title</span>
-        <span class="info-value">${performanceTitle}</span>
-      </div>` : ''}
-      <div class="info-row">
-        <span class="info-label">Event Date</span>
-        <span class="info-value">${event.date} · ${event.time}</span>
-      </div>
+  const bodyContent = `
+    <div class="status-badge badge-approved">✓ Spot Confirmed · Approved</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">See You on Stage! 🎙️</h2>
+    <p>Hi ${name},</p>
+    <p>Great news! The Offstage Creators team has <strong>approved your registration</strong> for <strong>${eventTitle}</strong>. Your performance slot is confirmed.</p>
 
+    <table width="100%" cellpadding="8" cellspacing="0" style="margin: 16px 0; border: 1px solid #2a231c; border-radius: 8px; background: #0e0c0a;">
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Registration ID</td>
+        <td align="right" style="color:#e4ad57; font-family:monospace; font-weight:800; font-size:15px;">${registrationId}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Performer</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${name}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Category</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${category || 'General'}</td>
+      </tr>
+      ${performanceTitle ? `
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Performance Title</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${performanceTitle}</td>
+      </tr>` : ''}
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Schedule</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${eventDate} · ${eventTime}</td>
+      </tr>
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Venue / Stage</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${venue}</td>
+      </tr>
+    </table>
+
+    <div style="text-align:center; margin:22px 0 16px;">
       <a href="${regUrl}" class="cta-btn">VIEW YOUR ENTRY PASS →</a>
+    </div>
 
-      <h3>Performer Guidelines</h3>
-      <p class="muted">
-        • Join the online room <strong>10 minutes before</strong> show time (7:20 PM IST) for audio check.<br>
-        • Have your camera and a quiet space ready.<br>
-        • Your performance slot is 5–7 minutes.<br>
-        • The Google Meet link will be shared closer to the event date.<br>
-        • Participation certificates are issued after event attendance.
-      </p>
+    <h3 style="margin:20px 0 8px; font-size:15px; color:#f7eee1;">Performer Guidelines</h3>
+    <p class="muted">
+      • Please join 10 minutes prior to scheduled start time for audio/video check.<br>
+      • Ensure a quiet environment and stable internet connection.<br>
+      • Each performer receives 5–7 minutes for their piece.<br>
+      • Participation certificates are issued after event attendance.
+    </p>
+  `;
 
-      <p style="margin-top:20px; font-size:16px; color:#f7eee1; font-style:italic;">
-        "ek lafz. ek awaaz. aur ek shaam." ♡
-      </p>
-    `
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+  const text = `Hi ${name},\n\nYour spot for ${eventTitle} is APPROVED!\nRegistration ID: ${registrationId}\nSchedule: ${eventDate} · ${eventTime}\nVenue: ${venue}\n\nView Pass: ${regUrl}\n\nSupport: support@offstagecreators.in`;
+
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    text,
+    emailCategory: 'REGISTRATION',
+    emailType: 'REGISTRATION_APPROVED',
+    registrationId
   });
-
-  return sendEmail({ registrationId, to: email, subject, html, emailType: 'REGISTRATION_APPROVED' });
 }
 
 /**
- * Send rejection email when admin rejects a registration.
+ * Send rejection email when registration cannot be approved.
  */
 async function sendRejectionEmail({ registrationId, email, name, reason }) {
   const appUrl = config.APP_URL;
   const subject = `Registration Update — ${registrationId} | Offstage Creators`;
-  const html = emailWrapper({
-    title: 'Registration Update — Offstage Creators',
-    preheader: `An update regarding your registration ${registrationId}.`,
-    bodyContent: `
-      <div class="status-rejected">
-        ✕ &nbsp;<strong>Your registration could not be approved at this time.</strong>
-      </div>
+  const preheader = `An update regarding your registration ${registrationId}.`;
 
-      <h2 style="margin-top:24px;">Registration Update</h2>
-      <p>Hi ${name},</p>
-      <p>We're sorry to inform you that your registration <strong>${registrationId}</strong> for the Online Open Mic 2026 was not approved.</p>
+  const bodyContent = `
+    <div class="status-badge badge-rejected">Registration Update</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">Registration Update</h2>
+    <p>Hi ${name || 'Creator'},</p>
+    <p>Thank you for your interest in performing with Offstage Creators. We are writing to let you know that your registration <strong>${registrationId}</strong> could not be approved at this time.</p>
 
-      ${reason ? `<div style="background:#110f0d; border: 1px solid #2a231c; border-radius:8px; padding:16px 20px; margin:16px 0; font-size:13px;">
-        <strong style="color:#8e8477;">Reason:</strong><br>
-        <span style="color:#f7eee1;">${reason}</span>
-      </div>` : ''}
+    ${reason ? `
+    <div style="background:#0e0c0a; border: 1px solid #2a231c; border-radius:8px; padding:16px 20px; margin:18px 0; font-size:13px;">
+      <strong style="color:#8e8477;">Reason:</strong><br>
+      <span style="color:#f7eee1; margin-top:4px; display:inline-block;">${reason}</span>
+    </div>` : ''}
 
-      <p>If you believe this is an error or would like to re-register, please visit our registration page:</p>
-      <a href="${appUrl}/register" class="cta-btn">RE-REGISTER →</a>
+    <p style="margin-top:18px;">You are welcome to submit a fresh registration for upcoming events:</p>
+    <div style="text-align:center; margin:20px 0 16px;">
+      <a href="${appUrl}/register" class="cta-btn">BROWSE / RE-REGISTER →</a>
+    </div>
 
-      <p class="muted" style="margin-top:20px;">
-        If you have any questions, please reach out to us on Instagram at
-        <a href="https://www.instagram.com/offstagecreators/" style="color:#e4ad57;">@offstagecreators</a>.
-      </p>
-    `
+    <p class="muted">
+      If you believe this was an error or have questions, reach us at <a href="mailto:support@offstagecreators.in">support@offstagecreators.in</a>.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+  const text = `Hi ${name},\n\nYour registration ${registrationId} could not be approved at this time.\n${reason ? `Reason: ${reason}\n` : ''}\nIf you have questions, please contact support@offstagecreators.in.`;
+
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    text,
+    emailCategory: 'REGISTRATION',
+    emailType: 'REGISTRATION_REJECTED',
+    registrationId
   });
+}
 
-  return sendEmail({ registrationId, to: email, subject, html, emailType: 'REGISTRATION_REJECTED' });
+/**
+ * Send an event announcement or update email.
+ * Uses RESEND_EVENT_UPDATES_API_KEY and events@offstagecreators.in sender.
+ * Honors unsubscribe preferences.
+ */
+async function sendEventAnnouncementEmail({
+  to,
+  name,
+  subject,
+  headline,
+  bodyText,
+  event = {},
+  actionButtonText = null,
+  actionButtonUrl = null,
+  registrationId = null,
+  isPromotional = true
+}) {
+  const eventTitle = event.title || event.name || 'Offstage Creators Event';
+  const effectiveSubject = subject || `An update about your Offstage Creators event — ${eventTitle}`;
+  const preheader = headline || `An important update regarding ${eventTitle}.`;
+
+  const unsubscribeToken = Buffer.from(to.toLowerCase()).toString('base64url');
+  const unsubscribeUrl = `${config.APP_URL}/api/email/unsubscribe?email=${encodeURIComponent(to)}&token=${unsubscribeToken}`;
+
+  const bodyContent = `
+    <div class="status-badge badge-pending">Event Update</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">${headline || eventTitle}</h2>
+    <p>Hi ${name || 'Creator'},</p>
+    <div style="font-size:14px; line-height:1.7; color:#eee4d5; margin:16px 0;">
+      ${bodyText}
+    </div>
+
+    ${(event.date || event.venue) ? `
+    <table width="100%" cellpadding="8" cellspacing="0" style="margin: 18px 0; border: 1px solid #2a231c; border-radius: 8px; background: #0e0c0a;">
+      ${event.date ? `
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Event Date &amp; Time</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${event.date}${event.time ? ` · ${event.time}` : ''}</td>
+      </tr>` : ''}
+      ${event.venue ? `
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Venue / Stage</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${event.venue}</td>
+      </tr>` : ''}
+    </table>` : ''}
+
+    ${actionButtonText && actionButtonUrl ? `
+    <div style="text-align:center; margin:24px 0 16px;">
+      <a href="${actionButtonUrl}" class="cta-btn">${actionButtonText} →</a>
+    </div>` : ''}
+
+    <p class="muted" style="margin-top:20px;">
+      This update was sent by Offstage Creators. If you need support, email us at <a href="mailto:support@offstagecreators.in">support@offstagecreators.in</a>.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: effectiveSubject, preheader, bodyContent, unsubscribeUrl });
+  const text = `Hi ${name || 'Creator'},\n\n${headline || eventTitle}\n\n${stripHtmlToPlainText(bodyText)}\n\nSupport: support@offstagecreators.in\nUnsubscribe: ${unsubscribeUrl}`;
+
+  return sendEmail({
+    to,
+    subject: effectiveSubject,
+    html,
+    text,
+    emailCategory: 'EVENTS',
+    emailType: 'EVENT_ANNOUNCEMENT',
+    registrationId,
+    isOptionalAnnouncement: isPromotional
+  });
+}
+
+/**
+ * Send an event reminder email (e.g. 24h before or day-of).
+ */
+async function sendEventReminderEmail({
+  to,
+  name,
+  event = {},
+  meetLink = null,
+  registrationId = null
+}) {
+  const eventTitle = event.title || event.name || 'Online Open Mic';
+  const eventDate = event.date || event.event_date || 'Today';
+  const eventTime = event.time || event.start_time || '6:00 PM IST';
+  const venue = event.venue || event.venue_name || 'Online (Google Meet)';
+
+  const subject = `Reminder: Upcoming event: ${eventTitle}`;
+  const preheader = `Your upcoming performance at ${eventTitle} is scheduled for ${eventDate} at ${eventTime}.`;
+
+  const unsubscribeToken = Buffer.from(to.toLowerCase()).toString('base64url');
+  const unsubscribeUrl = `${config.APP_URL}/api/email/unsubscribe?email=${encodeURIComponent(to)}&token=${unsubscribeToken}`;
+
+  const bodyContent = `
+    <div class="status-badge badge-approved">Event Reminder</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">Get Ready for the Stage! 🎙️</h2>
+    <p>Hi ${name || 'Creator'},</p>
+    <p>This is a friendly reminder that <strong>${eventTitle}</strong> is taking place soon. Here are the key details for your session:</p>
+
+    <table width="100%" cellpadding="8" cellspacing="0" style="margin: 16px 0; border: 1px solid #2a231c; border-radius: 8px; background: #0e0c0a;">
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Date &amp; Time</td>
+        <td align="right" style="color:#e4ad57; font-weight:700; font-size:14px;">${eventDate} · ${eventTime}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Venue</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${venue}</td>
+      </tr>
+      ${registrationId ? `
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Your Registration ID</td>
+        <td align="right" style="color:#f7eee1; font-family:monospace; font-weight:700; font-size:13px;">${registrationId}</td>
+      </tr>` : ''}
+    </table>
+
+    ${meetLink ? `
+    <div style="background:#0a0908; border:1px solid #e4ad57; border-radius:8px; padding:18px; text-align:center; margin:20px 0;">
+      <div style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.15em;">Google Meet Stage Link</div>
+      <a href="${meetLink}" target="_blank" style="display:inline-block; margin-top:8px; font-size:15px; font-weight:700; color:#e4ad57;">${meetLink}</a>
+    </div>` : ''}
+
+    <p class="muted">
+      • Please arrive 10 minutes early for sound checks.<br>
+      • Keep your camera on in a well-lit, quiet area.<br>
+      • Reach out to <a href="mailto:support@offstagecreators.in">support@offstagecreators.in</a> if you need assistance.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent, unsubscribeUrl });
+  const text = `Hi ${name},\n\nReminder: ${eventTitle} is scheduled for ${eventDate} · ${eventTime} at ${venue}.\n${meetLink ? `Stage Link: ${meetLink}\n` : ''}\nSupport: support@offstagecreators.in`;
+
+  return sendEmail({
+    to,
+    subject,
+    html,
+    text,
+    emailCategory: 'EVENTS',
+    emailType: 'EVENT_REMINDER',
+    registrationId,
+    isOptionalAnnouncement: false
+  });
+}
+
+/**
+ * Diagnostic helper: Checks whether offstagecreators.in is verified in Resend.
+ */
+async function checkDomainStatus() {
+  const client = getResendClient('DEFAULT') || getResendClient('OTP');
+  if (!client) {
+    return {
+      configured: false,
+      status: 'UNCONFIGURED',
+      message: 'No valid Resend API key configured in environment variables.'
+    };
+  }
+
+  try {
+    const listRes = await client.domains.list();
+    if (listRes.error) {
+      return {
+        configured: true,
+        status: 'ERROR',
+        error: listRes.error.message
+      };
+    }
+
+    const domains = listRes.data?.data || listRes.data || [];
+    const targetDomain = domains.find(d => d.name?.toLowerCase() === 'offstagecreators.in');
+
+    if (!targetDomain) {
+      return {
+        configured: true,
+        status: 'NOT_FOUND',
+        domain: 'offstagecreators.in',
+        message: 'Domain offstagecreators.in has not been added to this Resend account yet.'
+      };
+    }
+
+    return {
+      configured: true,
+      status: targetDomain.status, // 'verified', 'pending', etc.
+      domainId: targetDomain.id,
+      records: targetDomain.records || []
+    };
+  } catch (err) {
+    return {
+      configured: true,
+      status: 'EXCEPTION',
+      error: err.message
+    };
+  }
 }
 
 module.exports = {
+  sendEmail,
   sendOTPEmail,
   sendRegistrationConfirmationEmail,
   sendApprovalEmail,
   sendRejectionEmail,
-  sendEmail,
-  emailWrapper
+  sendEventAnnouncementEmail,
+  sendEventReminderEmail,
+  checkDomainStatus,
+  isEmailUnsubscribed,
+  emailWrapper,
+  stripHtmlToPlainText,
+  getSenderForCategory,
+  getResendClient
 };

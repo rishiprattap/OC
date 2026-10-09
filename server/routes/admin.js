@@ -1257,7 +1257,9 @@ router.post('/email/custom-send', async (req, res) => {
           to: reg.email,
           subject: substitutedSubject,
           html,
-          emailType: 'CUSTOM_EMAIL'
+          emailCategory: 'EVENTS',
+          emailType: 'EVENT_ANNOUNCEMENT',
+          isOptionalAnnouncement: true
         });
 
         results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
@@ -1289,7 +1291,9 @@ router.post('/email/custom-send', async (req, res) => {
           to: trimmed,
           subject: substitutedSubject,
           html,
-          emailType: 'CUSTOM_EMAIL'
+          emailCategory: 'EVENTS',
+          emailType: 'EVENT_ANNOUNCEMENT',
+          isOptionalAnnouncement: true
         });
 
         results.push({ recipient: trimmed, status: 'SENT' });
@@ -1385,7 +1389,9 @@ router.post('/email/meet-send', async (req, res) => {
           to: reg.email,
           subject: substitutedSubject,
           html,
-          emailType: 'MEET_INVITE'
+          emailCategory: 'EVENTS',
+          emailType: 'MEET_INVITE',
+          isOptionalAnnouncement: false
         });
 
         results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
@@ -1430,7 +1436,9 @@ router.post('/email/meet-send', async (req, res) => {
           to: trimmed,
           subject: substitutedSubject,
           html,
-          emailType: 'MEET_INVITE'
+          emailCategory: 'EVENTS',
+          emailType: 'MEET_INVITE',
+          isOptionalAnnouncement: false
         });
 
         results.push({ recipient: trimmed, status: 'SENT' });
@@ -1453,6 +1461,137 @@ router.post('/email/meet-send', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Meet send error:', err);
     return res.status(500).json({ success: false, error: 'Server error while sending Meet invitations.' });
+  }
+});
+
+// ─── GET /api/admin/email/domain-status ────────────────────────────────────────
+router.get('/email/domain-status', async (req, res) => {
+  try {
+    const status = await emailService.checkDomainStatus();
+    return res.json({ success: true, ...status });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /api/admin/email/campaign ───────────────────────────────────────────
+router.post('/email/campaign', async (req, res) => {
+  try {
+    const { eventId, recipientGroup = 'APPROVED', subject, bodyContent, previewOnly = false, isPromotional = true } = req.body;
+
+    if (!subject?.trim() || !bodyContent?.trim()) {
+      return res.status(400).json({ success: false, error: 'Subject and body content are required.' });
+    }
+
+    const event = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
+    const eventSlug = event?.slug || 'online-open-mic-2026';
+
+    let sql = `SELECT * FROM registrations WHERE event_id = ?`;
+    const params = [eventSlug];
+    if (recipientGroup === 'APPROVED') {
+      sql += ` AND reg_status = 'APPROVED'`;
+    } else if (recipientGroup === 'VERIFIED') {
+      sql += ` AND reg_status IN ('APPROVED', 'VERIFIED')`;
+    } else if (recipientGroup === 'CHECKED_IN') {
+      sql += ` AND checked_in = 1`;
+    }
+
+    const recipients = await all(sql, params);
+
+    // If previewOnly, render sample and recipient count
+    if (previewOnly) {
+      const sample = recipients[0] || {
+        full_name: 'Sample Performer',
+        email: 'creator@example.com',
+        registration_id: 'OC-SAMPLE-001',
+        category: 'Poetry'
+      };
+      const subSubject = replacePlaceholders(subject, sample, event);
+      const subBody = replacePlaceholders(bodyContent, sample, event);
+      const html = buildFullEmailHtml({
+        title: subSubject,
+        preheader: subSubject,
+        bodyContent: subBody
+      });
+      return res.json({
+        success: true,
+        preview: true,
+        recipientCount: recipients.length,
+        subject: subSubject,
+        html
+      });
+    }
+
+    // Protection against duplicate campaigns (within 60s)
+    const recentCampaign = await get(
+      `SELECT * FROM email_campaigns WHERE event_id = ? AND subject = ? AND created_at > ? LIMIT 1`,
+      [eventSlug, subject.trim(), new Date(Date.now() - 60000).toISOString()]
+    );
+    if (recentCampaign) {
+      return res.status(429).json({
+        success: false,
+        error: 'A duplicate campaign was recently sent. Please wait at least 60 seconds before sending another.'
+      });
+    }
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+    const results = [];
+
+    for (const reg of recipients) {
+      try {
+        const subSubject = replacePlaceholders(subject, reg, event);
+        const subBody = replacePlaceholders(bodyContent, reg, event);
+        const html = buildFullEmailHtml({
+          title: subSubject,
+          preheader: subSubject,
+          bodyContent: subBody
+        });
+
+        const sendRes = await emailService.sendEmail({
+          registrationId: reg.registration_id,
+          to: reg.email,
+          subject: subSubject,
+          html,
+          emailCategory: 'EVENTS',
+          emailType: 'EVENT_CAMPAIGN',
+          isOptionalAnnouncement: Boolean(isPromotional)
+        });
+
+        if (sendRes.skipped) {
+          skippedCount++;
+          results.push({ recipient: reg.email, status: 'SKIPPED_OPTED_OUT' });
+        } else {
+          sentCount++;
+          results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
+        }
+      } catch (sendErr) {
+        failedCount++;
+        results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'FAILED', error: sendErr.message });
+      }
+    }
+
+    // Record campaign in audit log
+    await run(
+      `INSERT INTO email_campaigns (event_id, campaign_type, subject, recipient_count, sent_count, failed_count, status, created_at)
+       VALUES (?, 'ANNOUNCEMENT', ?, ?, ?, ?, 'COMPLETED', ?)`,
+      [eventSlug, subject.trim(), recipients.length, sentCount, failedCount, new Date().toISOString()]
+    );
+
+    return res.json({
+      success: true,
+      message: `Campaign complete: ${sentCount} sent, ${skippedCount} opted-out/skipped, ${failedCount} failed.`,
+      recipientCount: recipients.length,
+      sentCount,
+      skippedCount,
+      failedCount,
+      results
+    });
+
+  } catch (err) {
+    console.error('[Admin] Campaign send error:', err);
+    return res.status(500).json({ success: false, error: 'Server error while sending campaign.' });
   }
 });
 
