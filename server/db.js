@@ -8,16 +8,20 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-// Create connection pool
-const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
-const pool = new Pool({
+// Create connection pool only if a real connection string is configured
+const connectionString = (process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
+const pool = connectionString ? new Pool({
   connectionString,
-  ssl: connectionString && connectionString.includes('localhost') ? false : { rejectUnauthorized: false }
-});
+  ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
+  connectionTimeoutMillis: 5000,
+  idleTimeoutMillis: 10000
+}) : null;
 
-pool.on('error', (err) => {
-  console.warn('[DB] Client connection notice:', err.message);
-});
+if (pool) {
+  pool.on('error', (err) => {
+    console.warn('[DB] Client connection notice:', err.message);
+  });
+}
 
 // Helper to convert SQLite ? to Postgres $1, $2, etc.
 const convertSql = (sql) => {
@@ -300,6 +304,9 @@ function saveLocalStore() {
 // ─── Promise Wrappers ──────────────────────────────────────────────────────────
 
 const rawRun = async (sql, params = []) => {
+  if (!pool || !connectionString) {
+    return handleLocalRun(sql, params);
+  }
   try {
     const pgSql = convertSql(sql);
     const result = await pool.query(pgSql, params);
@@ -308,15 +315,14 @@ const rawRun = async (sql, params = []) => {
       changes: result.rowCount 
     };
   } catch (err) {
-    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || !connectionString) {
-      return handleLocalRun(sql, params);
-    }
-    throw err;
+    console.warn('[DB Notice] Postgres query error, falling back to local store:', err.message);
+    return handleLocalRun(sql, params);
   }
 };
 
 let schemaInitPromise = null;
 function ensureSchema() {
+  if (!pool || !connectionString) return Promise.resolve();
   if (!schemaInitPromise) schemaInitPromise = initSchema().catch(err => {
     console.warn('[DB] Schema init fallback to local store:', err.message);
   });
@@ -330,29 +336,31 @@ const run = async (sql, params = []) => {
 
 const get = async (sql, params = []) => {
   await ensureSchema();
+  if (!pool || !connectionString) {
+    return handleLocalGet(sql, params);
+  }
   try {
     const pgSql = convertSql(sql);
     const result = await pool.query(pgSql, params);
     return result.rows[0];
   } catch (err) {
-    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || !connectionString) {
-      return handleLocalGet(sql, params);
-    }
-    throw err;
+    console.warn('[DB Notice] Postgres get error, falling back to local store:', err.message);
+    return handleLocalGet(sql, params);
   }
 };
 
 const all = async (sql, params = []) => {
   await ensureSchema();
+  if (!pool || !connectionString) {
+    return handleLocalAll(sql, params);
+  }
   try {
     const pgSql = convertSql(sql);
     const result = await pool.query(pgSql, params);
     return result.rows;
   } catch (err) {
-    if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || !connectionString) {
-      return handleLocalAll(sql, params);
-    }
-    throw err;
+    console.warn('[DB Notice] Postgres all error, falling back to local store:', err.message);
+    return handleLocalAll(sql, params);
   }
 };
 
