@@ -35,13 +35,16 @@ function getResendClient(category = 'DEFAULT') {
 
   let apiKey = '';
   if (cat === 'OTP') {
-    apiKey = config.RESEND.otpApiKey || config.RESEND.defaultApiKey;
+    apiKey = process.env.RESEND_OTP_API_KEY || config.RESEND.otpApiKey || process.env.RESEND_API_KEY || config.RESEND.defaultApiKey;
   } else if (cat === 'REGISTRATION') {
-    apiKey = config.RESEND.registrationApiKey || config.RESEND.defaultApiKey;
+    apiKey = process.env.RESEND_REGISTRATION_API_KEY || config.RESEND.registrationApiKey || process.env.RESEND_API_KEY || config.RESEND.defaultApiKey;
   } else if (cat === 'EVENTS') {
-    apiKey = config.RESEND.eventUpdatesApiKey || config.RESEND.defaultApiKey;
+    apiKey = process.env.RESEND_EVENT_UPDATES_API_KEY || config.RESEND.eventUpdatesApiKey || process.env.RESEND_API_KEY || config.RESEND.defaultApiKey;
   } else {
-    apiKey = config.RESEND.defaultApiKey || config.RESEND.otpApiKey || config.RESEND.registrationApiKey || config.RESEND.eventUpdatesApiKey;
+    apiKey = process.env.RESEND_API_KEY || config.RESEND.defaultApiKey ||
+             process.env.RESEND_OTP_API_KEY || config.RESEND.otpApiKey ||
+             process.env.RESEND_REGISTRATION_API_KEY || config.RESEND.registrationApiKey ||
+             process.env.RESEND_EVENT_UPDATES_API_KEY || config.RESEND.eventUpdatesApiKey;
   }
 
   if (apiKey && apiKey.trim() && !apiKey.startsWith('re_placeholder') && !apiKey.startsWith('changeme')) {
@@ -66,33 +69,33 @@ function getSenderForCategory(category = 'DEFAULT') {
   }
 }
 
-// ─── SMTP Fallback (for offline local development) ────────────────────────────
+// ─── SMTP Fallback (strictly blocked in production/Vercel) ────────────────────
 
 let smtpTransporter = null;
 
 function getSmtpTransporter() {
+  // Silent fallback to Gmail is strictly prohibited.
+  // In production or on Vercel, Resend with @offstagecreators.in is mandatory.
+  if (config.NODE_ENV === 'production' || process.env.VERCEL) {
+    return null;
+  }
+  // Only allowed during automated test execution or explicit local testing
+  if (process.env.NODE_ENV !== 'test' && process.env.ALLOW_DEV_SMTP !== 'true') {
+    return null;
+  }
   if (smtpTransporter) return smtpTransporter;
 
   const { user, password, host, port, secure } = config.EMAIL;
   if (!user || !password) return null;
 
-  const isGmail = host === 'smtp.gmail.com' || user.endsWith('@gmail.com');
-  if (isGmail) {
-    smtpTransporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user, pass: password },
-      connectionTimeout: 10000
-    });
-  } else {
-    smtpTransporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465 || secure,
-      auth: { user, pass: password },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 10000
-    });
-  }
+  smtpTransporter = nodemailer.createTransport({
+    host: host || 'localhost',
+    port: port || 587,
+    secure: port === 465 || secure,
+    auth: { user, pass: password },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 10000
+  });
   return smtpTransporter;
 }
 
@@ -191,7 +194,7 @@ async function sendEmail({
       }
 
       const messageId = response.data?.id || null;
-      console.log(`[Email / Resend] Sent ${emailType} (${emailCategory}) to ${cleanTo} — ID: ${messageId}`);
+      console.log(`[Email / Resend] Sent ${emailType} (${emailCategory}) from "${sender}" to ${cleanTo} — ID: ${messageId}`);
       await logEmail({
         registrationId,
         recipient: cleanTo,
@@ -200,7 +203,7 @@ async function sendEmail({
         status: 'SENT',
         messageId
       });
-      return { success: true, provider: 'resend', messageId };
+      return { success: true, provider: 'resend', from: sender, messageId };
     } catch (err) {
       console.error(`[Email / Resend] Failed to send ${emailType} to ${cleanTo}:`, err.message);
       await logEmail({
@@ -215,7 +218,26 @@ async function sendEmail({
     }
   }
 
-  // 2. Fallback to SMTP for local development
+  // 2. Strict Production Guard: No silent fallback to Gmail allowed.
+  const isProd = config.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+  if (isProd) {
+    const requiredVar = emailCategory === 'OTP' ? 'RESEND_OTP_API_KEY' :
+                        emailCategory === 'REGISTRATION' ? 'RESEND_REGISTRATION_API_KEY' :
+                        emailCategory === 'EVENTS' ? 'RESEND_EVENT_UPDATES_API_KEY' : 'RESEND_API_KEY';
+    const errMsg = `Resend is not configured for category "${emailCategory}". Please set ${requiredVar} in Vercel environment variables. All emails must originate from @offstagecreators.in via Resend. Falling back to Gmail is strictly prohibited.`;
+    console.error(`[Email Error] ${errMsg}`);
+    await logEmail({
+      registrationId,
+      recipient: cleanTo,
+      emailType,
+      subject,
+      status: 'NOT_CONFIGURED',
+      errorMessage: errMsg
+    });
+    throw new Error(errMsg);
+  }
+
+  // 3. Fallback to local dev/test transporter ONLY in non-production test environments
   const transporter = getSmtpTransporter();
   if (transporter) {
     try {
@@ -228,7 +250,7 @@ async function sendEmail({
         text: text || stripHtmlToPlainText(html)
       });
 
-      console.log(`[Email / SMTP Fallback] Sent ${emailType} to ${cleanTo} — ID: ${info.messageId}`);
+      console.log(`[Email / Dev Fallback] Sent ${emailType} to ${cleanTo} — ID: ${info.messageId}`);
       await logEmail({
         registrationId,
         recipient: cleanTo,
@@ -237,9 +259,9 @@ async function sendEmail({
         status: 'SENT',
         messageId: info.messageId
       });
-      return { success: true, provider: 'smtp', messageId: info.messageId };
+      return { success: true, provider: 'dev-smtp', from: sender, messageId: info.messageId };
     } catch (err) {
-      console.error(`[Email / SMTP Fallback] Failed to send ${emailType} to ${cleanTo}:`, err.message);
+      console.error(`[Email / Dev Fallback] Failed to send ${emailType} to ${cleanTo}:`, err.message);
       await logEmail({
         registrationId,
         recipient: cleanTo,
@@ -252,8 +274,8 @@ async function sendEmail({
     }
   }
 
-  // 3. No email provider configured
-  const errMsg = 'No email provider configured. Please configure RESEND_OTP_API_KEY, RESEND_REGISTRATION_API_KEY, RESEND_EVENT_UPDATES_API_KEY, or RESEND_API_KEY in environment variables.';
+  // 4. No email provider configured
+  const errMsg = `No email provider configured for ${emailCategory}. Please configure Resend API keys.`;
   console.warn(`[Email Warning] ${errMsg}`);
   await logEmail({
     registrationId,
@@ -788,6 +810,113 @@ async function checkDomainStatus() {
   }
 }
 
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function interpolateVariables(template, variables) {
+  return String(template || '').replace(/\{\{([^{}]+)\}\}/g, (match, key) => {
+    const trimmed = key.trim();
+    return variables[trimmed] !== undefined ? variables[trimmed] : match;
+  });
+}
+
+function renderMeetSessionEmail({ session = {}, participant = {}, customMessage = '' }) {
+  const eventName = session.event_name || 'Offstage Creators Event';
+  const sessionTitle = session.title || session.sessionTitle || 'Live Online Session';
+  const sessionDate = session.date || '';
+  const sessionTime = session.time || '';
+  const meetUrl = session.meet_url || session.meetUrl || '';
+  const participantName = participant?.full_name || participant?.name || 'Performer';
+  const regId = participant?.registration_id || 'N/A';
+
+  const variables = {
+    name: participantName,
+    registration_id: regId,
+    event_name: eventName,
+    session_title: sessionTitle,
+    date: sessionDate,
+    time: sessionTime,
+    meet_link: meetUrl
+  };
+
+  const subject = `Offstage Creators — Google Meet Details | ${sessionTitle}`;
+  const rawMessage = customMessage !== undefined && customMessage !== '' ? customMessage : (session.message || '');
+  const formattedMessage = rawMessage ? interpolateVariables(rawMessage, variables).replace(/\r?\n/g, '<br>') : '';
+
+  const bodyContent = `
+    <div class="status-badge badge-approved">Live Google Meet Session</div>
+    <h2 style="margin:0 0 12px; font-size:22px; font-weight:700; color:#f7eee1;">${escapeHtml(sessionTitle)}</h2>
+    <p>Hello <strong>${escapeHtml(participantName)}</strong>,</p>
+    <p>Here are the live Google Meet access details for your upcoming session for <strong>${escapeHtml(eventName)}</strong>.</p>
+
+    <table width="100%" cellpadding="8" cellspacing="0" style="margin: 16px 0; border: 1px solid #2a231c; border-radius: 8px; background: #0e0c0a;">
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Event</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${escapeHtml(eventName)}</td>
+      </tr>
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Session</td>
+        <td align="right" style="color:#ffd685; font-weight:700; font-size:13px;">${escapeHtml(sessionTitle)}</td>
+      </tr>
+      ${sessionDate ? `
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Date</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${escapeHtml(sessionDate)}</td>
+      </tr>` : ''}
+      ${sessionTime ? `
+      <tr style="border-bottom: 1px solid #1e1a16;">
+        <td style="color:#8e8477; font-size:13px;">Time</td>
+        <td align="right" style="color:#f7eee1; font-weight:600; font-size:13px;">${escapeHtml(sessionTime)}</td>
+      </tr>` : ''}
+      <tr>
+        <td style="color:#8e8477; font-size:13px;">Participant</td>
+        <td align="right" style="color:#f7eee1; font-size:13px;">${escapeHtml(participantName)} (${escapeHtml(regId)})</td>
+      </tr>
+    </table>
+
+    ${meetUrl ? `
+    <div style="background:#0a0908; border:1px solid #e4ad57; border-radius:8px; padding:18px; text-align:center; margin:20px 0;">
+      <div style="color:#8e8477; font-size:11px; text-transform:uppercase; letter-spacing:0.15em;">Google Meet Link</div>
+      <a href="${escapeHtml(meetUrl)}" target="_blank" style="display:inline-block; margin-top:8px; font-size:15px; font-weight:700; color:#e4ad57;">${escapeHtml(meetUrl)}</a>
+    </div>` : ''}
+
+    ${formattedMessage ? `
+      <div style="background:#110f0d; border-left: 3px solid #e4ad57; padding: 16px 20px; margin: 20px 0; border-radius: 4px; font-size: 14px; line-height: 1.7; color: #f7eee1;">
+        <div style="font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #e4ad57; text-transform: uppercase; margin-bottom: 8px;">Organizer Note</div>
+        ${formattedMessage}
+      </div>
+    ` : ''}
+
+    <p class="muted" style="margin-top:20px;">
+      ✦ <strong>Session Guidelines</strong>: Please join 5–10 minutes prior to the start time. Keep your microphone muted upon entry until your name is called. Support: <a href="mailto:support@offstagecreators.in">support@offstagecreators.in</a>.
+    </p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader: `Google Meet details for ${sessionTitle}`, bodyContent });
+  return { subject, html };
+}
+
+async function sendMeetEmail({ session, participant, recipientEmail, isTest = false }) {
+  const targetRecipient = recipientEmail || participant?.email;
+  if (!targetRecipient) {
+    throw new Error('No recipient email address provided');
+  }
+
+  const { subject, html } = renderMeetSessionEmail({ session, participant });
+  const finalSubject = isTest ? `[TEST PREVIEW] ${subject}` : subject;
+
+  return sendEmail({
+    to: targetRecipient,
+    subject: finalSubject,
+    html,
+    emailCategory: 'EVENTS',
+    emailType: isTest ? 'MEET_TEST' : 'MEET_SESSION',
+    registrationId: participant?.registration_id || null,
+    isOptionalAnnouncement: false
+  });
+}
+
 module.exports = {
   sendEmail,
   sendOTPEmail,
@@ -796,10 +925,15 @@ module.exports = {
   sendRejectionEmail,
   sendEventAnnouncementEmail,
   sendEventReminderEmail,
+  renderMeetSessionEmail,
+  sendMeetEmail,
   checkDomainStatus,
   isEmailUnsubscribed,
   emailWrapper,
   stripHtmlToPlainText,
+  interpolateVariables,
+  escapeHtml,
   getSenderForCategory,
   getResendClient
 };
+

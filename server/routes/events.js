@@ -141,7 +141,7 @@ function formatEventPublic(evt) {
     maxRegistrations: Number(evt.max_registrations || 0),
     confirmationMessage: evt.confirmation_message || '',
     allowedCategories,
-    contactEmail: evt.contact_email || 'offstagecreators77@gmail.com',
+    contactEmail: evt.contact_email || 'support@offstagecreators.in',
     contactPhone: evt.contact_phone || '',
     socialLinks: {
       instagram: evt.instagram_url || 'https://www.instagram.com/offstagecreators/',

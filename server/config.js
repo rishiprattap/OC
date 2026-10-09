@@ -45,7 +45,7 @@ module.exports = {
   },
 
   EMAIL: {
-    host: process.env.MAIL_HOST || 'smtp.gmail.com',
+    host: process.env.MAIL_HOST || '',
     port: parseInt(process.env.MAIL_PORT, 10) || 587,
     secure: process.env.MAIL_SECURE === 'true',
     user: process.env.MAIL_USER || '',

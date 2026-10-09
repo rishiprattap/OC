@@ -377,7 +377,7 @@ router.post('/', async (req, res) => {
         b.paymentInstructions || 'Pay registration fee via UPI and upload proof.',
         posterUrl, bannerUrl, b.logoUrl || '/assets/logo.png', b.promoVideoUrl || '',
         regEnabled, b.registrationButtonText || b.regButtonText || 'REGISTER AS PERFORMER', Number(b.maxRegistrations || 0), b.confirmationMessage || 'Thank you for registering!',
-        categoriesJson, b.contactEmail || 'offstagecreators77@gmail.com', b.contactPhone || '',
+        categoriesJson, b.contactEmail || 'support@offstagecreators.in', b.contactPhone || '',
         b.instagramUrl || 'https://www.instagram.com/offstagecreators/', b.youtubeUrl || '', b.whatsappUrl || '', b.meetLink || '', otherLinksJson,
         b.certificateEnabled !== undefined ? (b.certificateEnabled ? 1 : 0) : 1, b.certificateTitle || 'CERTIFICATE OF PARTICIPATION', b.certificateBgUrl || '',
         registrationProvider, externalRegistrationUrl, externalPlatformName, externalPlatformNotes, externalOpenNewTab,
