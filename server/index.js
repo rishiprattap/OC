@@ -238,7 +238,7 @@ app.get('*', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), 
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('[Server] Unhandled error:', err);
-  res.status(500).json({ success: false, error: 'Internal server error.' });
+  res.status(500).json({ success: false, error: err.message || 'Internal server error.' });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
