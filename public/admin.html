@@ -1109,8 +1109,41 @@
             <label class="admin-label">Full Venue Address</label>
             <textarea class="admin-textarea" id="evtVenueAddress" rows="2" placeholder="e.g. Commercial Complex B 6/7/8 Safdarjung Enclave, New Delhi"></textarea>
 
-            <label class="admin-label">Venue Image URL (Optional)</label>
-            <input type="text" class="admin-input" id="evtVenueImage" placeholder="https://... or /assets/...">
+            <label class="admin-label">Venue Image (Optional)</label>
+            <div class="admin-upload-widget" id="widgetVenueImage">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>🏛️</span> Venue Photo / Showcase Image</div>
+                <span class="upload-widget-badge">JPG, PNG, WebP • Max 10MB</span>
+              </div>
+              <div class="upload-dropzone" id="dropzoneVenueImage">
+                <span class="upload-dropzone-icon">📷</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop venue photo here, or click to upload</p>
+                <p class="upload-dropzone-sub">Shows attendees what the stage or location looks like</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowseVenueImage">📁 Browse / Upload Venue Photo</button>
+                <input type="file" id="fileInputVenueImage" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressVenueImage">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelVenueImage">Uploading venue photo…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarVenueImage"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorVenueImage"></div>
+              <div class="upload-preview-card" id="previewVenueImage" style="display:none;">
+                <img src="" alt="Venue Preview" class="upload-preview-thumb" id="thumbVenueImage">
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="nameVenueImage">venue-photo.jpg</div>
+                  <div class="upload-preview-size" id="sizeVenueImage">0 KB</div>
+                  <span class="upload-preview-status">✓ Image Attached</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <button type="button" class="btn-upload-action" id="btnReplaceVenueImage">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemoveVenueImage">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('VenueImage')">🔗 Or edit image URL manually</button>
+              <div class="upload-fallback-box" id="fallbackVenueImage">
+                <input type="text" class="admin-input" id="evtVenueImage" placeholder="https://... or /assets/..." style="margin-bottom:0;">
+              </div>
+            </div>
           </div>
 
           <!-- TAB 4: PRICING & PAYMENT -->
@@ -1151,40 +1184,224 @@
               </div>
             </div>
 
-            <div class="form-grid-2">
-              <div>
-                <label class="admin-label">Payment QR Image URL</label>
-                <input type="text" class="admin-input" id="evtPaymentQr" value="/assets/payment-qr.jpeg">
+            <!-- Payment QR Upload Widget -->
+            <label class="admin-label">Payment QR Code <span style="color:#e4ad57;">*</span></label>
+            <div class="admin-upload-widget" id="widgetPaymentQr">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>📱</span> Applicable UPI Payment QR Image</div>
+                <span class="upload-widget-badge">JPG, PNG, WebP • Max 10MB</span>
               </div>
-              <div>
-                <label class="admin-label">Payment Instructions</label>
-                <input type="text" class="admin-input" id="evtPaymentInstructions" value="Pay via Google Pay, PhonePe, Paytm, or BHIM, then enter your UTR and upload screenshot.">
+              <div class="upload-dropzone" id="dropzonePaymentQr">
+                <span class="upload-dropzone-icon">📲</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop UPI QR code image here</p>
+                <p class="upload-dropzone-sub">Participants scan this QR code on registration checkout</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowsePaymentQr">📁 Browse / Upload QR Code</button>
+                <input type="file" id="fileInputPaymentQr" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressPaymentQr">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelPaymentQr">Uploading QR code…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarPaymentQr"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorPaymentQr"></div>
+              <div class="upload-preview-card" id="previewPaymentQr" style="display:none;">
+                <img src="" alt="Payment QR Preview" class="upload-preview-thumb" id="thumbPaymentQr">
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="namePaymentQr">payment-qr.jpeg</div>
+                  <div class="upload-preview-size" id="sizePaymentQr">0 KB</div>
+                  <span class="upload-preview-status">✓ QR Code Active</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <button type="button" class="btn-upload-action" id="btnReplacePaymentQr">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemovePaymentQr">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('PaymentQr')">🔗 Or edit QR URL manually</button>
+              <div class="upload-fallback-box" id="fallbackPaymentQr">
+                <input type="text" class="admin-input" id="evtPaymentQr" value="/assets/payment-qr.jpeg" style="margin-bottom:0;">
               </div>
             </div>
+
+            <!-- Payment Instructions or Receipt Template Upload Widget -->
+            <label class="admin-label">Payment Instructions or Receipt Template (Optional)</label>
+            <div class="admin-upload-widget" id="widgetReceiptTemplate">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>📄</span> Receipt Template or Payment Guide Document</div>
+                <span class="upload-widget-badge">PDF, JPG, PNG • Max 10MB</span>
+              </div>
+              <div class="upload-dropzone" id="dropzoneReceiptTemplate">
+                <span class="upload-dropzone-icon">📑</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop PDF guide or receipt template image here</p>
+                <p class="upload-dropzone-sub">Upload payment policy document or booking invoice template</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowseReceiptTemplate">📁 Browse / Upload Document (PDF / Image)</button>
+                <input type="file" id="fileInputReceiptTemplate" accept="application/pdf,image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressReceiptTemplate">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelReceiptTemplate">Uploading document…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarReceiptTemplate"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorReceiptTemplate"></div>
+              <div class="upload-preview-card" id="previewReceiptTemplate" style="display:none;">
+                <div class="upload-preview-thumb pdf-icon" id="thumbReceiptTemplate">📄</div>
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="nameReceiptTemplate">receipt-template.pdf</div>
+                  <div class="upload-preview-size" id="sizeReceiptTemplate">0 KB</div>
+                  <span class="upload-preview-status">✓ Document Attached</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <a href="#" target="_blank" class="btn-upload-action" id="btnViewReceiptTemplate" style="text-decoration:none;">↗ View</a>
+                  <button type="button" class="btn-upload-action" id="btnReplaceReceiptTemplate">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemoveReceiptTemplate">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('ReceiptTemplate')">🔗 Or edit document URL manually</button>
+              <div class="upload-fallback-box" id="fallbackReceiptTemplate">
+                <input type="text" class="admin-input" id="evtReceiptTemplateUrl" placeholder="https://... or /assets/..." style="margin-bottom:0;">
+              </div>
+            </div>
+
+            <label class="admin-label">Payment Instructions (Text)</label>
+            <textarea class="admin-textarea" id="evtPaymentInstructions" rows="2" placeholder="Pay via Google Pay, PhonePe, Paytm, or BHIM, then enter your UTR and upload screenshot."></textarea>
           </div>
 
           <!-- TAB 5: MEDIA & POSTERS -->
           <div id="evtTabContentMedia" style="display:none;">
-            <div class="form-grid-2">
-              <div>
-                <label class="admin-label">Main Event Poster URL</label>
-                <input type="text" class="admin-input" id="evtPosterUrl" value="/assets/event-poster.png" placeholder="/assets/event-poster.png">
+            <!-- Event Banner Upload Widget -->
+            <label class="admin-label">Event Banner / Wide Cover Image <span style="color:#e4ad57;">*</span></label>
+            <div class="admin-upload-widget" id="widgetBanner">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>🖼️</span> Event Banner (Landscape Cover)</div>
+                <span class="upload-widget-badge">Wide (16:9) • Max 10MB</span>
               </div>
-              <div>
-                <label class="admin-label">Event Banner / Wide Poster URL</label>
-                <input type="text" class="admin-input" id="evtBannerUrl" placeholder="https://... or /assets/...">
+              <div class="upload-dropzone" id="dropzoneBanner">
+                <span class="upload-dropzone-icon">🌄</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop banner image here, or browse files</p>
+                <p class="upload-dropzone-sub">Hero banner displayed across event pages and social previews</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowseBanner">📁 Browse / Upload Banner</button>
+                <input type="file" id="fileInputBanner" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressBanner">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelBanner">Uploading banner…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarBanner"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorBanner"></div>
+              <div class="upload-preview-card" id="previewBanner" style="display:none;">
+                <img src="" alt="Banner Preview" class="upload-preview-thumb banner-preview" id="thumbBanner">
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="nameBanner">banner.png</div>
+                  <div class="upload-preview-size" id="sizeBanner">0 KB</div>
+                  <span class="upload-preview-status">✓ Banner Active</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <button type="button" class="btn-upload-action" id="btnReplaceBanner">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemoveBanner">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('Banner')">🔗 Or edit banner URL manually</button>
+              <div class="upload-fallback-box" id="fallbackBanner">
+                <input type="text" class="admin-input" id="evtBannerUrl" placeholder="/assets/event-poster.png" style="margin-bottom:0;">
               </div>
             </div>
 
-            <div class="form-grid-2">
-              <div>
-                <label class="admin-label">Event Logo URL</label>
-                <input type="text" class="admin-input" id="evtLogoUrl" value="/assets/logo.png">
+            <!-- Event Poster Upload Widget -->
+            <label class="admin-label">Main Event Poster <span style="color:#e4ad57;">*</span></label>
+            <div class="admin-upload-widget" id="widgetPoster">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>🎨</span> Main Event Poster (Portrait / Vertical)</div>
+                <span class="upload-widget-badge">Vertical • Max 10MB</span>
               </div>
-              <div>
-                <label class="admin-label">Promotional Video / Reel Link</label>
-                <input type="url" class="admin-input" id="evtPromoVideoUrl" placeholder="https://www.instagram.com/reel/... or YouTube">
+              <div class="upload-dropzone" id="dropzonePoster">
+                <span class="upload-dropzone-icon">🖼️</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop event poster here, or browse files</p>
+                <p class="upload-dropzone-sub">Primary vertical poster used in cards, passes, and schedule</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowsePoster">📁 Browse / Upload Poster</button>
+                <input type="file" id="fileInputPoster" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
               </div>
+              <div class="upload-progress-wrap" id="progressPoster">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelPoster">Uploading poster…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarPoster"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorPoster"></div>
+              <div class="upload-preview-card" id="previewPoster" style="display:none;">
+                <img src="" alt="Poster Preview" class="upload-preview-thumb" id="thumbPoster">
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="namePoster">event-poster.png</div>
+                  <div class="upload-preview-size" id="sizePoster">0 KB</div>
+                  <span class="upload-preview-status">✓ Poster Active</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <button type="button" class="btn-upload-action" id="btnReplacePoster">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemovePoster">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('Poster')">🔗 Or edit poster URL manually</button>
+              <div class="upload-fallback-box" id="fallbackPoster">
+                <input type="text" class="admin-input" id="evtPosterUrl" value="/assets/event-poster.png" style="margin-bottom:0;">
+              </div>
+            </div>
+
+            <!-- Event Logo Upload Widget -->
+            <label class="admin-label">Event Logo / Icon</label>
+            <div class="admin-upload-widget" id="widgetLogo">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>⚡</span> Brand or Edition Logo</div>
+                <span class="upload-widget-badge">Square (1:1) • Max 10MB</span>
+              </div>
+              <div class="upload-dropzone" id="dropzoneLogo">
+                <span class="upload-dropzone-icon">✨</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop event logo here</p>
+                <p class="upload-dropzone-sub">Square logo displayed on certificates and navigation</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowseLogo">📁 Browse / Upload Logo</button>
+                <input type="file" id="fileInputLogo" accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressLogo">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelLogo">Uploading logo…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarLogo"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorLogo"></div>
+              <div class="upload-preview-card" id="previewLogo" style="display:none;">
+                <img src="" alt="Logo Preview" class="upload-preview-thumb" id="thumbLogo" style="object-fit:contain; background:#181410;">
+                <div class="upload-preview-meta">
+                  <div class="upload-preview-name" id="nameLogo">logo.png</div>
+                  <div class="upload-preview-size" id="sizeLogo">0 KB</div>
+                  <span class="upload-preview-status">✓ Logo Active</span>
+                </div>
+                <div class="upload-preview-actions">
+                  <button type="button" class="btn-upload-action" id="btnReplaceLogo">🔄 Replace</button>
+                  <button type="button" class="btn-upload-action remove-btn" id="btnRemoveLogo">✕ Remove</button>
+                </div>
+              </div>
+              <button type="button" class="upload-fallback-toggle" onclick="toggleFallbackUrl('Logo')">🔗 Or edit logo URL manually</button>
+              <div class="upload-fallback-box" id="fallbackLogo">
+                <input type="text" class="admin-input" id="evtLogoUrl" value="/assets/logo.png" style="margin-bottom:0;">
+              </div>
+            </div>
+
+            <!-- Event Photos (Event Gallery Multi-Upload) Widget -->
+            <label class="admin-label">Event Photos (Event Gallery)</label>
+            <div class="admin-upload-widget" id="widgetEventGallery">
+              <div class="upload-widget-header">
+                <div class="upload-widget-title"><span>📸</span> Event Gallery Photos</div>
+                <span class="upload-widget-badge" id="eventGalleryCountBadge">0 photos attached</span>
+              </div>
+              <p style="font-size:12px; color:#8e8477; margin:0 0 10px;">Upload performer photos and event moments. These photos automatically appear in the public Event Gallery for this edition.</p>
+              <div class="upload-dropzone" id="dropzoneEventGallery">
+                <span class="upload-dropzone-icon">📸</span>
+                <p class="upload-dropzone-prompt">Drag &amp; drop photos here, or select multiple files</p>
+                <p class="upload-dropzone-sub">Supports multi-file upload (JPG, PNG, WebP) • Up to 10MB each</p>
+                <button type="button" class="btn-trigger-picker" id="btnBrowseEventGallery">📁 Browse / Upload Photos</button>
+                <input type="file" id="fileInputEventGallery" multiple accept="image/jpeg,image/png,image/webp,image/jpg" style="display:none;">
+              </div>
+              <div class="upload-progress-wrap" id="progressEventGallery">
+                <div style="font-size:11.5px; color:#e4ad57; font-weight:700;" id="progressLabelEventGallery">Uploading photos…</div>
+                <div class="upload-progress-bar-bg"><div class="upload-progress-bar-fill" id="progressBarEventGallery"></div></div>
+              </div>
+              <div class="upload-error-text" id="errorEventGallery"></div>
+              <div class="event-gallery-tray" id="eventGalleryTray" style="display:none;"></div>
+            </div>
+
+            <div>
+              <label class="admin-label">Promotional Video / Reel Link (Instagram / YouTube)</label>
+              <input type="url" class="admin-input" id="evtPromoVideoUrl" placeholder="https://www.instagram.com/reel/... or https://youtube.com/watch?v=...">
             </div>
           </div>
 

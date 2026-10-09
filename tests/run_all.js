@@ -5,6 +5,7 @@ const app = require('../server/index');
 const config = require('../server/config');
 const runPlatformTests = require('./test_platform');
 const runEmailOtpSystemTests = require('./test_email_otp_system');
+const runUploadTests = require('./test_event_uploads');
 
 let serverInstance = null;
 
@@ -37,18 +38,23 @@ async function runMasterSuite() {
 
   let emailOtpOk = false;
   let platformOk = false;
+  let uploadsOk = false;
   let analyticsOk = false;
 
   try {
-    console.log('>>> [1/3] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
+    console.log('>>> [1/4] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
     emailOtpOk = await runEmailOtpSystemTests();
     if (!emailOtpOk) allPassed = false;
 
-    console.log('>>> [2/3] EXECUTING PLATFORM & REGISTRATION JOURNEY TESTS...');
+    console.log('>>> [2/4] EXECUTING PLATFORM & REGISTRATION JOURNEY TESTS...');
     platformOk = await runPlatformTests();
     if (!platformOk) allPassed = false;
 
-    console.log('>>> [3/3] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
+    console.log('>>> [3/4] EXECUTING EVENT ASSET UPLOADS & MEDIA TESTS...');
+    uploadsOk = await runUploadTests();
+    if (!uploadsOk) allPassed = false;
+
+    console.log('>>> [4/4] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
     try {
       require('./test_analytics');
       analyticsOk = true;
@@ -71,6 +77,7 @@ async function runMasterSuite() {
   console.log('======================================================');
   console.log(`Email, OTP & Alerts    : ${emailOtpOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Platform & User Flow   : ${platformOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Event Asset Uploads    : ${uploadsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Analytics & Insights   : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Total Execution Time   : ${duration}s`);
   console.log('======================================================\n');

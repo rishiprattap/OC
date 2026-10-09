@@ -4,8 +4,84 @@
  */
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { run, get, all, getEventBySlug } = require('../db');
 const config = require('../config');
+
+const isVercel = Boolean(process.env.VERCEL || process.env.NOW_REGION);
+const uploadDir = isVercel ? path.join('/tmp', 'uploads', 'event-assets') : path.join(__dirname, '..', '..', 'uploads', 'event-assets');
+if (!isVercel && !fs.existsSync(uploadDir)) {
+  try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (_) {}
+}
+
+const storage = isVercel
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (req, file, cb) => {
+        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase() || '.png';
+        const safeName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 30) || 'asset';
+        const assetType = String(req.body.assetType || req.query.assetType || 'asset').replace(/[^a-zA-Z0-9_-]/g, '');
+        cb(null, `${assetType}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}-${safeName}${ext}`);
+      }
+    });
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const mime = (file.mimetype || '').toLowerCase();
+    const ext = path.extname(file.originalname).toLowerCase();
+    const assetType = String(req.body.assetType || req.query.assetType || '').toLowerCase();
+
+    // PDF only allowed for receipt_template / document
+    if (mime === 'application/pdf' || ext === '.pdf') {
+      if (['receipt_template', 'receipt', 'document', 'instructions'].includes(assetType)) {
+        return cb(null, true);
+      }
+      return cb(new Error('PDF files are only permitted for payment receipt templates.'));
+    }
+
+    if (['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/gif'].includes(mime)) {
+      return cb(null, true);
+    }
+
+    return cb(new Error('Invalid file format. Only JPEG, PNG, WebP, GIF (and PDF for receipts) are allowed.'));
+  }
+});
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function processUploadedFile(file, assetType) {
+  let fileUrl;
+  if (isVercel || file.buffer) {
+    const mimeType = file.mimetype || 'image/jpeg';
+    fileUrl = `data:${mimeType};base64,${file.buffer.toString('base64')}`;
+  } else {
+    fileUrl = `/uploads/event-assets/${file.filename}`;
+  }
+
+  return {
+    url: fileUrl,
+    filename: file.filename || file.originalname,
+    originalName: file.originalname,
+    size: file.size,
+    sizeFormatted: formatFileSize(file.size),
+    mimeType: file.mimetype,
+    assetType
+  };
+}
 
 // Middleware to ensure admin auth
 function requireAdmin(req, res, next) {
@@ -150,6 +226,12 @@ router.get('/', async (req, res) => {
         poster: media.poster,
         image: media.image,
         coverImage: media.coverImage,
+        receiptTemplateUrl: evt.receipt_template_url || '',
+        receipt_template_url: evt.receipt_template_url || '',
+        qrAssetPath: evt.qr_asset_path || '/assets/payment-qr.jpeg',
+        paymentInstructions: evt.payment_instructions || '',
+        logoUrl: evt.logo_url || '/assets/logo.png',
+        venueImageUrl: evt.venue_image_url || '',
         regEnabled: Boolean(evt.reg_enabled),
         regButtonText: evt.reg_button_text || 'REGISTER AS PERFORMER',
         maxRegistrations: Number(evt.max_registrations || 0),
@@ -176,6 +258,151 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[Admin Events] List error:', err);
     return res.status(500).json({ success: false, error: 'Failed to load events.' });
+  }
+});
+
+// POST /api/admin/events/upload — Upload media asset (banner, poster, QR, receipt template, gallery, logo, venue)
+router.post('/upload', (req, res) => {
+  upload.any()(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, error: 'File size exceeds 10MB limit. Please upload a smaller file.' });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'File upload failed.' });
+    }
+
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ success: false, error: 'No file uploaded. Please select a file.' });
+      }
+
+      const assetType = String(req.body.assetType || req.query.assetType || 'asset').toLowerCase();
+      const eventId = String(req.body.eventId || req.body.slug || req.query.eventId || '').trim();
+
+      const processed = req.files.map(f => processUploadedFile(f, assetType));
+
+      // If this upload is targeted at an event's gallery, persist to gallery_images
+      if (assetType === 'gallery' && eventId) {
+        const now = new Date().toISOString();
+        for (const item of processed) {
+          const result = await run(
+            `INSERT INTO gallery_images (image_url, caption, display_order, is_published, event_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+            [item.url, req.body.caption || '', 0, 1, eventId, now, now]
+          );
+          item.id = result.lastID;
+          item.eventId = eventId;
+        }
+      }
+
+      if (processed.length === 1 && !Array.isArray(req.body.files) && req.body.multiple !== 'true') {
+        return res.json({
+          success: true,
+          message: 'File uploaded successfully.',
+          file: processed[0],
+          ...processed[0]
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `${processed.length} file(s) uploaded successfully.`,
+        count: processed.length,
+        files: processed,
+        file: processed[0],
+        ...processed[0]
+      });
+    } catch (processErr) {
+      console.error('[Admin Events] Upload processing error:', processErr);
+      return res.status(500).json({ success: false, error: 'Failed to process uploaded file.' });
+    }
+  });
+});
+
+// GET /api/admin/events/:slug/gallery — List photos for a specific event
+router.get('/:slug/gallery', async (req, res) => {
+  try {
+    const slug = req.params.slug;
+    const rows = await all(
+      `SELECT * FROM gallery_images WHERE event_id = ? ORDER BY display_order ASC, id DESC`,
+      [slug]
+    );
+    const images = (rows || []).map(r => ({
+      id: r.id,
+      imageUrl: r.image_url,
+      caption: r.caption || '',
+      displayOrder: r.display_order,
+      isPublished: Boolean(r.is_published),
+      eventId: r.event_id || slug,
+      createdAt: r.created_at
+    }));
+    return res.json({ success: true, count: images.length, images });
+  } catch (err) {
+    console.error('[Admin Events] Gallery list error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load event photos.' });
+  }
+});
+
+// POST /api/admin/events/:slug/gallery — Upload photos directly to a specific event
+router.post('/:slug/gallery', (req, res) => {
+  req.body.assetType = 'gallery';
+  req.body.eventId = req.params.slug;
+  upload.any()(req, res, async (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, error: 'File size exceeds 10MB limit.' });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'Upload failed.' });
+    }
+
+    try {
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ success: false, error: 'No photos provided.' });
+      }
+
+      const slug = req.params.slug;
+      const now = new Date().toISOString();
+      const saved = [];
+
+      for (const file of req.files) {
+        const item = processUploadedFile(file, 'gallery');
+        const result = await run(
+          `INSERT INTO gallery_images (image_url, caption, display_order, is_published, event_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+          [item.url, req.body.caption || '', 0, 1, slug, now, now]
+        );
+        saved.push({
+          id: result.lastID,
+          imageUrl: item.url,
+          caption: req.body.caption || '',
+          displayOrder: 0,
+          isPublished: true,
+          eventId: slug,
+          createdAt: now
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `${saved.length} photo(s) added to event gallery.`,
+        images: saved
+      });
+    } catch (err) {
+      console.error('[Admin Events] Event gallery upload error:', err);
+      return res.status(500).json({ success: false, error: 'Failed to save event photos.' });
+    }
+  });
+});
+
+// DELETE /api/admin/events/:slug/gallery/:id — Delete a photo from a specific event
+router.delete('/:slug/gallery/:id', async (req, res) => {
+  try {
+    const { slug, id } = req.params;
+    await run(`DELETE FROM gallery_images WHERE id = ? AND event_id = ?`, [id, slug]);
+    return res.json({ success: true, message: 'Photo removed from event gallery.' });
+  } catch (err) {
+    console.error('[Admin Events] Gallery delete error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to delete photo.' });
   }
 });
 
@@ -247,6 +474,12 @@ router.get('/:slug', async (req, res) => {
         externalPlatformName: evt.external_platform_name || '',
         externalPlatformNotes: evt.external_platform_notes || '',
         externalOpenNewTab: evt.external_open_new_tab !== 0,
+        receiptTemplateUrl: evt.receipt_template_url || '',
+        receipt_template_url: evt.receipt_template_url || '',
+        qrAssetPath: evt.qr_asset_path || '/assets/payment-qr.jpeg',
+        paymentInstructions: evt.payment_instructions || '',
+        logoUrl: evt.logo_url || '/assets/logo.png',
+        venueImageUrl: evt.venue_image_url || '',
         certificateEnabled: Boolean(evt.certificate_enabled),
         allowedCategories,
         pricingTiers,
@@ -349,6 +582,7 @@ router.post('/', async (req, res) => {
         instagram_url, youtube_url, whatsapp_url, meet_link, other_links,
         certificate_enabled, certificate_title, certificate_bg_url,
         registration_provider, external_registration_url, external_platform_name, external_platform_notes, external_open_new_tab,
+        receipt_template_url,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
@@ -364,6 +598,7 @@ router.post('/', async (req, res) => {
         ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?, ?,
+        ?,
         ?, ?
       )`,
       [
@@ -373,7 +608,7 @@ router.post('/', async (req, res) => {
         b.regOpenDate || '', b.regCloseDate || '', venueName, venueAddress,
         b.city || '', b.state || '', b.mapsUrl || '', b.venueImageUrl || '',
         b.isPaid !== undefined ? (b.isPaid ? 1 : 0) : 1, fee, b.currency || 'INR', pricingTiersJson, b.earlyBirdFee ? Number(b.earlyBirdFee) : null,
-        b.upiId || 'rishiprattap@fam', b.payeeName || 'Rishi Pratap', b.qrAssetPath || '/assets/payment-qr.jpeg',
+        b.upiId || 'rishiprattap@fam', b.payeeName || 'Rishi Pratap', b.qrAssetPath || b.paymentQr || b.paymentQrUrl || b.qr_asset_path || '/assets/payment-qr.jpeg',
         b.paymentInstructions || 'Pay registration fee via UPI and upload proof.',
         posterUrl, bannerUrl, b.logoUrl || '/assets/logo.png', b.promoVideoUrl || '',
         regEnabled, b.registrationButtonText || b.regButtonText || 'REGISTER AS PERFORMER', Number(b.maxRegistrations || 0), b.confirmationMessage || 'Thank you for registering!',
@@ -381,6 +616,7 @@ router.post('/', async (req, res) => {
         b.instagramUrl || 'https://www.instagram.com/offstagecreators/', b.youtubeUrl || '', b.whatsappUrl || '', b.meetLink || '', otherLinksJson,
         b.certificateEnabled !== undefined ? (b.certificateEnabled ? 1 : 0) : 1, b.certificateTitle || 'CERTIFICATE OF PARTICIPATION', b.certificateBgUrl || '',
         registrationProvider, externalRegistrationUrl, externalPlatformName, externalPlatformNotes, externalOpenNewTab,
+        (b.receiptTemplateUrl || b.receipt_template_url || '').trim(),
         now, now
       ]
     );
@@ -480,6 +716,7 @@ router.put('/:slug', async (req, res) => {
         instagram_url = ?, youtube_url = ?, whatsapp_url = ?, meet_link = ?, other_links = ?,
         certificate_enabled = ?, certificate_title = ?, certificate_bg_url = ?,
         registration_provider = ?, external_registration_url = ?, external_platform_name = ?, external_platform_notes = ?, external_open_new_tab = ?,
+        receipt_template_url = ?,
         updated_at = ?
       WHERE id = ?`,
       [
@@ -511,7 +748,7 @@ router.put('/:slug', async (req, res) => {
         b.earlyBirdFee !== undefined ? (b.earlyBirdFee ? Number(b.earlyBirdFee) : null) : existing.early_bird_fee,
         b.upiId !== undefined ? b.upiId : existing.upi_id,
         b.payeeName !== undefined ? b.payeeName : existing.payee_name,
-        b.qrAssetPath !== undefined ? b.qrAssetPath : existing.qr_asset_path,
+        b.qrAssetPath !== undefined ? b.qrAssetPath : (b.paymentQr !== undefined ? b.paymentQr : (b.paymentQrUrl !== undefined ? b.paymentQrUrl : existing.qr_asset_path)),
         b.paymentInstructions !== undefined ? b.paymentInstructions : existing.payment_instructions,
         posterUrl,
         bannerUrl,
@@ -537,6 +774,7 @@ router.put('/:slug', async (req, res) => {
         externalPlatformName,
         externalPlatformNotes,
         externalOpenNewTab,
+        b.receiptTemplateUrl !== undefined ? b.receiptTemplateUrl : (b.receipt_template_url !== undefined ? b.receipt_template_url : (existing.receipt_template_url || '')),
         now,
         existing.id
       ]

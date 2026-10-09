@@ -2290,6 +2290,390 @@
     }
   };
 
+  // ── Asset Upload Widgets Controller ──────────────────────────────────────────
+  window.toggleFallbackUrl = function (type) {
+    const box = document.getElementById('fallback' + type);
+    if (box) {
+      box.style.display = (box.style.display === 'block') ? 'none' : 'block';
+    }
+  };
+
+  let eventGalleryPhotos = [];
+  let activeUploadCount = 0;
+
+  function updateSaveButtonUploadState() {
+    const btn = document.getElementById('btnSaveEvent');
+    if (!btn) return;
+    if (activeUploadCount > 0) {
+      btn.disabled = true;
+      btn.textContent = `Uploading file (${activeUploadCount} active)…`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = '✓ Save Event';
+    }
+  }
+
+  function initAssetUploadWidget({
+    key,
+    assetType,
+    inputElId,
+    acceptPdf = false
+  }) {
+    const dropzone = document.getElementById('dropzone' + key);
+    const fileInput = document.getElementById('fileInput' + key);
+    const btnBrowse = document.getElementById('btnBrowse' + key);
+    const progressWrap = document.getElementById('progress' + key);
+    const progressBar = document.getElementById('progressBar' + key);
+    const progressLabel = document.getElementById('progressLabel' + key);
+    const errorText = document.getElementById('error' + key);
+    const previewCard = document.getElementById('preview' + key);
+    const thumbImg = document.getElementById('thumb' + key);
+    const nameEl = document.getElementById('name' + key);
+    const sizeEl = document.getElementById('size' + key);
+    const btnReplace = document.getElementById('btnReplace' + key);
+    const btnRemove = document.getElementById('btnRemove' + key);
+    const btnView = document.getElementById('btnView' + key);
+    const inputEl = document.getElementById(inputElId);
+
+    if (!dropzone || !fileInput || !inputEl) return null;
+
+    function showError(msg) {
+      if (errorText) {
+        errorText.textContent = msg;
+        errorText.style.display = 'block';
+      }
+    }
+
+    function clearError() {
+      if (errorText) {
+        errorText.textContent = '';
+        errorText.style.display = 'none';
+      }
+    }
+
+    function setPreview(url, fileName = '', fileSize = '') {
+      clearError();
+      if (!url) {
+        if (previewCard) previewCard.style.display = 'none';
+        if (dropzone) dropzone.style.display = 'block';
+        inputEl.value = '';
+        return;
+      }
+
+      inputEl.value = url;
+      if (dropzone) dropzone.style.display = 'none';
+      if (previewCard) previewCard.style.display = 'flex';
+
+      const isPdf = url.includes('application/pdf') || url.toLowerCase().endsWith('.pdf') || (fileName && fileName.toLowerCase().endsWith('.pdf'));
+
+      if (thumbImg) {
+        if (isPdf) {
+          thumbImg.src = '';
+          thumbImg.style.display = 'none';
+          const pdfBadge = document.getElementById('thumb' + key);
+          if (pdfBadge && pdfBadge.classList.contains('pdf-icon')) {
+            pdfBadge.style.display = 'flex';
+            pdfBadge.textContent = '📄';
+          }
+        } else {
+          thumbImg.style.display = 'block';
+          thumbImg.src = url;
+        }
+      }
+
+      if (nameEl) {
+        nameEl.textContent = fileName || (url.startsWith('data:') ? `${assetType}-file.${isPdf ? 'pdf' : 'png'}` : url.split('/').pop().split('?')[0]);
+      }
+      if (sizeEl) {
+        sizeEl.textContent = fileSize || (url.startsWith('data:') ? `${Math.round(url.length * 0.75 / 1024)} KB` : 'Attached');
+      }
+      if (btnView) {
+        btnView.href = url;
+      }
+    }
+
+    async function handleFile(file) {
+      clearError();
+      if (!file) return;
+
+      const mime = (file.type || '').toLowerCase();
+      const ext = file.name.split('.').pop().toLowerCase();
+      const isPdf = mime === 'application/pdf' || ext === 'pdf';
+
+      if (isPdf && !acceptPdf) {
+        showError('PDF files are not allowed for this field. Please upload an image (JPG, PNG, WebP, GIF).');
+        return;
+      }
+
+      const validImg = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/gif'].includes(mime) ||
+                       ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext);
+
+      if (!isPdf && !validImg) {
+        showError('Unsupported file type. Please upload a valid image (JPG, PNG, WebP)' + (acceptPdf ? ' or PDF document.' : '.'));
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        showError('File exceeds 10MB limit (' + (file.size / (1024 * 1024)).toFixed(1) + 'MB). Please upload a smaller file.');
+        return;
+      }
+
+      activeUploadCount++;
+      updateSaveButtonUploadState();
+      if (progressWrap) progressWrap.style.display = 'block';
+      if (progressBar) progressBar.style.width = '30%';
+      if (progressLabel) progressLabel.textContent = `Uploading ${file.name}…`;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('assetType', assetType);
+
+        if (progressBar) progressBar.style.width = '65%';
+
+        const res = await adminFetch('/api/admin/events/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (progressBar) progressBar.style.width = '100%';
+
+        if (res.ok && data.success && data.url) {
+          setPreview(data.url, data.originalName || file.name, data.sizeFormatted || `${Math.round(file.size / 1024)} KB`);
+        } else {
+          showError(data.error || 'Failed to upload file. Please try again.');
+          if (dropzone) dropzone.style.display = 'block';
+        }
+      } catch (err) {
+        showError('Network error uploading file: ' + err.message);
+        if (dropzone) dropzone.style.display = 'block';
+      } finally {
+        activeUploadCount = Math.max(0, activeUploadCount - 1);
+        updateSaveButtonUploadState();
+        setTimeout(() => {
+          if (progressWrap) progressWrap.style.display = 'none';
+          if (progressBar) progressBar.style.width = '0%';
+        }, 400);
+        fileInput.value = '';
+      }
+    }
+
+    if (btnBrowse) {
+      btnBrowse.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files && fileInput.files[0]) {
+        handleFile(fileInput.files[0]);
+      }
+    });
+
+    if (btnReplace) {
+      btnReplace.addEventListener('click', () => fileInput.click());
+    }
+
+    if (btnRemove) {
+      btnRemove.addEventListener('click', () => {
+        setPreview('');
+      });
+    }
+
+    inputEl.addEventListener('input', () => {
+      const val = inputEl.value.trim();
+      if (val) {
+        if (dropzone) dropzone.style.display = 'none';
+        if (previewCard) previewCard.style.display = 'flex';
+        if (thumbImg) thumbImg.src = val;
+        if (nameEl) nameEl.textContent = val.split('/').pop().split('?')[0] || 'Image URL';
+        if (sizeEl) sizeEl.textContent = 'External link';
+        if (btnView) btnView.href = val;
+      } else {
+        if (previewCard) previewCard.style.display = 'none';
+        if (dropzone) dropzone.style.display = 'block';
+      }
+    });
+
+    return { setPreview, clearError };
+  }
+
+  const uploadWidgets = {};
+  function ensureUploadWidgetsInitialized() {
+    if (!uploadWidgets.Banner) {
+      uploadWidgets.Banner = initAssetUploadWidget({ key: 'Banner', assetType: 'banner', inputElId: 'evtBannerUrl' });
+      uploadWidgets.Poster = initAssetUploadWidget({ key: 'Poster', assetType: 'poster', inputElId: 'evtPosterUrl' });
+      uploadWidgets.PaymentQr = initAssetUploadWidget({ key: 'PaymentQr', assetType: 'qr', inputElId: 'evtPaymentQr' });
+      uploadWidgets.ReceiptTemplate = initAssetUploadWidget({ key: 'ReceiptTemplate', assetType: 'receipt_template', inputElId: 'evtReceiptTemplateUrl', acceptPdf: true });
+      uploadWidgets.Logo = initAssetUploadWidget({ key: 'Logo', assetType: 'logo', inputElId: 'evtLogoUrl' });
+      uploadWidgets.VenueImage = initAssetUploadWidget({ key: 'VenueImage', assetType: 'venue', inputElId: 'evtVenueImage' });
+      initEventGalleryWidget();
+    }
+  }
+
+  function initEventGalleryWidget() {
+    const dropzone = document.getElementById('dropzoneEventGallery');
+    const fileInput = document.getElementById('fileInputEventGallery');
+    const btnBrowse = document.getElementById('btnBrowseEventGallery');
+
+    if (!dropzone || !fileInput) return;
+
+    if (btnBrowse) {
+      btnBrowse.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files) {
+        handleEventGalleryFiles(e.dataTransfer.files);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files) {
+        handleEventGalleryFiles(fileInput.files);
+      }
+    });
+  }
+
+  function renderEventGalleryTray() {
+    const tray = document.getElementById('eventGalleryTray');
+    const badge = document.getElementById('eventGalleryCountBadge');
+    if (!tray) return;
+
+    if (badge) {
+      badge.textContent = `${eventGalleryPhotos.length} photo${eventGalleryPhotos.length === 1 ? '' : 's'} attached`;
+    }
+
+    if (eventGalleryPhotos.length === 0) {
+      tray.style.display = 'none';
+      tray.innerHTML = '';
+      return;
+    }
+
+    tray.style.display = 'grid';
+    tray.innerHTML = eventGalleryPhotos.map((photo, index) => `
+      <div class="gallery-tray-item" title="${photo.caption || 'Event Photo'}">
+        <img src="${escHtml(photo.imageUrl)}" alt="${escHtml(photo.caption || 'Event Photo')}" onerror="this.src='/assets/event-poster.png';">
+        <button type="button" class="gallery-tray-delete-btn" onclick="removeEventGalleryPhoto(${index})" title="Delete photo">✕</button>
+      </div>
+    `).join('');
+  }
+
+  window.removeEventGalleryPhoto = async function (index) {
+    const photo = eventGalleryPhotos[index];
+    if (!photo) return;
+
+    if (photo.id && currentEditingEventSlug) {
+      if (!confirm('Are you sure you want to remove this photo from the event gallery?')) return;
+      try {
+        await adminFetch(`/api/admin/events/${encodeURIComponent(currentEditingEventSlug)}/gallery/${photo.id}`, {
+          method: 'DELETE'
+        });
+      } catch (_) {}
+    }
+
+    eventGalleryPhotos.splice(index, 1);
+    renderEventGalleryTray();
+  };
+
+  async function handleEventGalleryFiles(fileList) {
+    const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+
+    const progressWrap = document.getElementById('progressEventGallery');
+    const progressBar = document.getElementById('progressBarEventGallery');
+    const progressLabel = document.getElementById('progressLabelEventGallery');
+    const errorText = document.getElementById('errorEventGallery');
+
+    if (errorText) { errorText.textContent = ''; errorText.style.display = 'none'; }
+    if (progressWrap) progressWrap.style.display = 'block';
+    if (progressLabel) progressLabel.textContent = `Uploading ${files.length} photo(s)…`;
+
+    activeUploadCount++;
+    updateSaveButtonUploadState();
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 10 * 1024 * 1024) continue;
+        if (progressBar) progressBar.style.width = `${Math.round(((i + 1) / files.length) * 100)}%`;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('assetType', 'gallery');
+        if (currentEditingEventSlug) {
+          formData.append('eventId', currentEditingEventSlug);
+        }
+
+        const res = await adminFetch('/api/admin/events/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.url) {
+          eventGalleryPhotos.push({
+            id: data.id || null,
+            imageUrl: data.url,
+            caption: '',
+            eventId: currentEditingEventSlug || null
+          });
+        }
+      }
+      renderEventGalleryTray();
+    } catch (err) {
+      if (errorText) {
+        errorText.textContent = 'Upload notice: ' + err.message;
+        errorText.style.display = 'block';
+      }
+    } finally {
+      activeUploadCount = Math.max(0, activeUploadCount - 1);
+      updateSaveButtonUploadState();
+      setTimeout(() => {
+        if (progressWrap) progressWrap.style.display = 'none';
+        if (progressBar) progressBar.style.width = '0%';
+      }, 400);
+      const fi = document.getElementById('fileInputEventGallery');
+      if (fi) fi.value = '';
+    }
+  }
+
   // ── Event Modal (Create / Edit) ───────────────────────────────────────────────
   window.openCreateEventModal = function () {
     currentEditingEventSlug = null;
@@ -2310,6 +2694,8 @@
     document.getElementById('evtPosterUrl').value = '/assets/event-poster.png';
     if (document.getElementById('evtBannerUrl')) document.getElementById('evtBannerUrl').value = '/assets/event-poster.png';
     document.getElementById('evtLogoUrl').value = '/assets/logo.png';
+    if (document.getElementById('evtReceiptTemplateUrl')) document.getElementById('evtReceiptTemplateUrl').value = '';
+    if (document.getElementById('evtVenueImage')) document.getElementById('evtVenueImage').value = '';
     document.getElementById('evtIsRegistrationOpen').checked = true;
     document.getElementById('evtIsRegistrationFeeEnabled').checked = true;
     document.getElementById('evtRegButtonText').value = 'REGISTER NOW';
@@ -2323,6 +2709,17 @@
     if (document.getElementById('evtExternalNotes')) document.getElementById('evtExternalNotes').value = '';
     if (document.getElementById('evtExternalOpenNewTab')) document.getElementById('evtExternalOpenNewTab').checked = true;
     onRegistrationProviderChange('internal');
+
+    // Initialize & populate asset upload controls
+    ensureUploadWidgetsInitialized();
+    uploadWidgets.Banner?.setPreview('/assets/event-poster.png', 'event-poster.png', 'Default');
+    uploadWidgets.Poster?.setPreview('/assets/event-poster.png', 'event-poster.png', 'Default');
+    uploadWidgets.PaymentQr?.setPreview('/assets/payment-qr.jpeg', 'payment-qr.jpeg', 'Default');
+    uploadWidgets.ReceiptTemplate?.setPreview('');
+    uploadWidgets.Logo?.setPreview('/assets/logo.png', 'logo.png', 'Default');
+    uploadWidgets.VenueImage?.setPreview('');
+    eventGalleryPhotos = [];
+    renderEventGalleryTray();
 
     switchEvtModalTab('basic');
     const modal = document.getElementById('eventEditorModal');
@@ -2376,7 +2773,7 @@
       document.getElementById('evtState').value = evt.state || '';
       document.getElementById('evtGoogleMapsUrl').value = evt.googleMapsUrl || evt.maps_url || '';
       document.getElementById('evtVenueAddress').value = evt.venueAddress || evt.venue_address || '';
-      document.getElementById('evtVenueImage').value = evt.venueImage || evt.venue_image_url || '';
+      document.getElementById('evtVenueImage').value = evt.venueImage || evt.venueImageUrl || evt.venue_image_url || '';
 
       // Tab 4: Pricing
       document.getElementById('evtFee').value = evt.fee ?? 79;
@@ -2386,8 +2783,11 @@
       document.getElementById('evtAllowedCategories').value = Array.isArray(evt.allowedCategories) ? evt.allowedCategories.join(', ') : (evt.allowedCategories || '');
       document.getElementById('evtPayeeName').value = evt.payeeName || evt.payee_name || 'Rishi Pratap';
       document.getElementById('evtUpiId').value = evt.upiId || evt.upi_id || 'rishiprattap@fam';
-      document.getElementById('evtPaymentQr').value = evt.paymentQr || evt.qr_asset_path || '/assets/payment-qr.jpeg';
+      document.getElementById('evtPaymentQr').value = evt.paymentQr || evt.qrAssetPath || evt.qr_asset_path || '/assets/payment-qr.jpeg';
       document.getElementById('evtPaymentInstructions').value = evt.paymentInstructions || evt.payment_instructions || '';
+      if (document.getElementById('evtReceiptTemplateUrl')) {
+        document.getElementById('evtReceiptTemplateUrl').value = evt.receiptTemplateUrl || evt.receipt_template_url || '';
+      }
 
       // Tab 5: Media
       const defaultAsset = (evt.slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
@@ -2400,6 +2800,33 @@
       document.getElementById('evtBannerUrl').value = banner;
       document.getElementById('evtLogoUrl').value = evt.logoUrl || evt.logo_url || '/assets/logo.png';
       document.getElementById('evtPromoVideoUrl').value = evt.promoVideoUrl || evt.promo_video_url || '';
+
+      // Populate asset upload controls with loaded URLs & thumbnails
+      ensureUploadWidgetsInitialized();
+      uploadWidgets.Banner?.setPreview(banner, banner.split('/').pop());
+      uploadWidgets.Poster?.setPreview(poster, poster.split('/').pop());
+      uploadWidgets.PaymentQr?.setPreview(evt.paymentQr || evt.qrAssetPath || evt.qr_asset_path || '/assets/payment-qr.jpeg', 'payment-qr.jpeg');
+      uploadWidgets.ReceiptTemplate?.setPreview(evt.receiptTemplateUrl || evt.receipt_template_url || '', (evt.receiptTemplateUrl || evt.receipt_template_url || '').split('/').pop());
+      uploadWidgets.Logo?.setPreview(evt.logoUrl || evt.logo_url || '/assets/logo.png', 'logo.png');
+      uploadWidgets.VenueImage?.setPreview(evt.venueImage || evt.venueImageUrl || evt.venue_image_url || '', (evt.venueImage || evt.venueImageUrl || evt.venue_image_url || '').split('/').pop());
+
+      // Fetch & display photos attached to this event
+      eventGalleryPhotos = [];
+      try {
+        const galleryRes = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}/gallery`);
+        if (galleryRes.ok) {
+          const gData = await galleryRes.json();
+          if (gData.success && Array.isArray(gData.images)) {
+            eventGalleryPhotos = gData.images.map(img => ({
+              id: img.id,
+              imageUrl: img.imageUrl,
+              caption: img.caption || '',
+              eventId: slug
+            }));
+          }
+        }
+      } catch (_) {}
+      renderEventGalleryTray();
 
       // Tab 6: Registration Provider & Settings
       let provider = (evt.registrationProvider || evt.registration_provider || 'internal').toLowerCase();
@@ -2479,6 +2906,11 @@
   window.saveEventForm = async function (e) {
     if (e && e.preventDefault) e.preventDefault();
     const btn = document.getElementById('btnSaveEvent');
+
+    if (activeUploadCount > 0) {
+      alert('A file upload is currently in progress. Please wait for it to finish before saving.');
+      return;
+    }
 
     const slug = (document.getElementById('evtSlug').value || '').trim().toLowerCase();
     const name = (document.getElementById('evtName').value || '').trim();
@@ -2566,6 +2998,7 @@
       upiId: document.getElementById('evtUpiId').value.trim(),
       paymentQr: document.getElementById('evtPaymentQr').value.trim(),
       paymentInstructions: document.getElementById('evtPaymentInstructions').value.trim(),
+      receiptTemplateUrl: (document.getElementById('evtReceiptTemplateUrl')?.value || '').trim(),
       posterUrl,
       bannerUrl: document.getElementById('evtBannerUrl').value.trim(),
       logoUrl: document.getElementById('evtLogoUrl').value.trim(),
@@ -2609,6 +3042,27 @@
         alert('Failed to save event: ' + (data.error || 'Server error'));
         if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
         return;
+      }
+
+      // If a brand new event was saved, link any staged gallery photos to it
+      if (!currentEditingEventSlug && eventGalleryPhotos.length > 0 && data.event?.slug) {
+        const newSlug = data.event.slug;
+        for (const photo of eventGalleryPhotos) {
+          if (!photo.id && photo.imageUrl) {
+            try {
+              await adminFetch(`/api/admin/events/upload`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  imageUrl: photo.imageUrl,
+                  caption: photo.caption || '',
+                  eventId: newSlug,
+                  assetType: 'gallery'
+                })
+              });
+            } catch (_) {}
+          }
+        }
       }
 
       closeEventModal();

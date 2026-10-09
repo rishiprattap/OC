@@ -8,6 +8,10 @@ data/*.sqlite
 scratch/
 uploads/screenshots/*
 !uploads/screenshots/.gitkeep
+uploads/event-assets/*
+!uploads/event-assets/.gitkeep
+handoff/
+handoff.zip
 .DS_Store
 Thumbs.db
 

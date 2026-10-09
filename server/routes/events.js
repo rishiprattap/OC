@@ -108,6 +108,9 @@ function formatEventPublic(evt) {
     currency: evt.currency || 'INR',
     pricingTiers,
     earlyBirdFee: evt.early_bird_fee ? Number(evt.early_bird_fee) : null,
+    paymentQrUrl: evt.qr_asset_path || '/assets/payment-qr.jpeg',
+    qrAssetPath: evt.qr_asset_path || '/assets/payment-qr.jpeg',
+    receiptTemplateUrl: evt.receipt_template_url || '',
     upi: {
       upiId: evt.upi_id || 'rishiprattap@fam',
       payeeName: evt.payee_name || 'Rishi Pratap',

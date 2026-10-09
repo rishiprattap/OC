@@ -64,6 +64,7 @@ const DEFAULT_EVENTS = [
     payee_name: 'Rishi Pratap',
     qr_asset_path: '/assets/payment-qr.jpeg',
     payment_instructions: 'Pay ₹79 using any UPI app (GPay, PhonePe, Paytm). Enter UTR/Transaction ID and upload screenshot proof.',
+    receipt_template_url: '',
     poster_url: '/assets/oct-open-mic-poster.jpg',
     banner_url: '/assets/oct-open-mic-poster.jpg',
     logo_url: '/assets/logo.png',
@@ -124,6 +125,7 @@ const DEFAULT_EVENTS = [
     payee_name: 'Rishi Pratap',
     qr_asset_path: '/assets/payment-qr.jpeg',
     payment_instructions: 'Pay ₹199 via UPI to reserve your seat or book via BookMyShow.',
+    receipt_template_url: '',
     poster_url: '/assets/adhure-musafir-poster.png',
     banner_url: '/assets/adhure-musafir-poster.png',
     logo_url: '/assets/logo.png',
@@ -261,6 +263,7 @@ function loadLocalStore() {
           external_platform_name: '',
           external_platform_notes: '',
           external_open_new_tab: 1,
+          receipt_template_url: '',
           ...e
         })),
         registrations: parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations,
@@ -602,8 +605,9 @@ function handleLocalRun(sql, params = []) {
       external_platform_name: params[52] || '',
       external_platform_notes: params[53] || '',
       external_open_new_tab: Number(params[54] !== undefined ? params[54] : 1),
-      created_at: params[55] || new Date().toISOString(),
-      updated_at: params[56] || new Date().toISOString()
+      receipt_template_url: sqlLower.includes('receipt_template_url') ? (params[55] || '') : '',
+      created_at: sqlLower.includes('receipt_template_url') ? (params[56] || new Date().toISOString()) : (params[55] || new Date().toISOString()),
+      updated_at: sqlLower.includes('receipt_template_url') ? (params[57] || new Date().toISOString()) : (params[56] || new Date().toISOString())
     };
 
     if (existingIdx !== -1) {
@@ -713,7 +717,12 @@ function handleLocalRun(sql, params = []) {
       evt.external_platform_name = params[51] || '';
       evt.external_platform_notes = params[52] || '';
       evt.external_open_new_tab = Number(params[53] !== undefined ? params[53] : 1);
-      evt.updated_at = params[54] || new Date().toISOString();
+      if (sqlLower.includes('receipt_template_url = ?')) {
+        evt.receipt_template_url = params[54] || '';
+        evt.updated_at = params[55] || new Date().toISOString();
+      } else {
+        evt.updated_at = params[54] || new Date().toISOString();
+      }
       saveLocalStore();
     }
     return { lastID: null, changes: evt ? 1 : 0 };
@@ -841,6 +850,39 @@ function handleLocalRun(sql, params = []) {
     localStore.emailCampaigns = list;
     saveLocalStore();
     return { lastID: id, changes: 1 };
+  }
+
+  // 10. Gallery Images (LocalStore fallback)
+  if (sqlLower.includes('insert into gallery_images')) {
+    const list = localStore.gallery || [];
+    const id = list.length > 0 ? Math.max(...list.map(g => g.id || 0)) + 1 : 1;
+    const imgObj = {
+      id,
+      image_url: params[0],
+      caption: params[1] || '',
+      display_order: Number(params[2] || 0),
+      is_published: Number(params[3] !== undefined ? params[3] : 1),
+      event_id: params[4] || 'online-open-mic-2026',
+      created_at: params[5] || new Date().toISOString(),
+      updated_at: params[6] || new Date().toISOString()
+    };
+    list.push(imgObj);
+    localStore.gallery = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
+  }
+
+  if (sqlLower.includes('delete from gallery_images')) {
+    const id = params[0];
+    const eventId = params[1];
+    localStore.gallery = (localStore.gallery || []).filter(g => {
+      if (eventId) {
+        return !((g.id === Number(id) || String(g.id) === String(id)) && g.event_id === eventId);
+      }
+      return !(g.id === Number(id) || String(g.id) === String(id));
+    });
+    saveLocalStore();
+    return { lastID: null, changes: 1 };
   }
 
   return { lastID: 1, changes: 1 };
@@ -1148,6 +1190,7 @@ const initSchema = async () => {
     try { await rawRun(`ALTER TABLE events ADD COLUMN external_platform_name TEXT DEFAULT ''`); } catch (_) {}
     try { await rawRun(`ALTER TABLE events ADD COLUMN external_platform_notes TEXT DEFAULT ''`); } catch (_) {}
     try { await rawRun(`ALTER TABLE events ADD COLUMN external_open_new_tab INTEGER DEFAULT 1`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN receipt_template_url TEXT DEFAULT ''`); } catch (_) {}
 
     // Seed default events if events table is empty
     for (const evt of DEFAULT_EVENTS) {
