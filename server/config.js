@@ -12,6 +12,11 @@ module.exports = {
     .replace(/[\r\n"']/g, '')
     .replace(/\/+$/, ''),
 
+  // Canonical HTTPS brand logo URL for emails (publicly reachable by external email clients & Gmail proxy)
+  EMAIL_LOGO_URL: String(process.env.EMAIL_LOGO_URL || 'https://offstagecreators.in/assets/brand-logo.png')
+    .trim()
+    .replace(/[\r\n"']/g, ''),
+
   // Admin credentials — must be set via environment
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@offstagecreators.com',
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',

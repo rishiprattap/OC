@@ -10,6 +10,7 @@ uploads/screenshots/*
 !uploads/screenshots/.gitkeep
 uploads/event-assets/*
 !uploads/event-assets/.gitkeep
+public/assets/logo-tall.png
 handoff/
 handoff.zip
 .DS_Store

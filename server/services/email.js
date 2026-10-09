@@ -291,8 +291,9 @@ async function sendEmail({
 
 // ─── HTML Email Wrapper ───────────────────────────────────────────────────────
 
-function emailWrapper({ title, preheader, bodyContent, unsubscribeUrl = null }) {
+function emailWrapper({ title, preheader, bodyContent, unsubscribeUrl = null, logoUrl = null }) {
   const year = new Date().getFullYear();
+  const brandLogoUrl = logoUrl || config.EMAIL_LOGO_URL || 'https://offstagecreators.in/assets/brand-logo.png';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -304,8 +305,9 @@ function emailWrapper({ title, preheader, bodyContent, unsubscribeUrl = null }) 
     .wrapper { max-width: 580px; margin: 0 auto; padding: 32px 16px; }
     .card { background: #141210; border: 1px solid #2a231c; border-radius: 12px; overflow: hidden; }
     .header { background: #181410; border-bottom: 1px solid #2a231c; padding: 28px 32px; text-align: center; }
-    .logo-text { font-size: 11px; font-weight: 800; letter-spacing: 0.2em; color: #e4ad57; text-transform: uppercase; }
-    .logo-sub { font-size: 20px; font-weight: 700; color: #f7eee1; margin-top: 4px; }
+    .brand-logo-img { display: block; margin: 0 auto; width: 92px; height: 92px; max-width: 92px; border: 0; border-radius: 12px; }
+    .logo-text { font-size: 11px; font-weight: 800; letter-spacing: 0.2em; color: #e4ad57; text-transform: uppercase; margin-top: 12px; }
+    .logo-sub { font-size: 18px; font-weight: 700; color: #f7eee1; margin-top: 3px; }
     .body { padding: 32px; font-size: 14px; line-height: 1.7; color: #eee4d5; }
     .otp-box { background: #0a0908; border: 2px solid #e4ad57; border-radius: 10px; padding: 24px; text-align: center; margin: 24px 0; }
     .otp-number { font-family: 'Courier New', Courier, monospace; font-size: 42px; font-weight: 900; letter-spacing: 0.25em; color: #e4ad57; }
@@ -331,9 +333,22 @@ function emailWrapper({ title, preheader, bodyContent, unsubscribeUrl = null }) 
       <td align="center" style="padding:32px 16px;">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:580px; width:100%; background-color:#141210; border:1px solid #2a231c; border-radius:12px; overflow:hidden;">
           <tr>
-            <td style="background-color:#181410; border-bottom:1px solid #2a231c; padding:26px 32px; text-align:center;">
-              <div style="font-size:11px; font-weight:800; letter-spacing:0.2em; color:#e4ad57; text-transform:uppercase;">Offstage Creators</div>
-              <div style="font-size:19px; font-weight:700; color:#f7eee1; margin-top:4px;">Creative Stage &amp; Community</div>
+            <td align="center" style="background-color:#181410; border-bottom:1px solid #2a231c; padding:28px 24px 22px; text-align:center;">
+              <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto; text-align:center;">
+                <tr>
+                  <td align="center" style="padding:0; text-align:center;">
+                    <a href="https://offstagecreators.in" target="_blank" style="text-decoration:none; display:inline-block;">
+                      <img src="${brandLogoUrl}" alt="Offstage Creators" width="92" height="92" style="display:block; margin:0 auto; width:92px; height:92px; max-width:92px; border:0; border-radius:12px; outline:none; text-decoration:none; box-shadow:0 4px 16px rgba(0,0,0,0.5);" />
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:10px; text-align:center;">
+                    <div style="font-size:11px; font-weight:800; letter-spacing:0.2em; color:#e4ad57; text-transform:uppercase; line-height:1.2;">Offstage Creators</div>
+                    <div style="font-size:18px; font-weight:700; color:#f7eee1; margin-top:3px; line-height:1.3;">Creative Stage &amp; Community</div>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
           <tr>
