@@ -7,8 +7,10 @@ require('dotenv').config();
 module.exports = {
   PORT: parseInt(process.env.PORT, 10) || 3000,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  APP_URL: process.env.APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'),
+  APP_URL: String(process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://offstagecreators.in'))
+    .trim()
+    .replace(/[\r\n"']/g, '')
+    .replace(/\/+$/, ''),
 
   // Admin credentials — must be set via environment
   ADMIN_EMAIL: process.env.ADMIN_EMAIL || 'admin@offstagecreators.com',

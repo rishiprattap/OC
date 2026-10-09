@@ -36,8 +36,26 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+const allowedOrigins = [
+  'https://offstagecreators.in',
+  'https://www.offstagecreators.in',
+  config.APP_URL
+].filter(Boolean).map(u => String(u).trim().replace(/\/+$/, ''));
+
 app.use(cors({
-  origin: config.APP_URL,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = String(origin).trim().replace(/[\r\n]/g, '').replace(/\/+$/, '');
+    if (
+      allowedOrigins.includes(cleanOrigin) ||
+      cleanOrigin.endsWith('.offstagecreators.in') ||
+      cleanOrigin.includes('localhost') ||
+      cleanOrigin.includes('127.0.0.1')
+    ) {
+      return callback(null, cleanOrigin);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
 
