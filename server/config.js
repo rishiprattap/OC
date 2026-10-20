@@ -7,7 +7,10 @@ require('dotenv').config();
 module.exports = {
   PORT: parseInt(process.env.PORT, 10) || 3000,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  APP_URL: String(process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://offstagecreators.in'))
+  APP_URL: String(
+    process.env.APP_URL ||
+    (process.env.VERCEL_ENV === 'production' ? 'https://offstagecreators.in' : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://offstagecreators.in'))
+  )
     .trim()
     .replace(/[\r\n"']/g, '')
     .replace(/\/+$/, ''),

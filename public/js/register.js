@@ -334,12 +334,13 @@
     }
 
     if (bannerEl) {
+      const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
       bannerEl.innerHTML = `
         <div style="background: rgba(20, 18, 16, 0.6); border: 1px solid #2a231c; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px; color: #8e8477;">
           <div>
-            Already have an account? <a href="/account" style="color: #e4ad57; text-decoration: underline; font-weight: 600;">Log in</a> to auto-fill your saved creator details.
+            Already have an account? <a href="/account?redirect=${returnUrl}" style="color: #e4ad57; text-decoration: underline; font-weight: 600;">Log in</a> to auto-fill your saved creator details.
           </div>
-          <a href="/account" class="cta cta-secondary" style="font-size: 11px; padding: 6px 12px;">Sign In ↗</a>
+          <a href="/account?redirect=${returnUrl}" class="cta cta-secondary" style="font-size: 11px; padding: 6px 12px;">Sign In ↗</a>
         </div>
       `;
     }

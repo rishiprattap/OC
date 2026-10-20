@@ -74,7 +74,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     secure: isProd,          // HTTPS only in production
-    sameSite: isProd ? 'strict' : 'lax',
+    sameSite: 'lax',
     maxAge: 8 * 60 * 60 * 1000  // 8 hours
   },
   name: 'oc.sid'

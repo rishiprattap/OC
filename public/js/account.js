@@ -165,6 +165,17 @@
     if (actOtpDigits[0]) actOtpDigits[0].focus();
   }
 
+  // ── Redirect & Callback Helper ───────────────────────────────────────────────
+  function handleLoginRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const redirect = params.get('redirect') || params.get('callbackUrl') || params.get('returnUrl');
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
+      window.location.href = redirect;
+      return true;
+    }
+    return false;
+  }
+
   // ── Check Session ────────────────────────────────────────────────────────────
   async function checkSession() {
     try {
@@ -176,6 +187,7 @@
 
       if (data.success && data.authenticated && data.user) {
         currentUser = data.user;
+        if (handleLoginRedirect()) return;
         renderDashboard(currentUser);
       } else {
         renderAuth();
@@ -401,6 +413,7 @@
 
         currentUser = data.user;
         showSuccess('Logged in successfully!');
+        if (handleLoginRedirect()) return;
         renderDashboard(currentUser);
 
       } catch (err) {
@@ -503,6 +516,7 @@
 
       currentUser = data.user;
       showSuccess(data.message || 'Email verified successfully!');
+      if (handleLoginRedirect()) return;
       renderDashboard(currentUser);
 
     } catch (err) {
