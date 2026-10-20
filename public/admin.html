@@ -386,7 +386,7 @@
       <h2>Admin Login</h2>
       <p>Offstage Creators Organizer Dashboard</p>
       <div class="auth-error" id="loginError"></div>
-      <form id="loginForm" autocomplete="off">
+      <form id="loginForm" autocomplete="off" onsubmit="return false;">
         <input type="text" class="auth-input" id="loginEmail" placeholder="Admin Email" autocomplete="username" required>
         <input type="password" class="auth-input" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
         <button type="submit" class="auth-btn" id="loginBtn">LOGIN TO DASHBOARD</button>

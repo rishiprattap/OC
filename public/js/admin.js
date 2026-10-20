@@ -3376,6 +3376,8 @@
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '✓ Issue Award & Update Certificate'; }
     }
+  };
+
   // ── Users & Creators Management ───────────────────────────────────────────────
   function escapeHtml(str) {
     if (str === null || str === undefined) return '';
