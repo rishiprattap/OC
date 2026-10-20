@@ -130,6 +130,7 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
     await run(
       `UPDATE registrations SET
          transaction_id = ?, payment_screenshot_url = ?, payment_submitted_at = ?,
+         payment_status = 'SUBMITTED',
          updated_at = ?
        WHERE registration_id = ?`,
       [cleanUtr, screenshotUrl, now, now, cleanRegId]

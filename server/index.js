@@ -21,6 +21,8 @@ const emailRouter = require('./routes/email');
 const galleryRouter = require('./routes/gallery');
 const eventsRouter = require('./routes/events');
 const adminEventsRouter = require('./routes/adminEvents');
+const { router: authRouter } = require('./routes/auth');
+const userRouter = require('./routes/user');
 
 // Load meet router conditionally (may not exist in all deployments)
 let meetRouter;
@@ -79,30 +81,27 @@ app.use(session({
 }));
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
-const isTest = process.env.NODE_ENV === 'test';
-
-// OTP endpoints: 10 requests per 15 minutes per IP (1000 in test mode)
+// Rate limiters (relaxed in development & test modes)
+const isDevOrTest = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isTest ? 1000 : 10,
+  max: isDevOrTest ? 2000 : 10,
   message: { success: false, error: 'Too many OTP requests. Please wait 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Registration endpoint: 20 per hour per IP (1000 in test mode)
 const registrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: isTest ? 1000 : 20,
+  max: isDevOrTest ? 2000 : 20,
   message: { success: false, error: 'Too many registration attempts. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// Admin login: 10 attempts per 15 minutes per IP (1000 in test mode)
 const adminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isTest ? 1000 : 10,
+  max: isDevOrTest ? 2000 : 10,
   message: { success: false, error: 'Too many login attempts. Please wait 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
@@ -126,6 +125,8 @@ app.use('/uploads', express.static(uploadsDir));
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api/registrations', registrationLimiter, registrationsRouter);
 app.use('/api/otp', otpLimiter, otpRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/user', userRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/scanner', scannerRouter);
 app.use('/api/certificate', certificateRouter);
@@ -242,6 +243,7 @@ app.get(['/registration/success', '/success'], (req, res) => sendNoCacheFile(pat
 app.get('/certificate', (req, res) => sendNoCacheFile(path.join(publicDir, 'certificate.html'), res));
 app.get(['/gallery', '/event-gallery'], (req, res) => sendNoCacheFile(path.join(publicDir, 'gallery.html'), res));
 app.get('/scanner', (req, res) => sendNoCacheFile(path.join(publicDir, 'scanner.html'), res));
+app.get(['/account', '/login', '/signup', '/reset-password'], (req, res) => sendNoCacheFile(path.join(publicDir, 'account.html'), res));
 app.get('/admin', (req, res) => sendNoCacheFile(path.join(publicDir, 'admin.html'), res));
 
 // ─── Scalable Event-Specific URLs (Requirement 4) ─────────────────────────────

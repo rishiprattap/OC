@@ -4,6 +4,9 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/event/(.*)", "destination": "/api" },
-    { "source": "/registration/:id", "destination": "/registration" }
+    { "source": "/registration/:id", "destination": "/registration" },
+    { "source": "/login", "destination": "/account" },
+    { "source": "/signup", "destination": "/account" },
+    { "source": "/reset-password", "destination": "/account" }
   ]
 }

@@ -240,7 +240,113 @@
     }
   }
 
+  let loggedInUser = null;
+
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  async function initAuthData() {
+    const bannerEl = document.getElementById('authStatusBanner');
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { 'Cache-Control': 'no-cache' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.isBlocked) {
+          if (bannerEl) {
+            bannerEl.innerHTML = `
+              <div style="background: rgba(226, 105, 71, 0.12); border: 1px solid rgba(226, 105, 71, 0.45); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; color: #ff8566; font-size: 13.5px;">
+                <strong>⚠️ Account Suspended:</strong> ${escapeHtml(data.error || 'Your account is blocked from creating registrations. Please contact support.')}
+              </div>
+            `;
+          }
+          return;
+        }
+        if (data.success && data.user) {
+          loggedInUser = data.user;
+
+          if (bannerEl) {
+            bannerEl.innerHTML = `
+              <div style="background: rgba(228, 173, 87, 0.08); border: 1px solid rgba(228, 173, 87, 0.35); border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 13.5px; color: #f7eee1;">
+                  <span style="color: #6edb8c; font-weight: 700; margin-right: 6px;">● Logged in</span>
+                  as <strong>${escapeHtml(loggedInUser.name)}</strong> (<span style="color: #e4ad57;">${escapeHtml(loggedInUser.email)}</span>)
+                </div>
+                <div style="display: flex; gap: 12px; font-size: 12.5px;">
+                  <a href="/account" style="color: #e4ad57; text-decoration: underline; font-weight: 600;">My Account</a>
+                  <a href="#" id="registerLogoutBtn" style="color: #e26947; text-decoration: underline;">Log out</a>
+                </div>
+              </div>
+            `;
+
+            document.getElementById('registerLogoutBtn')?.addEventListener('click', async (e) => {
+              e.preventDefault();
+              try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+              } finally {
+                window.location.reload();
+              }
+            });
+          }
+
+          const nameInput = document.getElementById('fullName');
+          if (nameInput && !nameInput.value) nameInput.value = loggedInUser.name || '';
+
+          const phoneInput = document.getElementById('phone');
+          if (phoneInput && !phoneInput.value) phoneInput.value = loggedInUser.phone || '';
+
+          const emailInput = document.getElementById('email');
+          if (emailInput) {
+            emailInput.value = loggedInUser.email || '';
+            emailInput.readOnly = true;
+            emailInput.style.opacity = '0.85';
+          }
+
+          const emailSubtext = document.getElementById('emailSubtext');
+          if (emailSubtext) {
+            emailSubtext.textContent = 'Verified account email (Email OTP verification step will be skipped).';
+            emailSubtext.style.color = '#6edb8c';
+          }
+
+          const cityInput = document.getElementById('city');
+          if (cityInput && !cityInput.value) cityInput.value = loggedInUser.city || '';
+
+          const ageInput = document.getElementById('age');
+          if (ageInput && !ageInput.value && loggedInUser.age) ageInput.value = loggedInUser.age;
+
+          if (submitBtnText) {
+            submitBtnText.textContent = 'PROCEED TO PAYMENT';
+          }
+
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[Register] Auth check fallback:', err);
+    }
+
+    if (bannerEl) {
+      bannerEl.innerHTML = `
+        <div style="background: rgba(20, 18, 16, 0.6); border: 1px solid #2a231c; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; font-size: 13px; color: #8e8477;">
+          <div>
+            Already have an account? <a href="/account" style="color: #e4ad57; text-decoration: underline; font-weight: 600;">Log in</a> to auto-fill your saved creator details.
+          </div>
+          <a href="/account" class="cta cta-secondary" style="font-size: 11px; padding: 6px 12px;">Sign In ↗</a>
+        </div>
+      `;
+    }
+  }
+
   initEventData();
+  initAuthData();
 
   const errorAlert = document.getElementById('errorAlert');
   const successAlert = document.getElementById('successAlert');
@@ -535,6 +641,7 @@
       const phone = (document.getElementById('phone')?.value || '').trim().replace(/\D/g, '');
       const email = (document.getElementById('email')?.value || '').trim().toLowerCase();
       const city = (document.getElementById('city')?.value || '').trim();
+      const ageVal = (document.getElementById('age')?.value || '').trim();
       const category = (document.getElementById('category')?.value || '').trim();
       const instagram = (document.getElementById('instagram')?.value || '').trim().replace(/^@/, '');
       const performanceTitle = (document.getElementById('performanceTitle')?.value || '').trim();
@@ -557,6 +664,7 @@
         const payload = {
           fullName, phone, email, city, category, instagram,
           performanceTitle, performanceDescription, terms,
+          age: ageVal ? parseInt(ageVal, 10) : undefined,
           eventId: currentEvent ? (currentEvent.slug || currentEvent.id) : undefined
         };
 
@@ -569,13 +677,19 @@
         const data = await res.json();
 
         if (!res.ok || !data.success) {
+          if (data.isBlocked) {
+            showError(data.error || 'Your account has been suspended from creating new registrations.');
+            submitBtn.disabled = false;
+            submitBtnText.textContent = loggedInUser ? 'PROCEED TO PAYMENT' : 'CONTINUE — VERIFY EMAIL';
+            return;
+          }
           if (res.status === 403 || (data.error && data.error.toLowerCase().includes('closed'))) {
             if (step1Card) step1Card.style.display = 'none';
             if (stepsBar) stepsBar.style.display = 'none';
             if (registrationClosedBox) registrationClosedBox.style.display = 'block';
             showError(data.error || 'Registration is currently closed.');
             submitBtn.disabled = false;
-            submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
+            submitBtnText.textContent = loggedInUser ? 'PROCEED TO PAYMENT' : 'CONTINUE — VERIFY EMAIL';
             return;
           }
           if (data.status === 'VERIFIED' || data.status === 'APPROVED') {
@@ -584,13 +698,23 @@
             showError(data.error || 'Failed to create registration. Please check your information.');
           }
           submitBtn.disabled = false;
-          submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
+          submitBtnText.textContent = loggedInUser ? 'PROCEED TO PAYMENT' : 'CONTINUE — VERIFY EMAIL';
           return;
         }
 
         activeRegistrationId = data.registrationId;
         activeEmail = email;
         activeName = fullName;
+
+        // Returning authenticated user: skip OTP directly to Payment proof
+        if (data.skipOtp) {
+          activeVerificationToken = data.verificationToken;
+          submitBtn.disabled = false;
+          submitBtnText.textContent = 'PROCEED TO PAYMENT';
+          goToStep(3);
+          return;
+        }
+
         otpExpiresAt = data.expiresAt || new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
         if (otpEmailDisplay) otpEmailDisplay.textContent = email;
@@ -607,7 +731,7 @@
         console.error('[Register] Network error:', err);
         showError('Network error. Please check your connection and try again.');
         submitBtn.disabled = false;
-        submitBtnText.textContent = 'CONTINUE — VERIFY EMAIL';
+        submitBtnText.textContent = loggedInUser ? 'PROCEED TO PAYMENT' : 'CONTINUE — VERIFY EMAIL';
       }
     });
   }

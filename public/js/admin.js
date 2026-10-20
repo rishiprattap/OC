@@ -48,7 +48,7 @@
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = document.getElementById('loginEmail')?.value.trim() || '';
-      const password = document.getElementById('loginPassword')?.value || '';
+      const password = (document.getElementById('loginPassword')?.value || '').trim();
 
       if (loginError) loginError.textContent = '';
       if (loginBtn) { loginBtn.disabled = true; loginBtn.textContent = 'LOGGING IN…'; }
@@ -143,7 +143,7 @@
   // ── Tab Navigation ────────────────────────────────────────────────────────────
   window.showTab = function (tabName) {
     if (tabName === 'settings') tabName = 'events';
-    ['overview', 'events', 'registrations', 'pending', 'approved', 'certificates', 'emailCenter', 'gallery'].forEach(name => {
+    ['overview', 'events', 'registrations', 'pending', 'approved', 'users', 'certificates', 'emailCenter', 'gallery'].forEach(name => {
       const el = document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1));
       if (el) el.style.display = 'none';
     });
@@ -159,6 +159,7 @@
     else if (tabName === 'registrations') loadRegistrations();
     else if (tabName === 'pending') loadFiltered('VERIFIED');
     else if (tabName === 'approved') loadFiltered('APPROVED');
+    else if (tabName === 'users') loadUsersTab();
     else if (tabName === 'certificates') loadCertificatesTab();
     else if (tabName === 'emailCenter') initEmailCenter();
     else if (tabName === 'gallery') loadAdminGallery();
@@ -3374,6 +3375,391 @@
       alert('Network error: ' + err.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '✓ Issue Award & Update Certificate'; }
+    }
+  // ── Users & Creators Management ───────────────────────────────────────────────
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  let userSearchTimeout = null;
+  let activeBlockUserId = null;
+
+  window.filterUsersDebounced = function () {
+    if (userSearchTimeout) clearTimeout(userSearchTimeout);
+    userSearchTimeout = setTimeout(() => {
+      loadUsersTab();
+    }, 300);
+  };
+
+  window.loadUsersTab = async function () {
+    const wrapper = document.getElementById('usersTableWrapper');
+    if (!wrapper) return;
+
+    const searchInput = document.getElementById('userSearchInput');
+    const statusFilter = document.getElementById('userStatusFilter');
+    const search = searchInput ? searchInput.value.trim() : '';
+    const status = statusFilter ? statusFilter.value : 'ALL';
+
+    wrapper.innerHTML = '<div class="empty-state"><p>Loading users…</p></div>';
+
+    try {
+      let url = `/api/admin/users?status=${encodeURIComponent(status)}`;
+      if (search) {
+        url += `&search=${encodeURIComponent(search)}`;
+      }
+
+      const res = await adminFetch(url);
+      if (res.status === 401) { showLoginOverlay(); return; }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load users.'}</p></div>`;
+        return;
+      }
+
+      const users = data.users || [];
+
+      if (users.length === 0) {
+        wrapper.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size:36px; margin-bottom:12px;">👥</div>
+            <p>No user accounts found matching your search criteria.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = `
+        <div style="overflow-x:auto;">
+          <table class="reg-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name / Performer</th>
+                <th>Contact Info</th>
+                <th>City &amp; Age</th>
+                <th>Status</th>
+                <th>Registrations</th>
+                <th>Joined</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      users.forEach(u => {
+        let statusBadge = '';
+        if (u.isBlocked) {
+          statusBadge = `<span class="status-pill status-BLOCKED" title="${escapeHtml(u.blockReason || 'Blocked by admin')}">● BLOCKED</span>`;
+        } else if (u.isVerified) {
+          statusBadge = `<span class="status-pill status-ACTIVE">✓ ACTIVE</span>`;
+        } else {
+          statusBadge = `<span class="status-pill status-PENDING_VERIFICATION">● UNVERIFIED</span>`;
+        }
+
+        const dateStr = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+        html += `
+          <tr>
+            <td class="id-cell">#${u.id}</td>
+            <td class="name-cell">
+              <div>${escapeHtml(u.name)}</div>
+              ${u.isBlocked && u.blockReason ? `<div style="font-size:11px; color:#ff7b7b; margin-top:2px;">Reason: ${escapeHtml(u.blockReason)}</div>` : ''}
+            </td>
+            <td>
+              <div><a href="mailto:${escapeHtml(u.email)}" style="color:#e4ad57; text-decoration:none;">${escapeHtml(u.email)}</a></div>
+              <div style="font-size:11.5px; color:#8e8477; margin-top:2px;">📱 ${escapeHtml(u.phone || '—')}</div>
+            </td>
+            <td>
+              <div>${escapeHtml(u.city || '—')}</div>
+              <div style="font-size:11.5px; color:#8e8477; margin-top:2px;">Age: ${u.age || '—'}</div>
+            </td>
+            <td>${statusBadge}</td>
+            <td>
+              <span class="badge-pill" style="background:#1b1713; color:#f7eee1; border:1px solid #2a231c; font-weight:700;">
+                ${u.registrationCount} ${u.registrationCount === 1 ? 'event' : 'events'}
+              </span>
+            </td>
+            <td style="font-size:12px; color:#8e8477;">${dateStr}</td>
+            <td style="text-align:right; white-space:nowrap;">
+              <div style="display:inline-flex; gap:6px;">
+                <button type="button" class="action-btn btn-view" onclick="openUserDetailsModal(${u.id})">
+                  View Profile &amp; Events
+                </button>
+                ${u.isBlocked ? `
+                  <button type="button" class="action-btn btn-unblock" onclick="confirmUnblockUser(${u.id}, '${escapeHtml(u.name)}')">
+                    Unblock
+                  </button>
+                ` : `
+                  <button type="button" class="action-btn btn-block" onclick="openBlockUserModal(${u.id}, '${escapeHtml(u.name)}', '${escapeHtml(u.email)}')">
+                    Block
+                  </button>
+                `}
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      wrapper.innerHTML = html;
+
+    } catch (err) {
+      console.error('[Admin] Error loading users:', err);
+      wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">Network error loading users.</p></div>`;
+    }
+  };
+
+  window.openUserDetailsModal = async function (userId) {
+    const modal = document.getElementById('userModal');
+    const titleEl = document.getElementById('userModalTitle');
+    const bodyEl = document.getElementById('userModalBody');
+    const actionsEl = document.getElementById('userModalActions');
+
+    if (!modal || !bodyEl) return;
+
+    modal.style.display = 'flex';
+    if (titleEl) titleEl.textContent = 'Loading User Profile…';
+    bodyEl.innerHTML = '<div style="text-align:center; padding:40px; color:#8e8477;">Fetching creator details & registrations history…</div>';
+    if (actionsEl) actionsEl.innerHTML = '';
+
+    try {
+      const res = await adminFetch(`/api/admin/users/${userId}`);
+      if (res.status === 401) { showLoginOverlay(); return; }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        bodyEl.innerHTML = `<div style="text-align:center; padding:30px; color:#e26947;">${data.error || 'Failed to fetch user.'}</div>`;
+        return;
+      }
+
+      const u = data.user;
+      const regs = data.registrations || [];
+
+      if (titleEl) titleEl.textContent = `${u.name} (Account #${u.id})`;
+
+      let statusBadge = u.isBlocked
+        ? `<span class="status-pill status-BLOCKED">● BLOCKED</span>`
+        : (u.isVerified ? `<span class="status-pill status-ACTIVE">✓ ACTIVE / VERIFIED</span>` : `<span class="status-pill status-PENDING_VERIFICATION">● UNVERIFIED</span>`);
+
+      let blockDetailsHtml = '';
+      if (u.isBlocked) {
+        blockDetailsHtml = `
+          <div style="background:rgba(226,71,71,0.08); border:1px solid rgba(226,71,71,0.3); border-radius:8px; padding:12px 16px; margin:16px 0; font-size:13px; color:#ff9e85;">
+            <div style="font-weight:700; color:#ff7b7b; margin-bottom:4px;">⚠ Account Suspended / Blocked</div>
+            <div><strong>Reason:</strong> ${escapeHtml(u.blockReason || 'Violation of terms')}</div>
+            <div style="font-size:11.5px; color:#c78778; margin-top:4px;">
+              Blocked on ${u.blockedAt ? new Date(u.blockedAt).toLocaleString('en-IN') : '—'} by ${escapeHtml(u.blockedBy || 'admin')}
+            </div>
+          </div>
+        `;
+      } else if (u.unblockedAt) {
+        blockDetailsHtml = `
+          <div style="background:rgba(110,219,140,0.08); border:1px solid rgba(110,219,140,0.3); border-radius:8px; padding:10px 14px; margin:16px 0; font-size:12px; color:#88f0a4;">
+            ✓ Account unblocked on ${new Date(u.unblockedAt).toLocaleString('en-IN')} by ${escapeHtml(u.unblockedBy || 'admin')}
+          </div>
+        `;
+      }
+
+      let regsTableHtml = '';
+      if (regs.length === 0) {
+        regsTableHtml = `
+          <div style="text-align:center; padding:24px; color:#8e8477; background:#110f0d; border-radius:8px; border:1px solid #221c16;">
+            No event registrations found for this user account.
+          </div>
+        `;
+      } else {
+        regsTableHtml = `
+          <div style="max-height:260px; overflow-y:auto; border:1px solid #2a231c; border-radius:8px;">
+            <table class="reg-table" style="margin:0;">
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Reg ID</th>
+                  <th>Performance Title</th>
+                  <th>Category</th>
+                  <th>Fee</th>
+                  <th>Status</th>
+                  <th>Payment</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+        `;
+
+        regs.forEach(r => {
+          let rStatusBadge = '';
+          if (r.regStatus === 'APPROVED') rStatusBadge = `<span class="status-pill status-APPROVED">APPROVED</span>`;
+          else if (r.regStatus === 'REJECTED') rStatusBadge = `<span class="status-pill status-REJECTED">REJECTED</span>`;
+          else if (r.regStatus === 'VERIFIED') rStatusBadge = `<span class="status-pill status-VERIFIED">VERIFIED</span>`;
+          else rStatusBadge = `<span class="status-pill status-PENDING_VERIFICATION">${r.regStatus}</span>`;
+
+          let pStatusBadge = '';
+          if (r.paymentStatus === 'PAID') pStatusBadge = `<span style="color:#6edb8c; font-weight:700;">PAID</span>`;
+          else if (r.paymentStatus === 'SUBMITTED') pStatusBadge = `<span style="color:#ffd078; font-weight:700;">SUBMITTED</span>`;
+          else pStatusBadge = `<span style="color:#8e8477;">PENDING</span>`;
+
+          regsTableHtml += `
+            <tr>
+              <td style="font-weight:600; color:#f7eee1;">${escapeHtml(r.eventTitle)}</td>
+              <td class="id-cell">${r.registrationId}</td>
+              <td>${escapeHtml(r.performanceTitle || '—')}</td>
+              <td>${escapeHtml(r.category || '—')}</td>
+              <td>₹${r.amount}</td>
+              <td>${rStatusBadge}</td>
+              <td>${pStatusBadge}</td>
+              <td>
+                <a href="/registration/${r.registrationId}" target="_blank" class="action-btn btn-view" style="text-decoration:none; display:inline-block; font-size:10px; padding:4px 8px;">
+                  Pass ↗
+                </a>
+              </td>
+            </tr>
+          `;
+        });
+
+        regsTableHtml += `
+              </tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      bodyEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:20px; background:#110f0d; border:1px solid #221c16; border-radius:12px; padding:18px;">
+          <div>
+            <div style="font-size:20px; font-weight:700; color:#f7eee1; margin-bottom:4px;">${escapeHtml(u.name)}</div>
+            <div style="font-size:13px; color:#e4ad57;">✉ ${escapeHtml(u.email)}</div>
+            <div style="font-size:13px; color:#8e8477; margin-top:2px;">📱 ${escapeHtml(u.phone || '—')} · 📍 ${escapeHtml(u.city || '—')} · Age: ${u.age || '—'}</div>
+          </div>
+          <div>
+            ${statusBadge}
+          </div>
+        </div>
+
+        ${blockDetailsHtml}
+
+        <div style="margin-top:20px;">
+          <div style="font-size:13px; font-weight:800; color:#8e8477; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:10px; display:flex; justify-content:space-between;">
+            <span>Event Registrations (${regs.length})</span>
+            <span style="font-size:11px; text-transform:none; color:#8e8477;">Payment records & tickets preserved</span>
+          </div>
+          ${regsTableHtml}
+        </div>
+      `;
+
+      if (actionsEl) {
+        actionsEl.innerHTML = `
+          <div>
+            <button type="button" class="action-btn btn-view" onclick="closeUserModal()">Close Window</button>
+          </div>
+          <div style="display:flex; gap:8px;">
+            ${u.isBlocked ? `
+              <button type="button" class="cta" style="background:#6edb8c; color:#0d0c0a; font-size:12px; padding:8px 16px;" onclick="closeUserModal(); confirmUnblockUser(${u.id}, '${escapeHtml(u.name)}');">
+                ✓ Unblock Account
+              </button>
+            ` : `
+              <button type="button" class="cta" style="background:#e26947; color:#fff; font-size:12px; padding:8px 16px;" onclick="closeUserModal(); openBlockUserModal(${u.id}, '${escapeHtml(u.name)}', '${escapeHtml(u.email)}');">
+                ✕ Block Account
+              </button>
+            `}
+          </div>
+        `;
+      }
+
+    } catch (err) {
+      console.error('[Admin] Error opening user modal:', err);
+      bodyEl.innerHTML = `<div style="text-align:center; padding:30px; color:#e26947;">Network error retrieving user details.</div>`;
+    }
+  };
+
+  window.closeUserModal = function () {
+    const modal = document.getElementById('userModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.openBlockUserModal = function (userId, userName, userEmail) {
+    activeBlockUserId = userId;
+    const modal = document.getElementById('blockUserModal');
+    const nameEl = document.getElementById('blockUserName');
+    const emailEl = document.getElementById('blockUserEmail');
+    const reasonEl = document.getElementById('blockReasonInput');
+
+    if (nameEl) nameEl.textContent = userName;
+    if (emailEl) emailEl.textContent = userEmail;
+    if (reasonEl) reasonEl.value = '';
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.closeBlockUserModal = function () {
+    activeBlockUserId = null;
+    const modal = document.getElementById('blockUserModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.submitBlockUser = async function () {
+    if (!activeBlockUserId) return;
+
+    const reasonEl = document.getElementById('blockReasonInput');
+    const reason = reasonEl ? reasonEl.value.trim() : '';
+    const btn = document.getElementById('confirmBlockUserBtn');
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Blocking…'; }
+
+    try {
+      const res = await adminFetch(`/api/admin/users/${activeBlockUserId}/block`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to block user: ' + (data.error || 'Server error'));
+        return;
+      }
+
+      closeBlockUserModal();
+      await loadUsersTab();
+      alert(data.message || 'User has been blocked.');
+    } catch (err) {
+      alert('Network error blocking user: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Block User Account'; }
+    }
+  };
+
+  window.confirmUnblockUser = async function (userId, userName) {
+    if (!confirm(`Are you sure you want to unblock creator ${userName}? They will be able to log in and register for events again.`)) {
+      return;
+    }
+
+    try {
+      const res = await adminFetch(`/api/admin/users/${userId}/unblock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to unblock user: ' + (data.error || 'Server error'));
+        return;
+      }
+
+      await loadUsersTab();
+      alert(data.message || 'User unblocked successfully.');
+    } catch (err) {
+      alert('Network error unblocking user: ' + err.message);
     }
   };
 

@@ -35,24 +35,70 @@ router.post('/', async (req, res) => {
     const {
       fullName, phone, email, city, category,
       instagram, performanceTitle, performanceDescription, terms,
-      eventId: requestedEventId, eventSlug
+      eventId: requestedEventId, eventSlug, age
     } = req.body;
 
+    // Check if user is authenticated via session
+    const sessionUserId = req.session ? req.session.userId : null;
+    let loggedInUser = null;
+    if (sessionUserId) {
+      loggedInUser = await get(`SELECT * FROM users WHERE id = ?`, [sessionUserId]);
+    }
+
+    if (loggedInUser && loggedInUser.is_blocked === 1) {
+      if (req.session) {
+        req.session.userId = null;
+        req.session.userEmail = null;
+        req.session.userName = null;
+      }
+      return res.status(403).json({
+        success: false,
+        isBlocked: true,
+        blockReason: loggedInUser.block_reason || null,
+        error: `Your account has been blocked and cannot register for events: ${loggedInUser.block_reason || 'Please contact support@offstagecreators.in for assistance.'}`
+      });
+    }
+
+    const effectiveName = (loggedInUser ? (fullName || loggedInUser.name) : fullName) || '';
+    const effectivePhone = (loggedInUser ? (phone || loggedInUser.phone) : phone) || '';
+    const effectiveEmail = (loggedInUser ? (email || loggedInUser.email) : email) || '';
+    const effectiveCity = (loggedInUser ? (city || loggedInUser.city) : city) || '';
+    const effectiveAge = loggedInUser ? (loggedInUser.age || (age ? parseInt(age, 10) : null)) : (age ? parseInt(age, 10) : null);
+    const targetUserId = loggedInUser ? loggedInUser.id : null;
+
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
+    if (!effectiveName || typeof effectiveName !== 'string' || effectiveName.trim().length < 2) {
       return res.status(400).json({ success: false, error: 'Please enter a valid full name (minimum 2 characters).' });
     }
 
-    const cleanPhone = normalizePhone(phone);
+    const cleanPhone = normalizePhone(effectivePhone);
     if (!cleanPhone || cleanPhone.length < 10) {
       return res.status(400).json({ success: false, error: 'Please provide a valid 10-digit phone/WhatsApp number.' });
     }
 
-    if (!email || !validateEmail(email.trim())) {
+    const cleanEmail = String(effectiveEmail || '').trim().toLowerCase();
+    if (!cleanEmail || !validateEmail(cleanEmail)) {
       return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
     }
 
-    if (!city || city.trim().length < 2) {
+    // Block if email is associated with a blocked user account
+    const userByEmail = await get(`SELECT id, is_blocked, block_reason FROM users WHERE email = ?`, [cleanEmail]);
+    if (userByEmail && userByEmail.is_blocked === 1) {
+      if (req.session) {
+        req.session.userId = null;
+        req.session.userEmail = null;
+        req.session.userName = null;
+      }
+      return res.status(403).json({
+        success: false,
+        isBlocked: true,
+        blockReason: userByEmail.block_reason || null,
+        error: `This email address is associated with a blocked account: ${userByEmail.block_reason || 'Please contact support@offstagecreators.in for assistance.'}`
+      });
+    }
+
+    const cleanCity = String(effectiveCity || '').trim();
+    if (!cleanCity || cleanCity.length < 2) {
       return res.status(400).json({ success: false, error: 'Please enter your city.' });
     }
 
@@ -126,9 +172,7 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Registration is currently closed.' });
     }
 
-    const cleanFullName = fullName.trim();
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanCity = city.trim();
+    const cleanFullName = effectiveName.trim();
     const cleanCategory = category.trim();
     const cleanInstagram = (instagram || '').trim().replace(/^@/, '');
     const cleanTitle = performanceTitle.trim();
@@ -136,10 +180,10 @@ router.post('/', async (req, res) => {
     const now = new Date().toISOString();
 
     // ── Duplicate check ───────────────────────────────────────────────────────
-    // Block if already APPROVED or VERIFIED for this email and this event
+    // Block if already APPROVED or VERIFIED with payment proof for this email/user and this event
     const existing = await get(
-      `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
-      [eventId, cleanEmail]
+      `SELECT * FROM registrations WHERE event_id = ? AND (email = ? ${targetUserId ? 'OR user_id = ?' : ''}) AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
+      targetUserId ? [eventId, cleanEmail, targetUserId] : [eventId, cleanEmail]
     );
 
     if (existing) {
@@ -153,6 +197,57 @@ router.post('/', async (req, res) => {
 
     // ── Reuse or create ───────────────────────────────────────────────────────
     let regId;
+
+    if (loggedInUser) {
+      // Returning user flow: already authenticated with verified account
+      const pendingOrExisting = existing || await get(
+        `SELECT * FROM registrations WHERE event_id = ? AND (user_id = ? OR email = ?) ORDER BY id DESC LIMIT 1`,
+        [eventId, targetUserId, cleanEmail]
+      );
+
+      if (pendingOrExisting && pendingOrExisting.reg_status !== 'APPROVED' && !pendingOrExisting.transaction_id) {
+        regId = pendingOrExisting.registration_id;
+        await run(
+          `UPDATE registrations SET
+             full_name = ?, phone = ?, city = ?, category = ?,
+             instagram = ?, performance_title = ?, performance_description = ?,
+             amount = ?, user_id = ?, age = ?, otp_verified = 1, reg_status = 'VERIFIED',
+             updated_at = ?
+           WHERE id = ?`,
+          [cleanFullName, cleanPhone, cleanCity, cleanCategory,
+           cleanInstagram, cleanTitle, cleanDesc, eventAmount, targetUserId, effectiveAge, now, pendingOrExisting.id]
+        );
+      } else {
+        regId = generateRegistrationId();
+        await run(
+          `INSERT INTO registrations (
+             registration_id, event_id, full_name, phone, email, city,
+             category, instagram, performance_title, performance_description,
+             amount, otp_verified, reg_status, checked_in, certificate_eligible,
+             user_id, age, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
+           cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount,
+           1, 'VERIFIED', 0, 0, targetUserId, effectiveAge, now, now]
+        );
+      }
+
+      const verificationToken = otpService.generateVerificationToken(regId, cleanEmail);
+
+      return res.status(201).json({
+        success: true,
+        skipOtp: true,
+        message: `Registration created for ${targetEvent?.title || 'event'}. Please complete payment.`,
+        registrationId: regId,
+        email: cleanEmail,
+        eventId,
+        amount: eventAmount,
+        verificationToken,
+        status: 'VERIFIED'
+      });
+    }
+
+    // Guest / New unauthenticated user flow: requires Email OTP verification
     const pending = await get(
       `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status = 'PENDING_VERIFICATION' ORDER BY id DESC LIMIT 1`,
       [eventId, cleanEmail]
@@ -164,10 +259,10 @@ router.post('/', async (req, res) => {
         `UPDATE registrations SET
            full_name = ?, phone = ?, city = ?, category = ?,
            instagram = ?, performance_title = ?, performance_description = ?,
-           amount = ?, updated_at = ?
+           amount = ?, age = ?, updated_at = ?
          WHERE id = ?`,
         [cleanFullName, cleanPhone, cleanCity, cleanCategory,
-         cleanInstagram, cleanTitle, cleanDesc, eventAmount, now, pending.id]
+         cleanInstagram, cleanTitle, cleanDesc, eventAmount, effectiveAge, now, pending.id]
       );
     } else {
       regId = generateRegistrationId();
@@ -176,10 +271,11 @@ router.post('/', async (req, res) => {
            registration_id, event_id, full_name, phone, email, city,
            category, instagram, performance_title, performance_description,
            amount, otp_verified, reg_status, checked_in, certificate_eligible,
-           created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING_VERIFICATION', 0, 0, ?, ?)`,
+           age, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
-         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount, now, now]
+         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount,
+         0, 'PENDING_VERIFICATION', 0, 0, effectiveAge, now, now]
       );
     }
 

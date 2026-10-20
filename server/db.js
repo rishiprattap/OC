@@ -248,7 +248,9 @@ function loadLocalStore() {
     emailLogs: [],
     otpSessions: [],
     unsubscribedEmails: [],
-    emailCampaigns: []
+    emailCampaigns: [],
+    users: [],
+    passwordResets: []
   };
 
   try {
@@ -270,7 +272,17 @@ function loadLocalStore() {
         settings: { ...defaultStore.settings, ...(parsed.settings || {}) },
         otpSessions: parsed.otpSessions || [],
         unsubscribedEmails: parsed.unsubscribedEmails || [],
-        emailCampaigns: parsed.emailCampaigns || []
+        emailCampaigns: parsed.emailCampaigns || [],
+        users: (parsed.users || []).map(u => ({
+          is_blocked: 0,
+          block_reason: null,
+          blocked_at: null,
+          blocked_by: null,
+          unblocked_at: null,
+          unblocked_by: null,
+          ...u
+        })),
+        passwordResets: parsed.passwordResets || []
       };
     }
   } catch (err) {
@@ -433,27 +445,59 @@ function handleLocalRun(sql, params = []) {
   // 2. Registrations Insert
   if (sqlLower.includes('insert into registrations')) {
     const id = localStore.registrations.length > 0 ? Math.max(...localStore.registrations.map(r => r.id)) + 1 : 1;
-    // Expected params: [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity, cleanCategory, cleanInstagram, cleanTitle, cleanDesc, fee, now, now]
-    const newReg = {
+    const colMatch = sql.match(/insert\s+into\s+registrations\s*\(([^)]+)\)\s*values\s*\((.*)\)/is);
+    let newReg = {
       id,
-      registration_id: params[0],
-      event_id: params[1] || 'online-open-mic-2026',
-      full_name: params[2],
-      phone: params[3],
-      email: params[4],
-      city: params[5],
-      category: params[6],
-      instagram: params[7],
-      performance_title: params[8],
-      performance_description: params[9],
-      amount: Number(params[10] || 79),
-      otp_verified: 0,
-      reg_status: 'PENDING_VERIFICATION',
       checked_in: 0,
       certificate_eligible: 0,
-      created_at: params[11] || new Date().toISOString(),
-      updated_at: params[12] || new Date().toISOString()
+      otp_verified: 0,
+      reg_status: 'PENDING_VERIFICATION'
     };
+    if (colMatch) {
+      const cols = colMatch[1].split(',').map(c => c.trim().toLowerCase());
+      const valExprs = colMatch[2].split(',').map(v => v.trim());
+      let pIdx = 0;
+      cols.forEach((col, idx) => {
+        const expr = valExprs[idx] !== undefined ? valExprs[idx] : '?';
+        if (expr === '?') {
+          if (pIdx < params.length) {
+            newReg[col] = params[pIdx++];
+          }
+        } else if (expr.toUpperCase() === 'NULL') {
+          newReg[col] = null;
+        } else {
+          let lit = expr.replace(/^['"]|['"]$/g, '');
+          if (lit === '1' || lit === '0') lit = Number(lit);
+          else if (!isNaN(Number(lit)) && lit !== '') lit = Number(lit);
+          newReg[col] = lit;
+        }
+      });
+      if (newReg.amount !== undefined) newReg.amount = Number(newReg.amount);
+      if (newReg.otp_verified !== undefined) newReg.otp_verified = Number(newReg.otp_verified);
+      if (newReg.user_id !== undefined && newReg.user_id !== null) newReg.user_id = Number(newReg.user_id);
+      if (newReg.age !== undefined && newReg.age !== null) newReg.age = Number(newReg.age);
+    } else {
+      newReg = {
+        id,
+        registration_id: params[0],
+        event_id: params[1] || 'online-open-mic-2026',
+        full_name: params[2],
+        phone: params[3],
+        email: params[4],
+        city: params[5],
+        category: params[6],
+        instagram: params[7],
+        performance_title: params[8],
+        performance_description: params[9],
+        amount: Number(params[10] || 79),
+        otp_verified: 0,
+        reg_status: 'PENDING_VERIFICATION',
+        checked_in: 0,
+        certificate_eligible: 0,
+        created_at: params[11] || new Date().toISOString(),
+        updated_at: params[12] || new Date().toISOString()
+      };
+    }
     localStore.registrations.push(newReg);
     saveLocalStore();
     return { lastID: id, changes: 1 };
@@ -461,6 +505,20 @@ function handleLocalRun(sql, params = []) {
 
   // 3. Registrations Update
   if (sqlLower.includes('update registrations')) {
+    if (sqlLower.includes('where email = ?') && sqlLower.includes('user_id = ?')) {
+      const userId = Number(params[0]);
+      const email = String(params[1] || '').toLowerCase().trim();
+      let count = 0;
+      (localStore.registrations || []).forEach(r => {
+        if (r.email && r.email.toLowerCase() === email && (r.user_id === null || r.user_id === undefined)) {
+          r.user_id = userId;
+          r.updated_at = new Date().toISOString();
+          count++;
+        }
+      });
+      saveLocalStore();
+      return { lastID: null, changes: count };
+    }
     if (sqlLower.includes('where registration_id =') || sqlLower.includes('where id =')) {
       const targetParam = params[params.length - 1];
       const reg = localStore.registrations.find(r => 
@@ -468,9 +526,34 @@ function handleLocalRun(sql, params = []) {
         r.id === targetParam
       );
       if (reg) {
-        if (sqlLower.includes('approved_at')) {
+        if (sqlLower.includes('full_name = ?') && sqlLower.includes('phone = ?')) {
+          const setMatch = sql.match(/update\s+registrations\s+set\s+(.*?)\s+where/is);
+          if (setMatch) {
+            const assignments = setMatch[1].split(',').map(s => s.trim());
+            let pIdx = 0;
+            assignments.forEach(assign => {
+              const parts = assign.split('=').map(s => s.trim());
+              const col = parts[0].toLowerCase();
+              const valExpr = parts[1];
+              if (valExpr === '?') {
+                const val = params[pIdx++];
+                if (col === 'amount') reg.amount = Number(val);
+                else if (col === 'user_id') reg.user_id = val !== null && val !== undefined ? Number(val) : null;
+                else if (col === 'age') reg.age = val !== null && val !== undefined ? Number(val) : null;
+                else if (col === 'otp_verified') reg.otp_verified = Number(val);
+                else reg[col] = val;
+              } else {
+                let litVal = valExpr.replace(/['"]/g, '');
+                if (litVal === '1' || litVal === '0') litVal = Number(litVal);
+                reg[col] = litVal;
+              }
+            });
+          }
+        } else if (sqlLower.includes('approved_at')) {
           reg.reg_status = 'APPROVED';
           reg.payment_status = 'PAID';
+          reg.payment_verified_at = new Date().toISOString();
+          reg.payment_verified_by = params[1] || 'admin';
           if (sqlLower.includes("reg_status = 'approved'")) {
             reg.approved_at = params[0];
             reg.approved_by = params[1] || 'admin';
@@ -509,6 +592,9 @@ function handleLocalRun(sql, params = []) {
           reg.payment_submitted_at = params[2];
           reg.payment_status = 'SUBMITTED';
           reg.updated_at = params[2];
+        } else if (sqlLower.includes('payment_status = ?')) {
+          reg.payment_status = params[0];
+          reg.updated_at = new Date().toISOString();
         } else if (sqlLower.includes('otp_verified = 1')) {
           reg.otp_verified = 1;
           reg.otp_verified_at = params[0];
@@ -885,12 +971,226 @@ function handleLocalRun(sql, params = []) {
     return { lastID: null, changes: 1 };
   }
 
+  // 11. Users Insert
+  if (sqlLower.includes('insert into users')) {
+    const list = localStore.users || [];
+    const id = list.length > 0 ? Math.max(...list.map(u => u.id || 0)) + 1 : 1;
+    const now = new Date().toISOString();
+    const colMatch = sql.match(/insert\s+into\s+users\s*\(([^)]+)\)\s*values\s*\((.*)\)/is);
+    let newUser = {
+      id,
+      is_verified: 0,
+      created_at: now,
+      updated_at: now
+    };
+    if (colMatch) {
+      const cols = colMatch[1].split(',').map(c => c.trim().toLowerCase());
+      const valExprs = colMatch[2].split(',').map(v => v.trim());
+      let pIdx = 0;
+      cols.forEach((col, idx) => {
+        const expr = valExprs[idx] !== undefined ? valExprs[idx] : '?';
+        if (expr === '?') {
+          if (pIdx < params.length) {
+            newUser[col] = params[pIdx++];
+          }
+        } else if (expr.toUpperCase() === 'NULL') {
+          newUser[col] = null;
+        } else {
+          let lit = expr.replace(/^['"]|['"]$/g, '');
+          if (lit === '1' || lit === '0') lit = Number(lit);
+          else if (!isNaN(Number(lit)) && lit !== '') lit = Number(lit);
+          newUser[col] = lit;
+        }
+      });
+      if (newUser.age !== undefined) newUser.age = Number(newUser.age);
+      if (newUser.is_verified !== undefined) newUser.is_verified = Number(newUser.is_verified);
+      if (newUser.email) newUser.email = String(newUser.email).toLowerCase().trim();
+    } else {
+      newUser = {
+        id,
+        name: params[0],
+        email: String(params[1] || '').toLowerCase().trim(),
+        phone: params[2],
+        age: Number(params[3]),
+        city: params[4],
+        password_hash: params[5],
+        is_verified: Number(params[6] !== undefined ? params[6] : 0),
+        verification_token: params[7] || null,
+        verification_token_expires_at: params[8] || null,
+        created_at: params[9] || now,
+        updated_at: params[10] || now
+      };
+    }
+    list.push(newUser);
+    localStore.users = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
+  }
+
+  // 12. Users Update
+  if (sqlLower.includes('update users')) {
+    const list = localStore.users || [];
+    let targetUser = null;
+    if (sqlLower.includes('where email = ?')) {
+      const email = String(params[params.length - 1] || '').toLowerCase().trim();
+      targetUser = list.find(user => user.email.toLowerCase() === email);
+    } else if (sqlLower.includes('where id = ?')) {
+      const id = Number(params[params.length - 1]);
+      targetUser = list.find(user => user.id === id);
+    }
+
+    if (targetUser) {
+      const setMatch = sql.match(/update\s+users\s+set\s+(.*?)\s+where/is);
+      if (setMatch) {
+        const assignments = setMatch[1].split(',').map(s => s.trim());
+        let pIdx = 0;
+        assignments.forEach(assign => {
+          const parts = assign.split('=').map(s => s.trim());
+          const col = parts[0].toLowerCase();
+          const valExpr = parts[1];
+          if (valExpr === '?') {
+            const v = params[pIdx++];
+            if (col === 'age') targetUser.age = v !== null && v !== undefined ? Number(v) : null;
+            else if (col === 'is_verified') targetUser.is_verified = Number(v);
+            else if (col === 'is_blocked') targetUser.is_blocked = Number(v);
+            else targetUser[col] = v;
+          } else if (valExpr.toUpperCase() === 'NULL') {
+            targetUser[col] = null;
+          } else {
+            let lit = valExpr.replace(/['"]/g, '');
+            if (lit === '1' || lit === '0') lit = Number(lit);
+            targetUser[col] = lit;
+          }
+        });
+        saveLocalStore();
+      }
+      return { lastID: null, changes: 1 };
+    }
+    return { lastID: null, changes: 0 };
+  }
+
+  // 13. Password Resets Insert
+  if (sqlLower.includes('insert into password_resets')) {
+    const list = localStore.passwordResets || [];
+    const id = list.length > 0 ? Math.max(...list.map(r => r.id || 0)) + 1 : 1;
+    list.push({
+      id,
+      user_id: Number(params[0]),
+      email: String(params[1] || '').toLowerCase().trim(),
+      token_hash: params[2],
+      token_salt: params[3],
+      expires_at: params[4],
+      used: 0,
+      created_at: params[5] || new Date().toISOString()
+    });
+    localStore.passwordResets = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
+  }
+
+  // 14. Password Resets Update
+  if (sqlLower.includes('update password_resets')) {
+    const list = localStore.passwordResets || [];
+    if (sqlLower.includes('where id = ?')) {
+      const id = Number(params[params.length - 1]);
+      const reset = list.find(r => r.id === id);
+      if (reset) {
+        if (sqlLower.includes('token_hash = ?')) {
+          reset.token_hash = params[0];
+          reset.token_salt = params[1];
+        }
+        if (sqlLower.includes('used = 1') || sqlLower.includes('used = ?')) {
+          reset.used = 1;
+        }
+        saveLocalStore();
+      }
+      return { lastID: null, changes: 1 };
+    }
+    if (sqlLower.includes('where email = ?')) {
+      const email = String(params[params.length - 1] || '').toLowerCase().trim();
+      list.filter(r => r.email.toLowerCase() === email).forEach(r => { r.used = 1; });
+      saveLocalStore();
+      return { lastID: null, changes: 1 };
+    }
+    return { lastID: null, changes: 1 };
+  }
+
+  // 15. Users Delete
+  if (sqlLower.includes('delete from users')) {
+    if (sqlLower.includes('where email = ?')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      localStore.users = (localStore.users || []).filter(u => u.email.toLowerCase() !== email);
+      saveLocalStore();
+    } else if (sqlLower.includes('where id = ?')) {
+      const id = Number(params[0]);
+      localStore.users = (localStore.users || []).filter(u => u.id !== id);
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
+  }
+
+  // 16. Password Resets Delete
+  if (sqlLower.includes('delete from password_resets')) {
+    if (sqlLower.includes('where email = ?')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      localStore.passwordResets = (localStore.passwordResets || []).filter(r => r.email.toLowerCase() !== email);
+      saveLocalStore();
+    } else if (sqlLower.includes('where user_id = ?')) {
+      const userId = Number(params[0]);
+      localStore.passwordResets = (localStore.passwordResets || []).filter(r => r.user_id !== userId);
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
+  }
+
+  // 17. Registrations Delete
+  if (sqlLower.includes('delete from registrations')) {
+    if (sqlLower.includes('where registration_id = ?')) {
+      const regId = String(params[0] || '').trim();
+      localStore.registrations = (localStore.registrations || []).filter(r => r.registration_id !== regId);
+      saveLocalStore();
+    } else if (sqlLower.includes('where email = ?')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      localStore.registrations = (localStore.registrations || []).filter(r => (r.email || '').toLowerCase() !== email);
+      saveLocalStore();
+    }
+    return { lastID: null, changes: 1 };
+  }
+
   return { lastID: 1, changes: 1 };
 }
 
 function handleLocalGet(sql, params = []) {
   syncLocalStore();
   const sqlLower = sql.toLowerCase();
+
+  // Users
+  if (sqlLower.includes('from users')) {
+    const list = localStore.users || [];
+    if (sqlLower.includes('email = ?') || sqlLower.includes('email) = lower(?)') || sqlLower.includes('email) = ?')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      return list.find(u => u.email && u.email.toLowerCase() === email) || null;
+    }
+    if (sqlLower.includes('id = ?')) {
+      const id = Number(params[0]);
+      return list.find(u => u.id === id) || null;
+    }
+    if (sqlLower.includes('where')) {
+      return null;
+    }
+    return list[0] || null;
+  }
+
+  // Password Resets
+  if (sqlLower.includes('from password_resets')) {
+    const list = localStore.passwordResets || [];
+    if (sqlLower.includes('email = ?')) {
+      const email = String(params[0] || '').toLowerCase().trim();
+      const filtered = list.filter(r => r.email.toLowerCase() === email && !r.used);
+      return filtered.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+    }
+    return list[0] || null;
+  }
 
   // OTP Sessions
   if (sqlLower.includes('from otp_sessions')) {
@@ -975,24 +1275,49 @@ function handleLocalGet(sql, params = []) {
 
   // Registration by registration_id
   if (sqlLower.includes('from registrations')) {
-    if (sqlLower.includes('registration_id =') || sqlLower.includes('registration_id !=')) {
+    if (sqlLower.includes('transaction_id = ?') && sqlLower.includes('registration_id !=')) {
+      const cleanUtr = String(params[0] || '').trim().toUpperCase();
+      const cleanRegId = String(params[1] || '').trim().toUpperCase();
+      return localStore.registrations.find(r => 
+        r.transaction_id && 
+        String(r.transaction_id).trim().toUpperCase() === cleanUtr && 
+        String(r.registration_id).trim().toUpperCase() !== cleanRegId
+      ) || null;
+    }
+    if (sqlLower.includes('registration_id = ?') || sqlLower.includes('registration_id =')) {
       const targetId = String(params[0] || '').trim().toUpperCase();
-      if (sqlLower.includes('registration_id !=')) {
-        return localStore.registrations.find(r => r.registration_id !== targetId);
-      }
       return localStore.registrations.find(r => String(r.registration_id).toUpperCase() === targetId) || null;
     }
-    if (sqlLower.includes('email = ?')) {
-      const email = String(params[params.length - 1] || '').trim().toLowerCase();
-      const eventId = params.length > 1 ? params[0] : null;
-      return localStore.registrations.find(r => {
-        if (!r || !r.email) return false;
-        if (r.email.toLowerCase() !== email) return false;
-        if (eventId && r.event_id && r.event_id !== eventId) return false;
-        if (sqlLower.includes("reg_status in ('approved', 'verified')") && !['APPROVED', 'VERIFIED'].includes(r.reg_status)) return false;
-        if (sqlLower.includes("reg_status = 'pending_verification'") && r.reg_status !== 'PENDING_VERIFICATION') return false;
-        return true;
-      }) || null;
+    if (sqlLower.includes('email = ?') || sqlLower.includes('user_id = ?')) {
+      let targetEmail = null;
+      let targetUserId = null;
+      let targetEventId = null;
+
+      for (const p of params) {
+        if (typeof p === 'string' && p.includes('@')) {
+          targetEmail = p.toLowerCase().trim();
+        } else if (typeof p === 'number' || (typeof p === 'string' && /^\d+$/.test(p) && !p.includes('-'))) {
+          targetUserId = Number(p);
+        } else if (typeof p === 'string') {
+          targetEventId = p;
+        }
+      }
+
+      let matches = localStore.registrations.filter(r => {
+        if (!r) return false;
+        if (targetEventId && r.event_id && r.event_id !== targetEventId) return false;
+        if (targetUserId && Number(r.user_id) === targetUserId) return true;
+        if (targetEmail && r.email && r.email.toLowerCase() === targetEmail) return true;
+        return false;
+      });
+
+      if (sqlLower.includes("reg_status in ('approved', 'verified')")) {
+        matches = matches.filter(r => ['APPROVED', 'VERIFIED'].includes(r.reg_status));
+      } else if (sqlLower.includes("reg_status = 'pending_verification'")) {
+        matches = matches.filter(r => r.reg_status === 'PENDING_VERIFICATION');
+      }
+
+      return matches.sort((a, b) => b.id - a.id)[0] || null;
     }
     return localStore.registrations[0] || null;
   }
@@ -1035,9 +1360,42 @@ function handleLocalAll(sql, params = []) {
     return list.sort((a, b) => b.id - a.id);
   }
 
+  // Users list
+  if (sqlLower.includes('from users')) {
+    let list = [...(localStore.users || [])];
+    if (sqlLower.includes('is_blocked = 1')) {
+      list = list.filter(u => Number(u.is_blocked) === 1);
+    } else if (sqlLower.includes('is_blocked = 0') || sqlLower.includes('is_blocked is null')) {
+      list = list.filter(u => Number(u.is_blocked || 0) === 0);
+    } else if (sqlLower.includes('is_blocked = ?')) {
+      const blockedParam = Number(params[params.length - 1]);
+      list = list.filter(u => Number(u.is_blocked || 0) === blockedParam);
+    }
+    if (sqlLower.includes('like ?') || sqlLower.includes('like')) {
+      const rawSearch = String(params[0] || '').replace(/^%|%$/g, '').toLowerCase().trim();
+      if (rawSearch) {
+        list = list.filter(u =>
+          (u.name && u.name.toLowerCase().includes(rawSearch)) ||
+          (u.email && u.email.toLowerCase().includes(rawSearch)) ||
+          (u.phone && String(u.phone).toLowerCase().includes(rawSearch)) ||
+          (u.city && u.city.toLowerCase().includes(rawSearch))
+        );
+      }
+    }
+    return list.sort((a, b) => b.id - a.id);
+  }
+
   // Registrations list
   if (sqlLower.includes('from registrations')) {
     let list = [...localStore.registrations];
+    if (sqlLower.includes('user_id = ?')) {
+      const userId = Number(params[0]);
+      if (sqlLower.includes('user_id is null and email = ?') || sqlLower.includes('email = ?')) {
+        const email = String(params[1] || '').toLowerCase().trim();
+        return list.filter(r => Number(r.user_id) === userId || (!r.user_id && r.email && r.email.toLowerCase() === email)).sort((a, b) => b.id - a.id);
+      }
+      return list.filter(r => Number(r.user_id) === userId).sort((a, b) => b.id - a.id);
+    }
     if (sqlLower.includes('phone = ?') || sqlLower.includes('phone =')) {
       const cleanPhone = String(params[0] || '').replace(/\D/g, '');
       return list.filter(r => r.phone === cleanPhone);
@@ -1300,6 +1658,8 @@ const initSchema = async () => {
     await addColumnIfNotExists('registrations', 'citation TEXT');
     await addColumnIfNotExists('registrations', 'certificate_title TEXT');
     await addColumnIfNotExists('registrations', 'serial_number INTEGER');
+    await addColumnIfNotExists('registrations', 'user_id INTEGER');
+    await addColumnIfNotExists('registrations', 'age INTEGER');
 
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_event ON registrations(event_id)`);
@@ -1307,6 +1667,59 @@ const initSchema = async () => {
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_phone ON registrations(phone)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_status ON registrations(reg_status)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_verified ON registrations(otp_verified)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_user_id ON registrations(user_id)`);
+
+    // ── Users Table ───────────────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        phone TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        city TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        is_verified INTEGER NOT NULL DEFAULT 0,
+        is_blocked INTEGER NOT NULL DEFAULT 0,
+        block_reason TEXT,
+        blocked_at TEXT,
+        blocked_by TEXT,
+        unblocked_at TEXT,
+        unblocked_by TEXT,
+        verification_token TEXT,
+        verification_token_expires_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
+    // Safe column migrations for users
+    await addColumnIfNotExists('users', 'is_blocked INTEGER NOT NULL DEFAULT 0');
+    await addColumnIfNotExists('users', 'block_reason TEXT');
+    await addColumnIfNotExists('users', 'blocked_at TEXT');
+    await addColumnIfNotExists('users', 'blocked_by TEXT');
+    await addColumnIfNotExists('users', 'unblocked_at TEXT');
+    await addColumnIfNotExists('users', 'unblocked_by TEXT');
+
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(is_blocked)`);
+
+    // ── Password Resets Table ──────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        email TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        token_salt TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    `);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_password_resets_email ON password_resets(email)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash)`);
 
     // ── OTP Sessions ────────────────────────────────────────────────────────────
     await rawRun(`

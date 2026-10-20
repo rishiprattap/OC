@@ -258,6 +258,7 @@
         <a href="/events">Events</a>
         <a href="/gallery">Event Gallery</a>
         <a href="/certificate">Certificate</a>
+        <a href="/account" id="navAccountLink">Account</a>
         <a href="/#about">About</a>
       </nav>
       <div class="nav-actions">
@@ -361,6 +362,7 @@
          STEP 1: DETAILS FORM
          ══════════════════════════════════════════════════ -->
     <div class="form-card" id="step1Card">
+      <div id="authStatusBanner"></div>
       <form id="regForm" novalidate>
         <div class="form-grid">
           <div class="form-group">
@@ -376,12 +378,17 @@
           <div class="form-group">
             <label for="email">Email Address <span class="req">*</span></label>
             <input type="email" id="email" name="email" class="form-control" placeholder="e.g. aarav@example.com" autocomplete="email" required>
-            <small style="color:#8e8477; font-size:11px; margin-top:4px; display:block;">A 6-digit verification code will be sent to this email.</small>
+            <small id="emailSubtext" style="color:#8e8477; font-size:11px; margin-top:4px; display:block;">A 6-digit verification code will be sent to this email.</small>
           </div>
 
           <div class="form-group">
             <label for="city">Your City <span class="req">*</span></label>
             <input type="text" id="city" name="city" class="form-control" placeholder="e.g. New Delhi, Mumbai, Jaipur" required>
+          </div>
+
+          <div class="form-group">
+            <label for="age">Age</label>
+            <input type="number" id="age" name="age" min="5" max="120" class="form-control" placeholder="e.g. 24">
           </div>
 
           <div class="form-group">

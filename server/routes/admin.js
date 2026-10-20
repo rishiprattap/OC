@@ -50,34 +50,49 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Email and password are required.' });
     }
 
-    const adminEmail = config.ADMIN_EMAIL.trim().toLowerCase();
-    const adminPassword = config.ADMIN_PASSWORD;
+    const configuredAdminEmail = (config.ADMIN_EMAIL || 'admin@offstagecreators.com').trim().toLowerCase();
+    const adminPassword = (config.ADMIN_PASSWORD || '').trim();
+    const adminSecret = (config.ADMIN_SECRET || '').trim();
 
-    if (!adminPassword) {
+    if (!adminPassword && !adminSecret) {
       return res.status(500).json({ success: false, error: 'Admin credentials not configured on server.' });
     }
 
-    const emailMatch = email.trim().toLowerCase() === adminEmail;
+    const inputEmail = String(email || '').trim().toLowerCase();
+    const inputPassword = String(password || '').trim();
 
-    // Support both plain password and bcrypt hash
+    // Accept primary configured email, brand .in domain, username 'admin', or configured mail sender
+    const validEmails = [
+      configuredAdminEmail,
+      'admin@offstagecreators.in',
+      'admin@offstagecreators.com',
+      'admin',
+      String(config.EMAIL?.from || '').toLowerCase().replace(/.*<([^>]+)>.*/, '$1').trim()
+    ].filter(Boolean);
+
+    const emailMatch = validEmails.includes(inputEmail);
+
+    // Support bcrypt hash, direct password, and ADMIN_SECRET
     let passwordMatch = false;
-    if (adminPassword.startsWith('$2')) {
-      // bcrypt hash
-      passwordMatch = await bcrypt.compare(password, adminPassword);
+    if (adminPassword && adminPassword.startsWith('$2')) {
+      passwordMatch = (await bcrypt.compare(inputPassword, adminPassword)) ||
+                      (adminSecret && inputPassword === adminSecret);
     } else {
-      // Plain text comparison (for dev/initial setup)
-      passwordMatch = password === adminPassword;
+      passwordMatch = (adminPassword && inputPassword === adminPassword) ||
+                      (adminSecret && inputPassword === adminSecret);
     }
 
     if (!emailMatch || !passwordMatch) {
-      // Add a small delay to deter brute force
-      await new Promise(r => setTimeout(r, 800));
-      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
+      await new Promise(r => setTimeout(r, 400));
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password.'
+      });
     }
 
     // Create server-side session
     req.session.adminAuthenticated = true;
-    req.session.adminEmail = adminEmail;
+    req.session.adminEmail = configuredAdminEmail;
     req.session.loginAt = new Date().toISOString();
 
     return res.json({ success: true, message: 'Logged in successfully.' });
@@ -491,9 +506,9 @@ router.post('/approve/:id', async (req, res) => {
     // Update status
     await run(
       `UPDATE registrations
-       SET reg_status = 'APPROVED', approved_at = ?, approved_by = ?, updated_at = ?
+       SET reg_status = 'APPROVED', payment_status = 'PAID', payment_verified_at = ?, payment_verified_by = ?, approved_at = ?, approved_by = ?, updated_at = ?
        WHERE registration_id = ?`,
-      [now, approvedBy, now, regId]
+      [now, approvedBy, now, approvedBy, now, regId]
     );
 
     // Send approval email (non-blocking)
@@ -1592,6 +1607,247 @@ router.post('/email/campaign', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Campaign send error:', err);
     return res.status(500).json({ success: false, error: 'Server error while sending campaign.' });
+  }
+});
+
+// ─── User Management Endpoints ────────────────────────────────────────────────
+
+function sanitizeAdminUser(u, registrationCount = 0) {
+  if (!u) return null;
+  const isBlockedBool = Number(u.is_blocked) === 1;
+  const isVerifiedBool = Number(u.is_verified) === 1;
+  return {
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    phone: u.phone,
+    age: u.age,
+    city: u.city,
+    is_verified: isVerifiedBool ? 1 : 0,
+    is_blocked: isBlockedBool ? 1 : 0,
+    isVerified: isVerifiedBool,
+    isBlocked: isBlockedBool,
+    block_reason: u.block_reason || null,
+    blockReason: u.block_reason || null,
+    blocked_at: u.blocked_at || null,
+    blockedAt: u.blocked_at || null,
+    blocked_by: u.blocked_by || null,
+    blockedBy: u.blocked_by || null,
+    unblocked_at: u.unblocked_at || null,
+    unblockedAt: u.unblocked_at || null,
+    unblocked_by: u.unblocked_by || null,
+    unblockedBy: u.unblocked_by || null,
+    created_at: u.created_at,
+    createdAt: u.created_at,
+    updated_at: u.updated_at,
+    updatedAt: u.updated_at,
+    registrationCount: Number(registrationCount || 0)
+  };
+}
+
+// GET /api/admin/users — List & Search Users
+router.get('/users', requireAdmin, async (req, res) => {
+  try {
+    const { search = '', status = 'ALL' } = req.query;
+    const cleanSearch = String(search || '').trim();
+    const cleanStatus = String(status || 'ALL').toUpperCase();
+
+    let query = `SELECT * FROM users`;
+    let params = [];
+    let whereClauses = [];
+
+    if (cleanSearch) {
+      whereClauses.push(`(name ILIKE ? OR email ILIKE ? OR phone ILIKE ? OR city ILIKE ?)`);
+      const term = `%${cleanSearch}%`;
+      params.push(term, term, term, term);
+    }
+
+    if (cleanStatus === 'BLOCKED') {
+      whereClauses.push(`is_blocked = 1`);
+    } else if (cleanStatus === 'ACTIVE') {
+      whereClauses.push(`(is_blocked = 0 OR is_blocked IS NULL)`);
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ` + whereClauses.join(' AND ');
+    }
+
+    query += ` ORDER BY id DESC`;
+
+    const users = await all(query.replace(/ILIKE/g, 'LIKE'), params);
+
+    // Fetch registration counts for each user
+    const usersWithCounts = await Promise.all(users.map(async (u) => {
+      const regCountRow = await get(
+        `SELECT COUNT(*) as count FROM registrations WHERE user_id = ? OR email = ?`,
+        [u.id, u.email]
+      );
+      const count = regCountRow ? (regCountRow.count || regCountRow['count(*)'] || 0) : 0;
+      return sanitizeAdminUser(u, count);
+    }));
+
+    return res.json({
+      success: true,
+      users: usersWithCounts,
+      total: usersWithCounts.length
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error retrieving users:', err);
+    return res.status(500).json({ success: false, error: 'Server error retrieving users.' });
+  }
+});
+
+// GET /api/admin/users/:id — User Profile & History Details
+router.get('/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, error: 'Invalid user ID.' });
+    }
+
+    const user = await get(`SELECT * FROM users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    // Fetch all registrations associated with user
+    const registrations = await all(
+      `SELECT * FROM registrations WHERE user_id = ? OR email = ? ORDER BY id DESC`,
+      [user.id, user.email]
+    );
+
+    const enrichedRegs = await Promise.all(registrations.map(async (r) => {
+      let eventTitle = 'Online Open Mic';
+      if (r.event_id) {
+        try {
+          const evt = await getEventBySlug(r.event_id);
+          if (evt) eventTitle = evt.title || evt.name || eventTitle;
+        } catch (_) {}
+      }
+      return {
+        id: r.id,
+        registrationId: r.registration_id,
+        eventId: r.event_id,
+        eventTitle,
+        category: r.category,
+        performanceTitle: r.performance_title,
+        amount: r.amount,
+        regStatus: r.reg_status,
+        paymentStatus: r.payment_status || (r.reg_status === 'APPROVED' ? 'PAID' : (r.transaction_id ? 'SUBMITTED' : 'PENDING')),
+        transactionId: r.transaction_id || null,
+        paymentScreenshotUrl: r.payment_screenshot_url || null,
+        checkedIn: Boolean(r.checked_in),
+        certificateEligible: Boolean(r.certificate_eligible),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      };
+    }));
+
+    return res.json({
+      success: true,
+      user: sanitizeAdminUser(user, enrichedRegs.length),
+      registrations: enrichedRegs
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error retrieving user details:', err);
+    return res.status(500).json({ success: false, error: 'Server error retrieving user details.' });
+  }
+});
+
+// POST /api/admin/users/:id/block — Block User
+router.post('/users/:id/block', requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const { reason = '' } = req.body;
+
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, error: 'Invalid user ID.' });
+    }
+
+    const user = await get(`SELECT * FROM users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const currentAdminEmail = (req.session && req.session.adminEmail) || config.ADMIN_EMAIL || 'admin@offstagecreators.com';
+
+    // Prevent admins from accidentally blocking their own account
+    if (
+      user.email.toLowerCase() === currentAdminEmail.toLowerCase() ||
+      user.email.toLowerCase() === (config.ADMIN_EMAIL || '').toLowerCase()
+    ) {
+      return res.status(400).json({ success: false, error: 'You cannot block your own admin account.' });
+    }
+
+    const now = new Date().toISOString();
+    const cleanReason = String(reason || '').trim() || 'Suspended by administrator';
+
+    await run(
+      `UPDATE users SET
+         is_blocked = 1,
+         block_reason = ?,
+         blocked_at = ?,
+         blocked_by = ?,
+         updated_at = ?
+       WHERE id = ?`,
+      [cleanReason, now, currentAdminEmail, now, userId]
+    );
+
+    const updatedUser = await get(`SELECT * FROM users WHERE id = ?`, [userId]);
+
+    return res.json({
+      success: true,
+      message: `User ${user.name} has been blocked successfully.`,
+      user: sanitizeAdminUser(updatedUser)
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error blocking user:', err);
+    return res.status(500).json({ success: false, error: 'Server error while blocking user.' });
+  }
+});
+
+// POST /api/admin/users/:id/unblock — Unblock User
+router.post('/users/:id/unblock', requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ success: false, error: 'Invalid user ID.' });
+    }
+
+    const user = await get(`SELECT * FROM users WHERE id = ?`, [userId]);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    const currentAdminEmail = (req.session && req.session.adminEmail) || config.ADMIN_EMAIL || 'admin@offstagecreators.com';
+    const now = new Date().toISOString();
+
+    await run(
+      `UPDATE users SET
+         is_blocked = 0,
+         block_reason = NULL,
+         unblocked_at = ?,
+         unblocked_by = ?,
+         updated_at = ?
+       WHERE id = ?`,
+      [now, currentAdminEmail, now, userId]
+    );
+
+    const updatedUser = await get(`SELECT * FROM users WHERE id = ?`, [userId]);
+
+    return res.json({
+      success: true,
+      message: `User ${user.name} has been unblocked successfully.`,
+      user: sanitizeAdminUser(updatedUser)
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error unblocking user:', err);
+    return res.status(500).json({ success: false, error: 'Server error while unblocking user.' });
   }
 });
 

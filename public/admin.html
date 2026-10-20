@@ -170,6 +170,8 @@
     .status-APPROVED { background: rgba(110,219,140,0.12); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
     .status-REJECTED { background: rgba(226,105,71,0.12); color: #e26947; border: 1px solid rgba(226,105,71,0.3); }
     .status-REVOKED, .status-CANCELLED { background: rgba(226,71,71,0.15); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
+    .status-BLOCKED { background: rgba(226,71,71,0.18); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
+    .status-ACTIVE { background: rgba(110,219,140,0.12); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
 
     .action-btn {
       padding: 6px 14px; border-radius: 6px; font-size: 11px; font-weight: 800;
@@ -181,6 +183,10 @@
     .btn-reject:hover { background: rgba(226,105,71,0.25); }
     .btn-revoke { background: rgba(226,71,71,0.15); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
     .btn-revoke:hover { background: rgba(226,71,71,0.28); }
+    .btn-block { background: rgba(226,71,71,0.15); color: #ff7b7b; border: 1px solid rgba(226,71,71,0.4); }
+    .btn-block:hover { background: rgba(226,71,71,0.28); }
+    .btn-unblock { background: rgba(110,219,140,0.15); color: #6edb8c; border: 1px solid rgba(110,219,140,0.3); }
+    .btn-unblock:hover { background: rgba(110,219,140,0.25); }
     .btn-view { background: #1a1612; color: #8e8477; border: 1px solid #2a231c; }
     .btn-view:hover { color: #f7eee1; border-color: #3a3228; }
 
@@ -381,7 +387,7 @@
       <p>Offstage Creators Organizer Dashboard</p>
       <div class="auth-error" id="loginError"></div>
       <form id="loginForm" autocomplete="off">
-        <input type="email" class="auth-input" id="loginEmail" placeholder="Admin Email" autocomplete="username" required>
+        <input type="text" class="auth-input" id="loginEmail" placeholder="Admin Email" autocomplete="username" required>
         <input type="password" class="auth-input" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
         <button type="submit" class="auth-btn" id="loginBtn">LOGIN TO DASHBOARD</button>
       </form>
@@ -412,6 +418,9 @@
         </button>
         <button class="admin-nav-item" data-tab="approved" onclick="showTab('approved')">
           <span class="nav-icon">✓</span> Approved
+        </button>
+        <button class="admin-nav-item" data-tab="users" onclick="showTab('users')">
+          <span class="nav-icon">👥</span> Users
         </button>
         <button class="admin-nav-item" data-tab="certificates" onclick="showTab('certificates')">
           <span class="nav-icon">🏆</span> Certificates &amp; Winners
@@ -606,6 +615,34 @@
         </div>
         <div id="approvedTableWrapper">
           <div class="empty-state"><p>Loading…</p></div>
+        </div>
+      </div>
+
+      <!-- ── USERS MANAGEMENT TAB ──────────────────────── -->
+      <div id="tabUsers" style="display:none;">
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">User &amp; Creator Management</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Search performers by name, email, or phone, inspect profiles and event registrations, and manage account access.</p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button type="button" class="cta cta-secondary" onclick="loadUsersTab()" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>⟳</span> Refresh Users
+            </button>
+          </div>
+        </div>
+
+        <div class="controls-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:20px;">
+          <input type="search" class="search-input" id="userSearchInput" placeholder="Search by name, email, phone, city…" oninput="filterUsersDebounced()" style="flex:1; min-width:240px;">
+          <select class="filter-select" id="userStatusFilter" onchange="loadUsersTab()">
+            <option value="ALL">All Accounts</option>
+            <option value="ACTIVE">Active Accounts Only</option>
+            <option value="BLOCKED">Blocked Accounts Only</option>
+          </select>
+        </div>
+
+        <div id="usersTableWrapper">
+          <div class="empty-state"><p>Loading users…</p></div>
         </div>
       </div>
 
@@ -971,6 +1008,47 @@
       </div>
       <div class="modal-body" id="modalBody"></div>
       <div class="modal-actions" id="modalActions"></div>
+    </div>
+  </div>
+
+  <!-- User Profile & Registrations Modal -->
+  <div class="modal-overlay" id="userModal" style="display:none;">
+    <div class="modal-card" style="width: min(840px, 95vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; font-weight:800; letter-spacing:0.1em; color:#8e8477; text-transform:uppercase;">CREATOR PROFILE &amp; REGISTRATIONS</div>
+          <div style="font-family:'Cormorant Garamond',Georgia,serif; font-size:24px; font-weight:700; color:#f7eee1;" id="userModalTitle">—</div>
+        </div>
+        <button class="modal-close" onclick="closeUserModal()">✕</button>
+      </div>
+      <div class="modal-body" id="userModalBody" style="padding:24px;"></div>
+      <div class="modal-actions" id="userModalActions" style="justify-content:space-between; align-items:center;"></div>
+    </div>
+  </div>
+
+  <!-- Block User Modal -->
+  <div class="modal-overlay" id="blockUserModal" style="display:none;">
+    <div class="modal-card" style="width: min(480px, 92vw);">
+      <div class="modal-header">
+        <div style="font-size:16px; font-weight:800; color:#ff7b7b;">Block User Account</div>
+        <button class="modal-close" onclick="closeBlockUserModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <p style="color:#d5cbbd; font-size:14px; margin:0 0 14px; line-height:1.5;">
+          Are you sure you want to block <strong id="blockUserName" style="color:#f7eee1;"></strong> (<span id="blockUserEmail" style="color:#e4ad57;"></span>)?
+        </p>
+        <p style="color:#8e8477; font-size:12.5px; margin:0 0 16px; line-height:1.5;">
+          Blocked users cannot log in, access account features, or submit new event registrations. Their existing registrations and payment records are preserved.
+        </p>
+        <label for="blockReasonInput" style="display:block; font-size:11px; font-weight:800; color:#8e8477; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px;">
+          Block Reason (Optional — Visible to user on login)
+        </label>
+        <textarea id="blockReasonInput" class="admin-textarea" placeholder="e.g. Violation of community rules, misconduct, non-attendance…" style="min-height:80px; margin-bottom:0;"></textarea>
+      </div>
+      <div class="modal-actions" style="justify-content: flex-end; gap: 10px;">
+        <button type="button" class="action-btn btn-view" onclick="closeBlockUserModal()">Cancel</button>
+        <button type="button" class="cta" id="confirmBlockUserBtn" style="background:#e26947; color:#fff;" onclick="submitBlockUser()">Block User Account</button>
+      </div>
     </div>
   </div>
 

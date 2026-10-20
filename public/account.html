@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Manage your Offstage Creators account, view your event registrations, performance history, and certificates.">
+  <title>Creator Account &amp; Registrations — Offstage Creators</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <link rel="icon" href="/assets/logo.png" type="image/png">
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
+  <script defer src="/_vercel/speed-insights/script.js"></script>
+  <script src="/js/analytics.js"></script>
+  <style>
+    .auth-tabs {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .auth-tab-btn {
+      background: transparent;
+      border: 1px solid #2a231c;
+      color: #8e8477;
+      padding: 10px 24px;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .auth-tab-btn:hover {
+      color: #f7eee1;
+      border-color: rgba(228, 173, 87, 0.4);
+    }
+    .auth-tab-btn.active {
+      background: rgba(228, 173, 87, 0.15);
+      border-color: #e4ad57;
+      color: #e4ad57;
+    }
+    .user-profile-header {
+      background: #141210;
+      border: 1px solid #2a231c;
+      border-radius: 16px;
+      padding: 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    .user-avatar-lockup {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .user-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #e4ad57, #9b6c28);
+      color: #0d0c0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      font-weight: 800;
+      box-shadow: 0 4px 16px rgba(228, 173, 87, 0.25);
+    }
+    .user-meta h2 {
+      margin: 0 0 4px;
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 28px;
+      color: #f7eee1;
+    }
+    .user-meta p {
+      margin: 0;
+      font-size: 13px;
+      color: #8e8477;
+    }
+    .dashboard-tabs {
+      display: flex;
+      gap: 12px;
+      border-bottom: 1px solid #2a231c;
+      margin-bottom: 28px;
+    }
+    .dash-tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #8e8477;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .dash-tab-btn:hover {
+      color: #f7eee1;
+    }
+    .dash-tab-btn.active {
+      color: #e4ad57;
+      border-bottom-color: #e4ad57;
+    }
+    .registration-card {
+      background: #141210;
+      border: 1px solid #2a231c;
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 16px;
+      transition: border-color 0.2s ease;
+    }
+    .registration-card:hover {
+      border-color: rgba(228, 173, 87, 0.4);
+    }
+    .reg-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .reg-card-title {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #f7eee1;
+      margin: 0 0 4px;
+    }
+    .reg-card-meta {
+      font-size: 12.5px;
+      color: #8e8477;
+    }
+    .reg-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      background: #0d0c0a;
+      border: 1px solid #1f1b16;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 14px 0;
+      font-size: 13px;
+    }
+    .reg-card-field-label {
+      color: #8e8477;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 3px;
+    }
+    .reg-card-field-val {
+      color: #f7eee1;
+      font-weight: 600;
+    }
+    .reg-card-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .otp-input-group {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin: 20px 0;
+    }
+    .otp-digit {
+      width: 50px;
+      height: 56px;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 800;
+      font-family: 'Courier New', monospace;
+      background: #0d0c0a;
+      border: 2px solid #2a231c;
+      border-radius: 8px;
+      color: #f7eee1;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+    .otp-digit:focus {
+      border-color: #e4ad57;
+      box-shadow: 0 0 0 3px rgba(228, 173, 87, 0.15);
+    }
+    .status-badge-confirmed {
+      background: rgba(110, 219, 140, 0.15);
+      border: 1px solid rgba(110, 219, 140, 0.4);
+      color: #88f0a4;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .status-badge-pending {
+      background: rgba(228, 173, 87, 0.15);
+      border: 1px solid rgba(228, 173, 87, 0.4);
+      color: #e4ad57;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .status-badge-submitted {
+      background: rgba(245, 166, 35, 0.15);
+      border: 1px solid rgba(245, 166, 35, 0.4);
+      color: #ffd078;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .status-badge-rejected {
+      background: rgba(226, 105, 71, 0.15);
+      border: 1px solid rgba(226, 105, 71, 0.4);
+      color: #ff9e85;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div class="grain-layer"></div>
+
+  <!-- NAVIGATION -->
+  <header class="nav-header">
+    <div class="nav-container">
+      <a class="logo-lockup" href="/">
+        <img src="/assets/logo.png" alt="Offstage Creators Logo">
+        <span>OFFSTAGE<br><b>CREATORS</b></span>
+      </a>
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/events">Events</a>
+        <a href="/register">Register</a>
+        <a href="/gallery">Gallery</a>
+        <a href="/certificate">Certificate</a>
+        <a href="/account" class="active" style="color: #e4ad57;">Account</a>
+      </nav>
+      <div class="nav-actions">
+        <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Instagram">◎</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-wrapper">
+    <a class="back-link" href="/">← Back to Home</a>
+
+    <!-- ALERTS -->
+    <div class="alert-box alert-error" id="errorAlert" role="alert"></div>
+    <div class="alert-box alert-success" id="successAlert" role="status"></div>
+
+    <!-- ══════════════════════════════════════════════════
+         STATE 1: UNAUTHENTICATED (LOGIN / REGISTER / RECOVERY)
+         ══════════════════════════════════════════════════ -->
+    <div id="authSection" style="display: none;">
+      <div class="page-head">
+        <span class="kicker orange">OFFSTAGE CREATORS COMMUNITY</span>
+        <h1 id="authHeading">Creator<br><em>Account</em></h1>
+        <p id="authSubheading">Log in to automatically fill your details for events, view your stage passes, and access your certificates.</p>
+      </div>
+
+      <!-- TABS -->
+      <div class="auth-tabs" id="authTabs">
+        <button type="button" class="auth-tab-btn active" id="tabLoginBtn">Log In</button>
+        <button type="button" class="auth-tab-btn" id="tabRegisterBtn">Create Account</button>
+      </div>
+
+      <!-- CARD: LOGIN FORM -->
+      <div class="form-card" id="loginCard" style="max-width: 520px; margin: 0 auto;">
+        <form id="loginForm" novalidate>
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="loginEmail">Email Address <span class="req">*</span></label>
+            <input type="email" id="loginEmail" name="email" class="form-control" placeholder="e.g. aarav@example.com" autocomplete="email" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <label for="loginPassword" style="margin-bottom: 0;">Password <span class="req">*</span></label>
+              <button type="button" id="forgotPassLink" style="background: none; border: none; color: #e4ad57; font-size: 12px; cursor: pointer; text-decoration: underline;">Forgot Password?</button>
+            </div>
+            <input type="password" id="loginPassword" name="password" class="form-control" placeholder="Your account password" autocomplete="current-password" required style="margin-top: 8px;">
+          </div>
+
+          <div style="margin-top: 24px;">
+            <button type="submit" id="loginSubmitBtn" class="cta" style="width: 100%; justify-content: center;">
+              <span id="loginSubmitText">LOG IN</span>
+              <b>→</b>
+            </button>
+          </div>
+
+          <p style="text-align: center; font-size: 13px; color: #8e8477; margin-top: 20px;">
+            Don't have an account yet? <button type="button" id="switchToRegisterBtn" style="background:none; border:none; color:#e4ad57; font-weight:700; cursor:pointer; text-decoration:underline;">Create an Account</button>
+          </p>
+        </form>
+      </div>
+
+      <!-- CARD: REGISTER FORM -->
+      <div class="form-card" id="registerCard" style="max-width: 600px; margin: 0 auto; display: none;">
+        <form id="createAccountForm" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="regName">Full Name <span class="req">*</span></label>
+              <input type="text" id="regName" name="name" class="form-control" placeholder="e.g. Aarav Sharma" autocomplete="name" required>
+            </div>
+
+            <div class="form-group">
+              <label for="regPhone">WhatsApp / Phone Number <span class="req">*</span></label>
+              <input type="tel" id="regPhone" name="phone" class="form-control" placeholder="10-digit number" maxlength="10" autocomplete="tel" required>
+            </div>
+
+            <div class="form-group">
+              <label for="regEmail">Email Address <span class="req">*</span></label>
+              <input type="email" id="regEmail" name="email" class="form-control" placeholder="e.g. aarav@example.com" autocomplete="email" required>
+            </div>
+
+            <div class="form-group">
+              <label for="regAge">Age <span class="req">*</span></label>
+              <input type="number" id="regAge" name="age" class="form-control" placeholder="e.g. 24" min="5" max="120" required>
+            </div>
+
+            <div class="form-group full">
+              <label for="regCity">City <span class="req">*</span></label>
+              <input type="text" id="regCity" name="city" class="form-control" placeholder="e.g. New Delhi, Mumbai, Bengaluru" required>
+            </div>
+
+            <div class="form-group full">
+              <label for="regPassword">Create Password <span class="req">*</span></label>
+              <input type="password" id="regPassword" name="password" class="form-control" placeholder="Minimum 6 characters" autocomplete="new-password" required>
+              <small style="color: #8e8477; font-size: 11px; margin-top: 4px; display: block;">Your basic details will be safely remembered so you never have to re-enter them for open mics.</small>
+            </div>
+          </div>
+
+          <div style="margin-top: 24px;">
+            <button type="submit" id="createAccountSubmitBtn" class="cta" style="width: 100%; justify-content: center;">
+              <span id="createAccountSubmitText">CREATE ACCOUNT &amp; VERIFY EMAIL</span>
+              <b>→</b>
+            </button>
+          </div>
+
+          <p style="text-align: center; font-size: 13px; color: #8e8477; margin-top: 20px;">
+            Already have an account? <button type="button" id="switchToLoginBtn" style="background:none; border:none; color:#e4ad57; font-weight:700; cursor:pointer; text-decoration:underline;">Log In Here</button>
+          </p>
+        </form>
+      </div>
+
+      <!-- CARD: OTP VERIFICATION -->
+      <div class="form-card" id="verifyOtpCard" style="max-width: 480px; margin: 0 auto; display: none; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 12px;">✉️</div>
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 28px; margin: 0 0 8px; color: #f7eee1;">Verify Your Email</h2>
+        <p style="color: #d5cbbd; font-size: 14px; margin: 0 0 16px;">
+          We sent a 6-digit verification code to<br>
+          <strong id="verifyEmailDisplay" style="color: #e4ad57;"></strong>
+        </p>
+
+        <div class="otp-input-group">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp1" aria-label="OTP digit 1">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp2" aria-label="OTP digit 2">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp3" aria-label="OTP digit 3">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp4" aria-label="OTP digit 4">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp5" aria-label="OTP digit 5">
+          <input class="otp-digit" type="text" inputmode="numeric" maxlength="1" id="actOtp6" aria-label="OTP digit 6">
+        </div>
+
+        <div style="margin: 20px 0;">
+          <button type="button" id="confirmOtpBtn" class="cta" style="width: 100%; justify-content: center;">
+            <span id="confirmOtpText">VERIFY CODE &amp; ACTIVATE ACCOUNT</span>
+            <b>✓</b>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
+          <button type="button" id="resendActOtpBtn" class="resend-btn">Resend Code</button>
+          <button type="button" id="backToLoginFromOtpBtn" style="background: none; border: none; color: #8e8477; font-size: 13px; cursor: pointer; text-decoration: underline;">← Back to Log In</button>
+        </div>
+      </div>
+
+      <!-- CARD: FORGOT PASSWORD -->
+      <div class="form-card" id="forgotPassCard" style="max-width: 500px; margin: 0 auto; display: none;">
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 28px; margin: 0 0 8px; color: #f7eee1; text-align: center;">Reset Password</h2>
+        <p style="color: #8e8477; font-size: 13px; text-align: center; margin: 0 0 24px;">Enter your account email and we'll send you instructions to choose a new password.</p>
+
+        <form id="forgotPassForm" novalidate>
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="forgotEmail">Email Address <span class="req">*</span></label>
+            <input type="email" id="forgotEmail" name="email" class="form-control" placeholder="e.g. aarav@example.com" autocomplete="email" required>
+          </div>
+
+          <button type="submit" id="forgotSubmitBtn" class="cta" style="width: 100%; justify-content: center;">
+            <span id="forgotSubmitText">SEND RESET LINK</span>
+            <b>→</b>
+          </button>
+
+          <p style="text-align: center; font-size: 13px; margin-top: 18px;">
+            <button type="button" id="backToLoginFromForgot" style="background:none; border:none; color:#8e8477; cursor:pointer; text-decoration:underline;">← Back to Log In</button>
+          </p>
+        </form>
+      </div>
+
+      <!-- CARD: RESET PASSWORD FORM (WITH TOKEN) -->
+      <div class="form-card" id="resetPassCard" style="max-width: 500px; margin: 0 auto; display: none;">
+        <h2 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 28px; margin: 0 0 8px; color: #f7eee1; text-align: center;">Set New Password</h2>
+        <p style="color: #8e8477; font-size: 13px; text-align: center; margin: 0 0 24px;">Enter your new password below for your Offstage Creators account.</p>
+
+        <form id="resetPassForm" novalidate>
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="newPassInput">New Password <span class="req">*</span></label>
+            <input type="password" id="newPassInput" name="newPassword" class="form-control" placeholder="Minimum 6 characters" autocomplete="new-password" required>
+          </div>
+
+          <div class="form-group" style="margin-bottom: 20px;">
+            <label for="newPassConfirmInput">Confirm New Password <span class="req">*</span></label>
+            <input type="password" id="newPassConfirmInput" name="confirmPassword" class="form-control" placeholder="Re-enter new password" autocomplete="new-password" required>
+          </div>
+
+          <button type="submit" id="resetSubmitBtn" class="cta" style="width: 100%; justify-content: center;">
+            <span id="resetSubmitText">UPDATE PASSWORD</span>
+            <b>✓</b>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════
+         STATE 2: AUTHENTICATED DASHBOARD
+         ══════════════════════════════════════════════════ -->
+    <div id="dashboardSection" style="display: none;">
+      <!-- USER PROFILE HEADER -->
+      <div class="user-profile-header">
+        <div class="user-avatar-lockup">
+          <div class="user-avatar" id="dashAvatar">A</div>
+          <div class="user-meta">
+            <h2 id="dashName">Aarav Sharma</h2>
+            <p id="dashMeta">aarav@example.com · City: New Delhi</p>
+          </div>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <a href="/register" class="cta" style="font-size: 13px; padding: 10px 20px;">
+            <span>REGISTER FOR EVENT</span>
+            <b>+</b>
+          </a>
+          <button type="button" id="dashLogoutBtn" class="resend-btn" style="padding: 10px 18px; color: #ff8566; border-color: rgba(226,105,71,0.3);">
+            Log Out
+          </button>
+        </div>
+      </div>
+
+      <!-- DASHBOARD TABS -->
+      <div class="dashboard-tabs">
+        <button type="button" class="dash-tab-btn active" id="tabMyRegistrationsBtn">My Event Passes &amp; Registrations</button>
+        <button type="button" class="dash-tab-btn" id="tabMyProfileBtn">Profile Details</button>
+      </div>
+
+      <!-- TAB 1: REGISTRATIONS LIST -->
+      <div id="registrationsTabContent">
+        <div id="registrationsListContainer">
+          <div style="text-align: center; padding: 40px; color: #8e8477;">Loading your events...</div>
+        </div>
+      </div>
+
+      <!-- TAB 2: EDIT PROFILE -->
+      <div id="profileTabContent" style="display: none;">
+        <div class="form-card" style="max-width: 680px; margin: 0 auto;">
+          <h3 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 26px; color: #f7eee1; margin: 0 0 16px;">Saved Profile Details</h3>
+          <p style="color: #8e8477; font-size: 13px; margin: 0 0 24px;">These details are automatically populated whenever you register for an Offstage Creators open mic or showcase.</p>
+
+          <form id="editProfileForm" novalidate>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="editName">Full Name <span class="req">*</span></label>
+                <input type="text" id="editName" name="name" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label for="editPhone">WhatsApp / Mobile Number <span class="req">*</span></label>
+                <input type="tel" id="editPhone" name="phone" class="form-control" maxlength="10" required>
+              </div>
+
+              <div class="form-group">
+                <label for="editEmail">Email Address</label>
+                <input type="email" id="editEmail" name="email" class="form-control" disabled style="opacity: 0.7; cursor: not-allowed;">
+                <small style="color: #6edb8c; font-size: 11px; margin-top: 4px; display: block;">✓ Verified Account Email</small>
+              </div>
+
+              <div class="form-group">
+                <label for="editAge">Age <span class="req">*</span></label>
+                <input type="number" id="editAge" name="age" class="form-control" min="5" max="120" required>
+              </div>
+
+              <div class="form-group full">
+                <label for="editCity">City <span class="req">*</span></label>
+                <input type="text" id="editCity" name="city" class="form-control" required>
+              </div>
+            </div>
+
+            <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
+              <button type="submit" id="saveProfileBtn" class="cta">
+                <span id="saveProfileText">SAVE CHANGES</span>
+                <b>✓</b>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-desktop">
+      <div class="footer-left">
+        <span class="footer-copy">© 2026 Offstage Creators. All rights reserved.</span>
+        <span class="footer-sep">•</span>
+        <span class="footer-tagline">Built with ♡ for the creative community.</span>
+      </div>
+      <div class="footer-nav">
+        <a href="/">Home</a>
+        <a href="/events">All Events</a>
+        <a href="/gallery">Event Gallery</a>
+        <a href="/certificate">Certificate</a>
+        <a href="/register">Register</a>
+        <a href="/account">Account</a>
+        <a href="/scanner" class="footer-secondary">Event Scanner</a>
+        <a href="/admin" class="footer-secondary">Admin</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/account.js"></script>
+</body>
+</html>

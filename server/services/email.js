@@ -932,6 +932,70 @@ async function sendMeetEmail({ session, participant, recipientEmail, isTest = fa
   });
 }
 
+/**
+ * Send Password Reset Email.
+ */
+async function sendPasswordResetEmail({ email, name, resetLink, expiryMinutes = 60 }) {
+  const cleanTo = String(email || '').trim().toLowerCase();
+  const safeName = escapeHtml(name || 'Creator');
+  const subject = 'Reset Your Offstage Creators Password';
+  const preheader = `Password reset request for your Offstage Creators account.`;
+
+  const bodyContent = `
+    <h2 style="font-size:22px; margin:0 0 12px; color:#f7eee1;">Password Reset Request</h2>
+    <p>Hi <strong>${safeName}</strong>,</p>
+    <p>We received a request to reset your password for your Offstage Creators account. Click the button below to choose a new password:</p>
+    <div style="text-align:center; margin:24px 0;">
+      <a href="${resetLink}" class="cta-btn" style="background:#e4ad57; color:#0d0c0a !important; display:inline-block; padding:14px 28px; border-radius:6px; text-decoration:none; font-weight:800; letter-spacing:0.05em;">RESET PASSWORD →</a>
+    </div>
+    <p style="font-size:12px; color:#8e8477;">Or copy and paste this link into your browser:<br><a href="${resetLink}" style="color:#e4ad57; word-break:break-all;">${resetLink}</a></p>
+    <p style="font-size:12px; color:#8e8477; margin-top:20px;">This link will expire in ${expiryMinutes} minutes. If you did not request a password reset, you can safely ignore this email.</p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+
+  return sendEmail({
+    to: cleanTo,
+    subject,
+    html,
+    emailCategory: 'OTP',
+    emailType: 'PASSWORD_RESET',
+    isOptionalAnnouncement: false
+  });
+}
+
+/**
+ * Send Account Verification OTP Email.
+ */
+async function sendAccountVerificationEmail({ email, name, otp, expiryMinutes = 10 }) {
+  const cleanTo = String(email || '').trim().toLowerCase();
+  const safeName = escapeHtml(name || 'Creator');
+  const subject = 'Verify Your Offstage Creators Account';
+  const preheader = `Your 6-digit verification code is ready.`;
+
+  const bodyContent = `
+    <h2 style="font-size:22px; margin:0 0 12px; color:#f7eee1;">Welcome to Offstage Creators</h2>
+    <p>Hi <strong>${safeName}</strong>,</p>
+    <p>Thank you for creating an account. Please use the verification code below to confirm your email address and activate your account:</p>
+    <div class="otp-box">
+      <div class="otp-number">${otp}</div>
+      <div class="otp-label">Account Verification Code · Valid for ${expiryMinutes} Minutes</div>
+    </div>
+    <p style="font-size:12px; color:#8e8477;">Enter this code on the verification screen to complete your registration. Do not share this code with anyone.</p>
+  `;
+
+  const html = emailWrapper({ title: subject, preheader, bodyContent });
+
+  return sendEmail({
+    to: cleanTo,
+    subject,
+    html,
+    emailCategory: 'OTP',
+    emailType: 'ACCOUNT_VERIFICATION',
+    isOptionalAnnouncement: false
+  });
+}
+
 module.exports = {
   sendEmail,
   sendOTPEmail,
@@ -942,6 +1006,8 @@ module.exports = {
   sendEventReminderEmail,
   renderMeetSessionEmail,
   sendMeetEmail,
+  sendPasswordResetEmail,
+  sendAccountVerificationEmail,
   checkDomainStatus,
   isEmailUnsubscribed,
   emailWrapper,
