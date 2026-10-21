@@ -71,7 +71,7 @@ const DEFAULT_EVENTS = [
     promo_video_url: '',
     reg_enabled: 1,
     reg_button_text: 'REGISTER AS PERFORMER',
-    max_registrations: 50,
+    max_registrations: 500,
     confirmation_message: 'Thank you for registering for Offstage Creators Online Open Mic!',
     allowed_categories: JSON.stringify(['Poetry & Shayari', 'Heartfelt Storytelling', 'Stand-up Comedy', 'Music & Vocals']),
     contact_email: 'support@offstagecreators.in',
@@ -250,7 +250,8 @@ function loadLocalStore() {
     unsubscribedEmails: [],
     emailCampaigns: [],
     users: [],
-    passwordResets: []
+    passwordResets: [],
+    promoCodes: []
   };
 
   try {
@@ -268,7 +269,14 @@ function loadLocalStore() {
           receipt_template_url: '',
           ...e
         })),
-        registrations: parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations,
+        registrations: (parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations).map(r => ({
+          promo_code: null,
+          referrer_name: null,
+          original_fee: r.amount || 79,
+          discount_amount: 0,
+          final_fee: r.amount || 79,
+          ...r
+        })),
         settings: { ...defaultStore.settings, ...(parsed.settings || {}) },
         otpSessions: parsed.otpSessions || [],
         unsubscribedEmails: parsed.unsubscribedEmails || [],
@@ -280,9 +288,11 @@ function loadLocalStore() {
           blocked_by: null,
           unblocked_at: null,
           unblocked_by: null,
+          instagram: null,
           ...u
         })),
-        passwordResets: parsed.passwordResets || []
+        passwordResets: parsed.passwordResets || [],
+        promoCodes: parsed.promoCodes || []
       };
     }
   } catch (err) {
@@ -473,6 +483,10 @@ function handleLocalRun(sql, params = []) {
         }
       });
       if (newReg.amount !== undefined) newReg.amount = Number(newReg.amount);
+      if (newReg.original_fee !== undefined) newReg.original_fee = Number(newReg.original_fee);
+      if (newReg.discount_amount !== undefined) newReg.discount_amount = Number(newReg.discount_amount);
+      if (newReg.final_fee !== undefined) newReg.final_fee = Number(newReg.final_fee);
+      if (newReg.promo_code_id !== undefined && newReg.promo_code_id !== null) newReg.promo_code_id = Number(newReg.promo_code_id);
       if (newReg.otp_verified !== undefined) newReg.otp_verified = Number(newReg.otp_verified);
       if (newReg.user_id !== undefined && newReg.user_id !== null) newReg.user_id = Number(newReg.user_id);
       if (newReg.age !== undefined && newReg.age !== null) newReg.age = Number(newReg.age);
@@ -490,6 +504,9 @@ function handleLocalRun(sql, params = []) {
         performance_title: params[8],
         performance_description: params[9],
         amount: Number(params[10] || 79),
+        original_fee: Number(params[10] || 79),
+        discount_amount: 0,
+        final_fee: Number(params[10] || 79),
         otp_verified: 0,
         reg_status: 'PENDING_VERIFICATION',
         checked_in: 0,
@@ -526,30 +543,33 @@ function handleLocalRun(sql, params = []) {
         r.id === targetParam
       );
       if (reg) {
-        if (sqlLower.includes('full_name = ?') && sqlLower.includes('phone = ?')) {
-          const setMatch = sql.match(/update\s+registrations\s+set\s+(.*?)\s+where/is);
-          if (setMatch) {
-            const assignments = setMatch[1].split(',').map(s => s.trim());
-            let pIdx = 0;
-            assignments.forEach(assign => {
-              const parts = assign.split('=').map(s => s.trim());
-              const col = parts[0].toLowerCase();
-              const valExpr = parts[1];
-              if (valExpr === '?') {
-                const val = params[pIdx++];
-                if (col === 'amount') reg.amount = Number(val);
-                else if (col === 'user_id') reg.user_id = val !== null && val !== undefined ? Number(val) : null;
-                else if (col === 'age') reg.age = val !== null && val !== undefined ? Number(val) : null;
-                else if (col === 'otp_verified') reg.otp_verified = Number(val);
-                else reg[col] = val;
+        const setMatch = sql.match(/update\s+registrations\s+set\s+(.*?)\s+where/is);
+        if (setMatch) {
+          const assignments = setMatch[1].split(',').map(s => s.trim());
+          let pIdx = 0;
+          assignments.forEach(assign => {
+            const parts = assign.split('=').map(s => s.trim());
+            const col = parts[0].toLowerCase();
+            const valExpr = parts[1];
+            if (valExpr === '?') {
+              const val = params[pIdx++];
+              if (['amount', 'original_fee', 'discount_amount', 'final_fee', 'promo_code_id', 'checked_in', 'certificate_eligible', 'serial_number'].includes(col)) {
+                reg[col] = val !== null && val !== undefined ? Number(val) : null;
+              } else if (['user_id', 'age', 'otp_verified'].includes(col)) {
+                reg[col] = val !== null && val !== undefined ? Number(val) : null;
               } else {
-                let litVal = valExpr.replace(/['"]/g, '');
-                if (litVal === '1' || litVal === '0') litVal = Number(litVal);
-                reg[col] = litVal;
+                reg[col] = val;
               }
-            });
-          }
-        } else if (sqlLower.includes('approved_at')) {
+            } else if (valExpr.toUpperCase() === 'NULL') {
+              reg[col] = null;
+            } else {
+              let litVal = valExpr.replace(/['"]/g, '');
+              if (litVal === '1' || litVal === '0') litVal = Number(litVal);
+              reg[col] = litVal;
+            }
+          });
+        }
+        if (sqlLower.includes('approved_at')) {
           reg.reg_status = 'APPROVED';
           reg.payment_status = 'PAID';
           reg.payment_verified_at = new Date().toISOString();
@@ -1157,6 +1177,149 @@ function handleLocalRun(sql, params = []) {
     return { lastID: null, changes: 1 };
   }
 
+  // 18. Promo Codes Insert
+  if (sqlLower.includes('insert into promo_codes')) {
+    const list = localStore.promoCodes || [];
+    const id = list.length > 0 ? Math.max(...list.map(p => p.id || 0)) + 1 : 1;
+    const now = new Date().toISOString();
+    const colMatch = sql.match(/insert\s+into\s+promo_codes\s*\(([^)]+)\)\s*values\s*\((.*)\)/is);
+    let newPromo = {
+      id,
+      discount_type: 'percentage',
+      discount_value: 0,
+      eligible_events: 'ALL',
+      max_uses: 0,
+      max_uses_per_user: 1,
+      times_used: 0,
+      is_active: 1,
+      created_at: now,
+      updated_at: now
+    };
+    if (colMatch) {
+      const cols = colMatch[1].split(',').map(c => c.trim().toLowerCase());
+      const valExprs = colMatch[2].split(',').map(v => v.trim());
+      let pIdx = 0;
+      cols.forEach((col, idx) => {
+        const expr = valExprs[idx] !== undefined ? valExprs[idx] : '?';
+        if (expr === '?') {
+          if (pIdx < params.length) {
+            newPromo[col] = params[pIdx++];
+          }
+        } else if (expr.toUpperCase() === 'NULL') {
+          newPromo[col] = null;
+        } else {
+          let lit = expr.replace(/^['"]|['"]$/g, '');
+          if (lit === '1' || lit === '0') lit = Number(lit);
+          else if (!isNaN(Number(lit)) && lit !== '') lit = Number(lit);
+          newPromo[col] = lit;
+        }
+      });
+    } else {
+      newPromo = {
+        id,
+        code: String(params[0] || '').toUpperCase().trim(),
+        assigned_to: params[1],
+        discount_type: params[2] || 'percentage',
+        discount_value: Number(params[3] || 0),
+        eligible_events: params[4] || 'ALL',
+        starts_at: params[5] || null,
+        expires_at: params[6] || null,
+        max_uses: Number(params[7] || 0),
+        max_uses_per_user: Number(params[8] !== undefined ? params[8] : 1),
+        times_used: Number(params[9] || 0),
+        is_active: Number(params[10] !== undefined ? params[10] : 1),
+        created_at: params[11] || now,
+        updated_at: params[12] || now
+      };
+    }
+    if (newPromo.code) newPromo.code = String(newPromo.code).toUpperCase().trim();
+    if (newPromo.discount_value !== undefined) newPromo.discount_value = Number(newPromo.discount_value);
+    if (newPromo.total_usage_limit !== undefined && newPromo.total_usage_limit !== null) {
+      newPromo.total_usage_limit = Number(newPromo.total_usage_limit);
+      newPromo.max_uses = newPromo.total_usage_limit;
+    } else if (newPromo.max_uses !== undefined && newPromo.max_uses !== null) {
+      newPromo.max_uses = Number(newPromo.max_uses);
+      newPromo.total_usage_limit = newPromo.max_uses;
+    }
+    if (newPromo.per_user_limit !== undefined && newPromo.per_user_limit !== null) {
+      newPromo.per_user_limit = Number(newPromo.per_user_limit);
+      newPromo.max_uses_per_user = newPromo.per_user_limit;
+    } else if (newPromo.max_uses_per_user !== undefined && newPromo.max_uses_per_user !== null) {
+      newPromo.max_uses_per_user = Number(newPromo.max_uses_per_user);
+      newPromo.per_user_limit = newPromo.max_uses_per_user;
+    }
+    if (newPromo.assigned_person && !newPromo.assigned_to) newPromo.assigned_to = newPromo.assigned_person;
+    if (newPromo.assigned_to && !newPromo.assigned_person) newPromo.assigned_person = newPromo.assigned_to;
+    if (newPromo.times_used !== undefined) newPromo.times_used = Number(newPromo.times_used);
+    if (newPromo.is_active !== undefined) newPromo.is_active = Number(newPromo.is_active);
+    list.push(newPromo);
+    localStore.promoCodes = list;
+    saveLocalStore();
+    return { lastID: id, changes: 1 };
+  }
+
+  // 19. Promo Codes Update
+  if (sqlLower.includes('update promo_codes')) {
+    const list = localStore.promoCodes || [];
+    let target = null;
+    if (sqlLower.includes('where id = ?')) {
+      const id = Number(params[params.length - 1]);
+      target = list.find(p => p.id === id);
+    } else if (sqlLower.includes('where upper(code) = upper(?)') || sqlLower.includes('where code = ?')) {
+      const code = String(params[params.length - 1] || '').toUpperCase().trim();
+      target = list.find(p => p.code.toUpperCase() === code);
+    }
+    if (target) {
+      const setMatch = sql.match(/update\s+promo_codes\s+set\s+(.*?)\s+where/is);
+      if (setMatch) {
+        const assignments = setMatch[1].split(',').map(s => s.trim());
+        let pIdx = 0;
+        assignments.forEach(assign => {
+          const parts = assign.split('=').map(s => s.trim());
+          const col = parts[0].toLowerCase();
+          const valExpr = parts[1];
+          if (valExpr === '?') {
+            const v = params[pIdx++];
+            if (['discount_value', 'max_uses', 'total_usage_limit', 'max_uses_per_user', 'per_user_limit', 'times_used', 'is_active'].includes(col)) {
+              target[col] = v !== null && v !== undefined ? Number(v) : 0;
+              if (col === 'total_usage_limit') target.max_uses = target[col];
+              if (col === 'max_uses') target.total_usage_limit = target[col];
+              if (col === 'per_user_limit') target.max_uses_per_user = target[col];
+              if (col === 'max_uses_per_user') target.per_user_limit = target[col];
+            } else if (col === 'code') {
+              target[col] = String(v || '').toUpperCase().trim();
+            } else if (col === 'assigned_person' || col === 'assigned_to') {
+              target.assigned_person = v;
+              target.assigned_to = v;
+            } else {
+              target[col] = v;
+            }
+          } else if (valExpr.toUpperCase() === 'NULL') {
+            target[col] = null;
+            if (col === 'total_usage_limit') target.max_uses = null;
+            if (col === 'assigned_person') target.assigned_to = null;
+          } else {
+            let lit = valExpr.replace(/['"]/g, '');
+            if (lit === '1' || lit === '0') lit = Number(lit);
+            target[col] = lit;
+          }
+        });
+        saveLocalStore();
+      }
+      return { lastID: null, changes: 1 };
+    }
+    return { lastID: null, changes: 0 };
+  }
+
+  // 20. Promo Codes Delete
+  if (sqlLower.includes('delete from promo_codes')) {
+    const list = localStore.promoCodes || [];
+    const id = Number(params[0]);
+    localStore.promoCodes = list.filter(p => p.id !== id);
+    saveLocalStore();
+    return { lastID: null, changes: 1 };
+  }
+
   return { lastID: 1, changes: 1 };
 }
 
@@ -1219,6 +1382,20 @@ function handleLocalGet(sql, params = []) {
     return val !== undefined ? { value: String(val) } : undefined;
   }
 
+  // Promo codes
+  if (sqlLower.includes('from promo_codes')) {
+    const list = localStore.promoCodes || [];
+    if (sqlLower.includes('upper(code) = upper(?)') || sqlLower.includes('code = ?') || sqlLower.includes('lower(code) = lower(?)')) {
+      const code = String(params[0] || '').toUpperCase().trim();
+      return list.find(p => p.code.toUpperCase() === code) || null;
+    }
+    if (sqlLower.includes('id = ?')) {
+      const id = Number(params[0]);
+      return list.find(p => p.id === id) || null;
+    }
+    return list[0] || null;
+  }
+
   // Events count
   if (sqlLower.includes('count(*)') && sqlLower.includes('from events')) {
     return { count: localStore.events.length, c: localStore.events.length };
@@ -1247,6 +1424,14 @@ function handleLocalGet(sql, params = []) {
   // Registrations Count
   if (sqlLower.includes('count(*)') && sqlLower.includes('from registrations')) {
     let list = localStore.registrations;
+    if (sqlLower.includes('promo_code')) {
+      const codeParam = String(params[0] || '').toUpperCase().trim();
+      list = list.filter(r => r.promo_code && String(r.promo_code).toUpperCase() === codeParam);
+      if (sqlLower.includes("reg_status not in ('rejected', 'revoked', 'cancelled')")) {
+        list = list.filter(r => !['REJECTED', 'REVOKED', 'CANCELLED'].includes(r.reg_status));
+      }
+      return { count: list.length, c: list.length };
+    }
     let pIdx = 0;
     if (sqlLower.includes('event_id = ?') && pIdx < params.length) {
       const eventId = params[pIdx++];
@@ -1360,6 +1545,19 @@ function handleLocalAll(sql, params = []) {
     return list.sort((a, b) => b.id - a.id);
   }
 
+  // Promo codes list
+  if (sqlLower.includes('from promo_codes')) {
+    let list = [...(localStore.promoCodes || [])];
+    if (sqlLower.includes('is_active = 1')) {
+      list = list.filter(p => Number(p.is_active) === 1);
+    }
+    if (sqlLower.includes('upper(code) = upper(?)') || sqlLower.includes('code = ?')) {
+      const codeParam = String(params[0] || '').toUpperCase().trim();
+      list = list.filter(p => p.code.toUpperCase() === codeParam);
+    }
+    return list.sort((a, b) => b.id - a.id);
+  }
+
   // Users list
   if (sqlLower.includes('from users')) {
     let list = [...(localStore.users || [])];
@@ -1388,6 +1586,10 @@ function handleLocalAll(sql, params = []) {
   // Registrations list
   if (sqlLower.includes('from registrations')) {
     let list = [...localStore.registrations];
+    if (sqlLower.includes('upper(promo_code) = upper(?)') || sqlLower.includes('promo_code = ?')) {
+      const codeParam = String(params[0] || '').toUpperCase().trim();
+      return list.filter(r => r.promo_code && String(r.promo_code).toUpperCase() === codeParam).sort((a, b) => b.id - a.id);
+    }
     if (sqlLower.includes('user_id = ?')) {
       const userId = Number(params[0]);
       if (sqlLower.includes('user_id is null and email = ?') || sqlLower.includes('email = ?')) {
@@ -1660,6 +1862,12 @@ const initSchema = async () => {
     await addColumnIfNotExists('registrations', 'serial_number INTEGER');
     await addColumnIfNotExists('registrations', 'user_id INTEGER');
     await addColumnIfNotExists('registrations', 'age INTEGER');
+    await addColumnIfNotExists('registrations', 'promo_code TEXT');
+    await addColumnIfNotExists('registrations', 'referrer_name TEXT');
+    await addColumnIfNotExists('registrations', 'original_fee INTEGER');
+    await addColumnIfNotExists('registrations', 'discount_amount INTEGER DEFAULT 0');
+    await addColumnIfNotExists('registrations', 'final_fee INTEGER');
+    await addColumnIfNotExists('registrations', 'promo_code_id INTEGER');
 
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_id ON registrations(registration_id)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_event ON registrations(event_id)`);
@@ -1668,6 +1876,7 @@ const initSchema = async () => {
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_status ON registrations(reg_status)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_otp_verified ON registrations(otp_verified)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_user_id ON registrations(user_id)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_reg_promo_code ON registrations(promo_code)`);
 
     // ── Users Table ───────────────────────────────────────────────────────────
     await rawRun(`
@@ -1688,6 +1897,7 @@ const initSchema = async () => {
         unblocked_by TEXT,
         verification_token TEXT,
         verification_token_expires_at TEXT,
+        instagram TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -1700,10 +1910,33 @@ const initSchema = async () => {
     await addColumnIfNotExists('users', 'blocked_by TEXT');
     await addColumnIfNotExists('users', 'unblocked_at TEXT');
     await addColumnIfNotExists('users', 'unblocked_by TEXT');
+    await addColumnIfNotExists('users', 'instagram TEXT');
 
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_users_blocked ON users(is_blocked)`);
+
+    // ── Promo Codes Table ──────────────────────────────────────────────────────
+    await rawRun(`
+      CREATE TABLE IF NOT EXISTS promo_codes (
+        id SERIAL PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        assigned_to TEXT NOT NULL,
+        discount_type TEXT NOT NULL DEFAULT 'percentage',
+        discount_value NUMERIC NOT NULL DEFAULT 0,
+        eligible_events TEXT DEFAULT 'ALL',
+        starts_at TEXT,
+        expires_at TEXT,
+        max_uses INTEGER DEFAULT 0,
+        max_uses_per_user INTEGER DEFAULT 1,
+        times_used INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_promo_code ON promo_codes(code)`);
+    await rawRun(`CREATE INDEX IF NOT EXISTS idx_promo_active ON promo_codes(is_active)`);
 
     // ── Password Resets Table ──────────────────────────────────────────────────
     await rawRun(`

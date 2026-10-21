@@ -143,7 +143,7 @@
   // ── Tab Navigation ────────────────────────────────────────────────────────────
   window.showTab = function (tabName) {
     if (tabName === 'settings') tabName = 'events';
-    ['overview', 'events', 'registrations', 'pending', 'approved', 'users', 'certificates', 'emailCenter', 'gallery'].forEach(name => {
+    ['overview', 'events', 'registrations', 'pending', 'approved', 'users', 'promoCodes', 'certificates', 'emailCenter', 'gallery'].forEach(name => {
       const el = document.getElementById('tab' + name.charAt(0).toUpperCase() + name.slice(1));
       if (el) el.style.display = 'none';
     });
@@ -160,6 +160,7 @@
     else if (tabName === 'pending') loadFiltered('VERIFIED');
     else if (tabName === 'approved') loadFiltered('APPROVED');
     else if (tabName === 'users') loadUsersTab();
+    else if (tabName === 'promoCodes') loadPromoCodesTab();
     else if (tabName === 'certificates') loadCertificatesTab();
     else if (tabName === 'emailCenter') initEmailCenter();
     else if (tabName === 'gallery') loadAdminGallery();
@@ -314,8 +315,14 @@
             <tbody>
               ${data.registrations.map(r => `
                 <tr>
-                  <td class="name-cell">${escHtml(r.fullName)}</td>
-                  <td class="id-cell">${escHtml(r.registrationId)}</td>
+                  <td class="name-cell">
+                    <div>${escHtml(r.fullName)}</div>
+                    ${r.instagram ? `<div style="font-size:11px; color:#e4ad57; font-weight:normal; margin-top:2px;"><a href="https://instagram.com/${encodeURIComponent(r.instagram)}" target="_blank" rel="noopener" style="color:#e4ad57; text-decoration:none;">📸 @${escHtml(r.instagram)}</a></div>` : ''}
+                  </td>
+                  <td class="id-cell">
+                    <div>${escHtml(r.registrationId)}</div>
+                    ${r.promoCode ? `<div style="font-size:10px; font-family:monospace; background:rgba(228,173,87,0.12); border:1px solid rgba(228,173,87,0.3); color:#e4ad57; border-radius:4px; padding:1px 5px; display:inline-block; margin-top:3px;" title="Referrer: ${escHtml(r.referrerName || 'None')}">🏷️ ${escHtml(r.promoCode)}</div>` : ''}
+                  </td>
                   <td style="font-size:12px;">${escHtml(r.email)}</td>
                   <td style="font-size:12px;">${escHtml(r.category)}</td>
                   <td>${escHtml(r.phone)}</td>
@@ -458,7 +465,12 @@
           <div class="modal-row"><span class="modal-label">Category</span><span class="modal-value">${escHtml(r.category)}</span></div>
           <div class="modal-row"><span class="modal-label">Performance Title</span><span class="modal-value">${escHtml(r.performanceTitle || '—')}</span></div>
           ${r.performanceDescription ? `<div class="modal-row"><span class="modal-label">Description</span><span class="modal-value">${escHtml(r.performanceDescription)}</span></div>` : ''}
-          ${r.instagram ? `<div class="modal-row"><span class="modal-label">Instagram</span><span class="modal-value">@${escHtml(r.instagram)}</span></div>` : ''}
+          ${r.instagram ? `<div class="modal-row"><span class="modal-label">Instagram</span><span class="modal-value"><a href="https://instagram.com/${encodeURIComponent(r.instagram)}" target="_blank" rel="noopener" style="color:#e4ad57; text-decoration:none;">@${escHtml(r.instagram)} ↗</a></span></div>` : ''}
+          ${r.promoCode ? `<div class="modal-row"><span class="modal-label">Promo Code</span><span class="modal-value"><span style="font-family:monospace; background:rgba(228,173,87,0.12); border:1px solid rgba(228,173,87,0.3); color:#e4ad57; border-radius:4px; padding:2px 6px; font-weight:700;">🏷️ ${escHtml(r.promoCode)}</span></span></div>` : ''}
+          ${r.referrerName ? `<div class="modal-row"><span class="modal-label">Referrer</span><span class="modal-value" style="color:#f7eee1; font-weight:700;">${escHtml(r.referrerName)}</span></div>` : ''}
+          ${(r.originalFee !== undefined && r.originalFee !== null) ? `<div class="modal-row"><span class="modal-label">Original Fee</span><span class="modal-value">₹${r.originalFee}</span></div>` : ''}
+          ${r.discountAmount ? `<div class="modal-row"><span class="modal-label">Discount Applied</span><span class="modal-value" style="color:#6edb8c; font-weight:700;">-₹${r.discountAmount}</span></div>` : ''}
+          ${(r.finalFee !== undefined && r.finalFee !== null) ? `<div class="modal-row"><span class="modal-label">Final Payable Fee</span><span class="modal-value" style="font-weight:800; color:#e4ad57;">₹${r.finalFee}</span></div>` : ''}
           <div class="modal-row"><span class="modal-label">Status</span><span class="modal-value"><span class="status-pill status-${r.status}">${formatStatus(r.status)}</span></span></div>
           <div class="modal-row"><span class="modal-label">OTP Verified</span><span class="modal-value" style="color:${r.otpVerified ? '#6edb8c' : '#e26947'}">${r.otpVerified ? '✓ Yes' : '✗ No'}</span></div>
           ${r.otpVerifiedAt ? `<div class="modal-row"><span class="modal-label">Verified At</span><span class="modal-value">${formatDate(r.otpVerifiedAt)}</span></div>` : ''}
@@ -3477,6 +3489,7 @@
             <td>
               <div><a href="mailto:${escapeHtml(u.email)}" style="color:#e4ad57; text-decoration:none;">${escapeHtml(u.email)}</a></div>
               <div style="font-size:11.5px; color:#8e8477; margin-top:2px;">📱 ${escapeHtml(u.phone || '—')}</div>
+              ${u.instagram ? `<div style="font-size:11.5px; color:#e4ad57; margin-top:2px;"><a href="https://instagram.com/${encodeURIComponent(u.instagram)}" target="_blank" rel="noopener" style="color:#e4ad57; text-decoration:none;">📸 @${escapeHtml(u.instagram)} ↗</a></div>` : ''}
             </td>
             <td>
               <div>${escapeHtml(u.city || '—')}</div>
@@ -3618,7 +3631,10 @@
               <td class="id-cell">${r.registrationId}</td>
               <td>${escapeHtml(r.performanceTitle || '—')}</td>
               <td>${escapeHtml(r.category || '—')}</td>
-              <td>₹${r.amount}</td>
+              <td>
+                <div>₹${r.amount}</div>
+                ${r.promoCode ? `<div style="font-size:10px; font-family:monospace; color:#e4ad57;">🏷️ ${escapeHtml(r.promoCode)}</div>` : ''}
+              </td>
               <td>${rStatusBadge}</td>
               <td>${pStatusBadge}</td>
               <td>
@@ -3643,6 +3659,7 @@
             <div style="font-size:20px; font-weight:700; color:#f7eee1; margin-bottom:4px;">${escapeHtml(u.name)}</div>
             <div style="font-size:13px; color:#e4ad57;">✉ ${escapeHtml(u.email)}</div>
             <div style="font-size:13px; color:#8e8477; margin-top:2px;">📱 ${escapeHtml(u.phone || '—')} · 📍 ${escapeHtml(u.city || '—')} · Age: ${u.age || '—'}</div>
+            ${u.instagram ? `<div style="font-size:13px; color:#e4ad57; margin-top:4px;"><a href="https://instagram.com/${encodeURIComponent(u.instagram)}" target="_blank" rel="noopener" style="color:#e4ad57; text-decoration:none;">📸 @${escapeHtml(u.instagram)} ↗</a></div>` : ''}
           </div>
           <div>
             ${statusBadge}
@@ -3763,6 +3780,683 @@
     } catch (err) {
       alert('Network error unblocking user: ' + err.message);
     }
+  };
+
+  // ── Promo Codes & Referrals Management ────────────────────────────────────────
+  let cachedPromoCodes = [];
+  let currentPromoSubtab = 'codes';
+
+  window.switchPromoSubtab = function (subtab) {
+    currentPromoSubtab = subtab;
+    const btnCodes = document.getElementById('subnavBtnPromoCodes');
+    const btnRef = document.getElementById('subnavBtnPromoReferrers');
+    const tabCodes = document.getElementById('promoSubtabCodes');
+    const tabRef = document.getElementById('promoSubtabReferrers');
+
+    if (btnCodes) btnCodes.classList.toggle('active', subtab === 'codes');
+    if (btnRef) btnRef.classList.toggle('active', subtab === 'referrers');
+    if (tabCodes) tabCodes.style.display = subtab === 'codes' ? 'block' : 'none';
+    if (tabRef) tabRef.style.display = subtab === 'referrers' ? 'block' : 'none';
+
+    if (subtab === 'referrers') {
+      loadPromoReferrers();
+    } else {
+      loadPromoCodesTab();
+    }
+  };
+
+  window.loadPromoCodesTab = async function () {
+    const wrapper = document.getElementById('promoCodesTableWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '<div class="empty-state"><p>Loading promo codes…</p></div>';
+
+    try {
+      const res = await adminFetch('/api/admin/promo-codes');
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load promo codes.'}</p></div>`;
+        return;
+      }
+
+      cachedPromoCodes = data.promoCodes || [];
+      const countEl = document.getElementById('promoCodesCount');
+      if (countEl) countEl.textContent = cachedPromoCodes.length;
+
+      // Populate eligible events dropdown in modal
+      populatePromoEligibleEvents();
+
+      filterPromoCodesList();
+    } catch (err) {
+      console.error('[Admin] Error loading promo codes:', err);
+      wrapper.innerHTML = '<div class="empty-state"><p style="color:#e26947;">Network error loading promo codes.</p></div>';
+    }
+  };
+
+  function populatePromoEligibleEvents() {
+    const sel = document.getElementById('promoInputEligibleEvents');
+    if (!sel) return;
+    const currentVal = sel.value || '';
+    let opts = '<option value="">All Events (Universal)</option>';
+    if (Array.isArray(adminEvents)) {
+      adminEvents.forEach(evt => {
+        opts += `<option value="${escapeHtml(evt.slug)}">${escapeHtml(evt.name || evt.title || evt.slug)}</option>`;
+      });
+    }
+    sel.innerHTML = opts;
+    sel.value = currentVal;
+  }
+
+  window.filterPromoCodesList = function () {
+    const search = (document.getElementById('promoSearchInput')?.value || '').trim().toLowerCase();
+    const statusFilter = document.getElementById('promoStatusFilter')?.value || 'ALL';
+    const discountFilter = document.getElementById('promoDiscountFilter')?.value || 'ALL';
+
+    let filtered = cachedPromoCodes.filter(p => {
+      if (search) {
+        const codeMatch = (p.code || '').toLowerCase().includes(search);
+        const refMatch = (p.referrerName || '').toLowerCase().includes(search);
+        if (!codeMatch && !refMatch) return false;
+      }
+      if (statusFilter === 'ACTIVE' && !p.isActive) return false;
+      if (statusFilter === 'INACTIVE' && p.isActive) return false;
+      if (discountFilter !== 'ALL' && p.discountType !== discountFilter) return false;
+      return true;
+    });
+
+    renderPromoCodesTable(filtered);
+  };
+
+  window.renderPromoCodesTable = function (codes) {
+    const wrapper = document.getElementById('promoCodesTableWrapper');
+    if (!wrapper) return;
+
+    if (!codes.length) {
+      wrapper.innerHTML = `
+        <div class="empty-state">
+          <div style="font-size:36px; margin-bottom:10px;">🏷️</div>
+          <p>No promo codes found matching your criteria.</p>
+          <button type="button" class="cta" onclick="openCreatePromoModal()" style="margin-top:12px; font-size:12px;">+ CREATE PROMO CODE</button>
+        </div>
+      `;
+      return;
+    }
+
+    const now = new Date();
+
+    let html = `
+      <div style="overflow-x:auto;">
+        <table class="reg-table">
+          <thead>
+            <tr>
+              <th>Promo Code</th>
+              <th>Assigned Referrer</th>
+              <th>Discount</th>
+              <th>Eligible Events</th>
+              <th>Validity</th>
+              <th>Usage / Limits</th>
+              <th>Revenue &amp; Paid</th>
+              <th>Status</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    codes.forEach(p => {
+      // Determine discount text
+      let discountText = '—';
+      if (p.discountType === 'PERCENTAGE') {
+        discountText = `<span style="font-weight:700; color:#6edb8c;">${p.discountValue}% OFF</span>`;
+      } else if (p.discountType === 'FIXED') {
+        discountText = `<span style="font-weight:700; color:#6edb8c;">₹${p.discountValue} OFF</span>`;
+      } else if (p.discountType === 'NONE') {
+        discountText = `<span style="color:#8e8477; font-weight:600;">Referral Only (₹0)</span>`;
+      }
+
+      // Determine validity text
+      let validityText = 'Always Valid';
+      if (p.startDate && p.endDate) {
+        validityText = `${p.startDate.slice(0, 10)} to ${p.endDate.slice(0, 10)}`;
+      } else if (p.startDate) {
+        validityText = `From ${p.startDate.slice(0, 10)}`;
+      } else if (p.endDate) {
+        validityText = `Until ${p.endDate.slice(0, 10)}`;
+      }
+
+      // Check expired
+      const isExpired = p.endDate && new Date(p.endDate) < now;
+      const isExhausted = p.maxUses > 0 && (p.usageCount || 0) >= p.maxUses;
+
+      let statusBadge = '';
+      if (!p.isActive) {
+        statusBadge = '<span class="status-pill status-REJECTED">INACTIVE</span>';
+      } else if (isExpired) {
+        statusBadge = '<span class="status-pill status-REJECTED">EXPIRED</span>';
+      } else if (isExhausted) {
+        statusBadge = '<span class="status-pill status-REVOKED">EXHAUSTED</span>';
+      } else {
+        statusBadge = '<span class="status-pill status-APPROVED">ACTIVE</span>';
+      }
+
+      // Eligible events text
+      let eventsText = '<span style="color:#8e8477;">All Events</span>';
+      if (Array.isArray(p.eligibleEvents) && p.eligibleEvents.length > 0) {
+        eventsText = `<span class="badge-pill" style="background:#1b1713; color:#e4ad57; border:1px solid #2a231c;">${p.eligibleEvents.join(', ')}</span>`;
+      }
+
+      html += `
+        <tr>
+          <td class="name-cell">
+            <span style="font-family:monospace; font-size:13px; font-weight:800; color:#e4ad57; background:rgba(228,173,87,0.12); padding:3px 8px; border-radius:4px; border:1px solid rgba(228,173,87,0.3); letter-spacing:0.05em;">
+              ${escapeHtml(p.code)}
+            </span>
+          </td>
+          <td>
+            <div style="font-weight:700; color:#f7eee1;">${escapeHtml(p.referrerName || '—')}</div>
+          </td>
+          <td>${discountText}</td>
+          <td>${eventsText}</td>
+          <td style="font-size:11.5px; color:#8e8477;">${validityText}</td>
+          <td>
+            <div style="font-weight:700; color:#f7eee1;">${p.usageCount || 0} / ${p.maxUses > 0 ? p.maxUses : '∞'} used</div>
+            <div style="font-size:11px; color:#8e8477;">Max ${p.perUserLimit || 1} per person</div>
+          </td>
+          <td>
+            <div style="font-weight:700; color:#6edb8c;">₹${p.totalRevenue || 0}</div>
+            <div style="font-size:11px; color:#8e8477;">${p.paidCount || 0} confirmed paid</div>
+          </td>
+          <td>${statusBadge}</td>
+          <td style="text-align:right; white-space:nowrap;">
+            <div style="display:inline-flex; gap:6px;">
+              <button type="button" class="action-btn btn-view" onclick="openPromoRegistrationsModal(${p.id}, '${escapeHtml(p.code)}')">
+                Registrations (${p.usageCount || 0})
+              </button>
+              <button type="button" class="action-btn btn-view" onclick="openEditPromoModalById(${p.id})">
+                Edit
+              </button>
+              <button type="button" class="action-btn ${p.isActive ? 'btn-revoke' : 'btn-approve'}" onclick="togglePromoActive(${p.id}, ${!p.isActive})">
+                ${p.isActive ? 'Deactivate' : 'Activate'}
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    wrapper.innerHTML = html;
+  };
+
+  window.openEditPromoModalById = function (id) {
+    const promo = cachedPromoCodes.find(p => p.id === id);
+    if (promo) openEditPromoModal(promo);
+  };
+
+  window.loadPromoReferrers = async function () {
+    const wrapper = document.getElementById('promoReferrersTableWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '<div class="empty-state"><p>Loading referrer revenue totals…</p></div>';
+
+    try {
+      const res = await adminFetch('/api/admin/promo-codes/referrers');
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load referrers.'}</p></div>`;
+        return;
+      }
+
+      const referrers = data.referrers || [];
+      const countEl = document.getElementById('promoReferrersCount');
+      if (countEl) countEl.textContent = referrers.length;
+
+      // Calculate totals
+      let totalRegs = 0;
+      let totalPaid = 0;
+      let totalRev = 0;
+      let totalDisc = 0;
+
+      referrers.forEach(r => {
+        totalRegs += r.totalRegistrations || 0;
+        totalPaid += r.confirmedPaidRegistrations || 0;
+        totalRev += r.totalRevenue || 0;
+        totalDisc += r.totalDiscountsGiven || 0;
+      });
+
+      const elTotRef = document.getElementById('refTotalReferrers');
+      const elTotReg = document.getElementById('refTotalRegistrations');
+      const elTotPaid = document.getElementById('refTotalPaid');
+      const elTotRev = document.getElementById('refTotalRevenue');
+      const elTotDisc = document.getElementById('refTotalDiscounts');
+
+      if (elTotRef) elTotRef.textContent = referrers.length;
+      if (elTotReg) elTotReg.textContent = totalRegs;
+      if (elTotPaid) elTotPaid.textContent = totalPaid;
+      if (elTotRev) elTotRev.textContent = `₹${totalRev}`;
+      if (elTotDisc) elTotDisc.textContent = `₹${totalDisc}`;
+
+      if (!referrers.length) {
+        wrapper.innerHTML = `
+          <div class="empty-state">
+            <div style="font-size:36px; margin-bottom:10px;">👥</div>
+            <p>No referrer tracking activity recorded yet.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = `
+        <div style="overflow-x:auto;">
+          <table class="reg-table">
+            <thead>
+              <tr>
+                <th>Referrer / Promoter</th>
+                <th>Assigned Promo Codes</th>
+                <th>Total Registrations</th>
+                <th>Confirmed Paid</th>
+                <th>Net Revenue Generated</th>
+                <th>Discounts Given</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      referrers.forEach(r => {
+        const codesList = (r.codes || []).map(c => `
+          <span style="font-family:monospace; font-size:11px; font-weight:700; color:#e4ad57; background:rgba(228,173,87,0.1); border:1px solid rgba(228,173,87,0.3); padding:2px 6px; border-radius:4px; margin-right:4px; display:inline-block;">
+            ${escapeHtml(c)}
+          </span>
+        `).join('');
+
+        html += `
+          <tr>
+            <td class="name-cell">
+              <span style="font-size:14px; font-weight:800; color:#f7eee1;">${escapeHtml(r.referrerName)}</span>
+            </td>
+            <td>${codesList || '<span style="color:#8e8477;">—</span>'}</td>
+            <td><strong style="color:#f7eee1;">${r.totalRegistrations || 0}</strong></td>
+            <td><strong style="color:#6edb8c;">${r.confirmedPaidRegistrations || 0}</strong></td>
+            <td><strong style="color:#6edb8c; font-size:14px;">₹${r.totalRevenue || 0}</strong></td>
+            <td><span style="color:#e26947; font-weight:700;">₹${r.totalDiscountsGiven || 0}</span></td>
+            <td style="text-align:right;">
+              <button type="button" class="action-btn btn-view" onclick="exportRegistrationsCsv({ search: '${escapeHtml(r.referrerName)}' })">
+                📥 Export Referrals CSV
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      wrapper.innerHTML = html;
+
+    } catch (err) {
+      console.error('[Admin] Error loading referrers:', err);
+      wrapper.innerHTML = '<div class="empty-state"><p style="color:#e26947;">Network error loading referrers.</p></div>';
+    }
+  };
+
+  window.onPromoDiscountTypeChange = function () {
+    const type = document.getElementById('promoInputDiscountType')?.value || 'PERCENTAGE';
+    const wrapper = document.getElementById('promoDiscountValueWrapper');
+    const label = document.getElementById('promoDiscountValueLabel');
+    const input = document.getElementById('promoInputDiscountValue');
+
+    if (!wrapper || !label || !input) return;
+
+    if (type === 'NONE') {
+      wrapper.style.display = 'none';
+      input.value = '0';
+      input.required = false;
+    } else {
+      wrapper.style.display = 'block';
+      input.required = true;
+      if (type === 'PERCENTAGE') {
+        label.innerHTML = 'Discount Percentage (%) <span style="color:#e4ad57;">*</span>';
+        input.placeholder = 'e.g. 20 (for 20% off)';
+        input.max = '100';
+      } else {
+        label.innerHTML = 'Discount Amount (₹) <span style="color:#e4ad57;">*</span>';
+        input.placeholder = 'e.g. 50 (for ₹50 off)';
+        input.removeAttribute('max');
+      }
+    }
+  };
+
+  window.openCreatePromoModal = function () {
+    populatePromoEligibleEvents();
+    const modal = document.getElementById('promoCodeModal');
+    const kicker = document.getElementById('promoModalKicker');
+    const heading = document.getElementById('promoModalHeading');
+    const err = document.getElementById('promoFormError');
+
+    if (kicker) kicker.textContent = 'PROMO CODE CREATION';
+    if (heading) heading.textContent = 'Create New Promo Code';
+    if (err) err.textContent = '';
+
+    const editIdEl = document.getElementById('promoEditId');
+    if (editIdEl) editIdEl.value = '';
+
+    const codeEl = document.getElementById('promoInputCode');
+    if (codeEl) { codeEl.value = ''; codeEl.disabled = false; }
+
+    const refEl = document.getElementById('promoInputReferrer');
+    if (refEl) refEl.value = '';
+
+    const typeEl = document.getElementById('promoInputDiscountType');
+    if (typeEl) typeEl.value = 'PERCENTAGE';
+
+    const valEl = document.getElementById('promoInputDiscountValue');
+    if (valEl) valEl.value = '10';
+
+    const evtEl = document.getElementById('promoInputEligibleEvents');
+    if (evtEl) evtEl.value = '';
+
+    const perUserEl = document.getElementById('promoInputPerUserLimit');
+    if (perUserEl) perUserEl.value = '1';
+
+    const maxUsesEl = document.getElementById('promoInputMaxUses');
+    if (maxUsesEl) maxUsesEl.value = '0';
+
+    const activeEl = document.getElementById('promoInputIsActive');
+    if (activeEl) activeEl.checked = true;
+
+    const startEl = document.getElementById('promoInputStartDate');
+    if (startEl) startEl.value = '';
+
+    const endEl = document.getElementById('promoInputEndDate');
+    if (endEl) endEl.value = '';
+
+    onPromoDiscountTypeChange();
+
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.openEditPromoModal = function (p) {
+    populatePromoEligibleEvents();
+    const modal = document.getElementById('promoCodeModal');
+    const kicker = document.getElementById('promoModalKicker');
+    const heading = document.getElementById('promoModalHeading');
+    const err = document.getElementById('promoFormError');
+
+    if (kicker) kicker.textContent = 'PROMO CODE EDITOR';
+    if (heading) heading.textContent = `Edit Promo Code: ${p.code}`;
+    if (err) err.textContent = '';
+
+    const editIdEl = document.getElementById('promoEditId');
+    if (editIdEl) editIdEl.value = p.id;
+
+    const codeEl = document.getElementById('promoInputCode');
+    if (codeEl) { codeEl.value = p.code; codeEl.disabled = true; } // code itself immutable in edit
+
+    const refEl = document.getElementById('promoInputReferrer');
+    if (refEl) refEl.value = p.referrerName || '';
+
+    const typeEl = document.getElementById('promoInputDiscountType');
+    if (typeEl) typeEl.value = p.discountType;
+
+    const valEl = document.getElementById('promoInputDiscountValue');
+    if (valEl) valEl.value = p.discountValue;
+
+    const evtEl = document.getElementById('promoInputEligibleEvents');
+    if (evtEl) evtEl.value = (p.eligibleEvents && p.eligibleEvents[0]) || '';
+
+    const perUserEl = document.getElementById('promoInputPerUserLimit');
+    if (perUserEl) perUserEl.value = p.perUserLimit || 1;
+
+    const maxUsesEl = document.getElementById('promoInputMaxUses');
+    if (maxUsesEl) maxUsesEl.value = p.maxUses || 0;
+
+    const activeEl = document.getElementById('promoInputIsActive');
+    if (activeEl) activeEl.checked = p.isActive;
+
+    const startEl = document.getElementById('promoInputStartDate');
+    if (startEl) startEl.value = p.startDate ? p.startDate.slice(0, 10) : '';
+
+    const endEl = document.getElementById('promoInputEndDate');
+    if (endEl) endEl.value = p.endDate ? p.endDate.slice(0, 10) : '';
+
+    onPromoDiscountTypeChange();
+
+    if (modal) modal.style.display = 'flex';
+  };
+
+  window.closePromoModal = function () {
+    const modal = document.getElementById('promoCodeModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.submitPromoCodeForm = async function (e) {
+    if (e) e.preventDefault();
+
+    const err = document.getElementById('promoFormError');
+    const btn = document.getElementById('btnSavePromo');
+    if (err) err.textContent = '';
+
+    const editId = document.getElementById('promoEditId')?.value;
+    const code = (document.getElementById('promoInputCode')?.value || '').trim();
+    const referrerName = (document.getElementById('promoInputReferrer')?.value || '').trim();
+    const discountType = document.getElementById('promoInputDiscountType')?.value || 'PERCENTAGE';
+    const discountValue = parseFloat(document.getElementById('promoInputDiscountValue')?.value || '0');
+    const eligibleEvent = document.getElementById('promoInputEligibleEvents')?.value || '';
+    const perUserLimit = parseInt(document.getElementById('promoInputPerUserLimit')?.value || '1', 10);
+    const maxUses = parseInt(document.getElementById('promoInputMaxUses')?.value || '0', 10);
+    const isActive = !!document.getElementById('promoInputIsActive')?.checked;
+    const startDate = document.getElementById('promoInputStartDate')?.value || null;
+    const endDate = document.getElementById('promoInputEndDate')?.value || null;
+
+    if (!code) {
+      if (err) err.textContent = 'Please enter a promo code.';
+      return;
+    }
+
+    if (discountType !== 'NONE' && (isNaN(discountValue) || discountValue <= 0)) {
+      if (err) err.textContent = 'Please enter a valid discount value greater than 0.';
+      return;
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      const payload = {
+        code,
+        referrerName,
+        discountType,
+        discountValue,
+        eligibleEvents: eligibleEvent ? [eligibleEvent] : [],
+        perUserLimit,
+        maxUses,
+        isActive,
+        startDate,
+        endDate
+      };
+
+      let url = '/api/admin/promo-codes';
+      let method = 'POST';
+
+      if (editId) {
+        url = `/api/admin/promo-codes/${editId}`;
+        method = 'PUT';
+      }
+
+      const res = await adminFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (err) err.textContent = data.error || 'Failed to save promo code.';
+        return;
+      }
+
+      closePromoModal();
+      await loadPromoCodesTab();
+    } catch (ex) {
+      if (err) err.textContent = 'Network error saving promo code: ' + ex.message;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Save Promo Code'; }
+    }
+  };
+
+  window.togglePromoActive = async function (id, newStatus) {
+    try {
+      const res = await adminFetch(`/api/admin/promo-codes/${id}/toggle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: newStatus })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to update promo status: ' + (data.error || 'Server error'));
+        return;
+      }
+      await loadPromoCodesTab();
+    } catch (err) {
+      alert('Network error updating promo status: ' + err.message);
+    }
+  };
+
+  window.openPromoRegistrationsModal = async function (promoId, promoCode) {
+    const modal = document.getElementById('promoRegistrationsModal');
+    const titleEl = document.getElementById('promoRegsModalTitle');
+    const summaryEl = document.getElementById('promoRegsSummary');
+    const wrapper = document.getElementById('promoRegsTableWrapper');
+
+    if (!modal || !wrapper) return;
+    if (titleEl) titleEl.textContent = `Registrations Attributed to: ${promoCode}`;
+    if (summaryEl) summaryEl.innerHTML = '';
+    wrapper.innerHTML = '<div class="empty-state"><p>Loading registrations for promo code…</p></div>';
+    modal.style.display = 'flex';
+
+    try {
+      const res = await adminFetch(`/api/admin/promo-codes/${promoId}/registrations`);
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load registrations.'}</p></div>`;
+        return;
+      }
+
+      const summary = data.summary || {};
+      const regs = data.registrations || [];
+
+      if (summaryEl) {
+        summaryEl.innerHTML = `
+          <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+            <div class="stat-label">Total Uses</div>
+            <div class="stat-value" style="font-size:22px;">${summary.totalRegistrations || 0}</div>
+          </div>
+          <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+            <div class="stat-label">Confirmed Paid</div>
+            <div class="stat-value green" style="font-size:22px;">${summary.paidRegistrations || 0}</div>
+          </div>
+          <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+            <div class="stat-label">Attributed Revenue</div>
+            <div class="stat-value green" style="font-size:22px;">₹${summary.totalRevenue || 0}</div>
+          </div>
+          <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+            <div class="stat-label">Total Discounts</div>
+            <div class="stat-value orange" style="font-size:22px;">₹${summary.totalDiscounts || 0}</div>
+          </div>
+        `;
+      }
+
+      if (!regs.length) {
+        wrapper.innerHTML = `
+          <div class="empty-state">
+            <p>No registrations have used this promo code yet.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = `
+        <div style="overflow-x:auto;">
+          <table class="reg-table">
+            <thead>
+              <tr>
+                <th>Registration ID</th>
+                <th>Participant</th>
+                <th>Contact</th>
+                <th>Event</th>
+                <th>Fee Breakdown</th>
+                <th>Payment</th>
+                <th>Date</th>
+                <th>Pass</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      regs.forEach(r => {
+        let pStatus = '';
+        if (r.paymentStatus === 'PAID') pStatus = `<span style="color:#6edb8c; font-weight:700;">PAID</span>`;
+        else if (r.paymentStatus === 'SUBMITTED') pStatus = `<span style="color:#ffd078; font-weight:700;">SUBMITTED</span>`;
+        else pStatus = `<span style="color:#8e8477;">PENDING</span>`;
+
+        html += `
+          <tr>
+            <td class="id-cell">${r.registrationId}</td>
+            <td class="name-cell">
+              <div>${escapeHtml(r.fullName)}</div>
+              ${r.instagram ? `<div style="font-size:11px; color:#e4ad57;">📸 @${escapeHtml(r.instagram)}</div>` : ''}
+            </td>
+            <td style="font-size:12px;">
+              <div>${escapeHtml(r.email)}</div>
+              <div style="color:#8e8477; font-size:11px;">${escapeHtml(r.phone || '—')}</div>
+            </td>
+            <td><span class="badge-pill" style="background:#1b1713; color:#f7eee1; border:1px solid #2a231c;">${escapeHtml(r.eventSlug || '—')}</span></td>
+            <td>
+              <div style="font-size:12px;">Original: ₹${r.originalFee !== undefined ? r.originalFee : '—'}</div>
+              <div style="font-size:11px; color:#6edb8c;">Discount: -₹${r.discountAmount || 0}</div>
+              <div style="font-weight:800; color:#e4ad57;">Final: ₹${r.finalFee !== undefined ? r.finalFee : '—'}</div>
+            </td>
+            <td>${pStatus}</td>
+            <td style="font-size:11px; color:#8e8477;">${r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-IN') : '—'}</td>
+            <td>
+              <a href="/registration/${r.registrationId}" target="_blank" class="action-btn btn-view" style="text-decoration:none; display:inline-block; font-size:11px; padding:4px 8px;">
+                Pass ↗
+              </a>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      wrapper.innerHTML = html;
+
+    } catch (err) {
+      console.error('[Admin] Error opening promo registrations:', err);
+      wrapper.innerHTML = '<div class="empty-state"><p style="color:#e26947;">Network error loading registrations.</p></div>';
+    }
+  };
+
+  window.closePromoRegistrationsModal = function () {
+    const modal = document.getElementById('promoRegistrationsModal');
+    if (modal) modal.style.display = 'none';
   };
 
   // ── Init ──────────────────────────────────────────────────────────────────────

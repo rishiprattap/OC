@@ -137,19 +137,42 @@ router.post('/verify', async (req, res) => {
       });
     }
 
-    // OTP verified — update registration status
-    const now = new Date().toISOString();
-    await run(
-      `UPDATE registrations
-       SET otp_verified = 1,
-           otp_verified_at = ?,
-           reg_status = 'VERIFIED',
-           updated_at = ?
-       WHERE registration_id = ?`,
-      [now, now, cleanRegId]
+    // Fetch registration before status update to check fee
+    const preReg = await get(
+      `SELECT * FROM registrations WHERE registration_id = ?`,
+      [cleanRegId]
     );
 
-    // Fetch updated registration with actual event details for confirmation email
+    const isFree = preReg && (Number(preReg.final_fee !== null && preReg.final_fee !== undefined ? preReg.final_fee : preReg.amount) === 0);
+    const now = new Date().toISOString();
+
+    if (isFree) {
+      await run(
+        `UPDATE registrations
+         SET otp_verified = 1,
+             otp_verified_at = ?,
+             reg_status = 'APPROVED',
+             payment_status = 'PAID',
+             payment_verified_by = 'PROMO_FREE',
+             approved_at = ?,
+             approved_by = 'AUTO_PROMO_FREE',
+             updated_at = ?
+         WHERE registration_id = ?`,
+        [now, now, now, cleanRegId]
+      );
+    } else {
+      await run(
+        `UPDATE registrations
+         SET otp_verified = 1,
+             otp_verified_at = ?,
+             reg_status = 'VERIFIED',
+             updated_at = ?
+         WHERE registration_id = ?`,
+        [now, now, cleanRegId]
+      );
+    }
+
+    // Fetch updated registration with actual event details for confirmation/approval email
     const reg = await get(
       `SELECT * FROM registrations WHERE registration_id = ?`,
       [cleanRegId]
@@ -165,45 +188,69 @@ router.post('/verify', async (req, res) => {
         regEvent = await getActiveEvent();
       }
 
-      // Avoid duplicate confirmation emails if already recorded
-      if (!reg.registration_email_sent_at) {
+      const eventPayload = {
+        title: regEvent?.title || regEvent?.name || config.EVENT.title,
+        date: regEvent?.event_date || config.EVENT.date,
+        time: regEvent?.start_time ? (regEvent?.end_time ? `${regEvent.start_time} – ${regEvent.end_time}` : regEvent.start_time) : config.EVENT.time,
+        venue: regEvent?.venue_name || 'Online (Google Meet)',
+        meetLink: regEvent?.meet_link || ''
+      };
+
+      if (isFree) {
         try {
-          await emailService.sendRegistrationConfirmationEmail({
+          await emailService.sendApprovalEmail({
             registrationId: cleanRegId,
             email: cleanEmail,
             name: reg.full_name,
-            category: reg.category,
-            performanceTitle: reg.performance_title,
-            event: {
-              title: regEvent?.title || regEvent?.name || config.EVENT.title,
-              date: regEvent?.event_date || config.EVENT.date,
-              time: regEvent?.start_time ? (regEvent?.end_time ? `${regEvent.start_time} – ${regEvent.end_time}` : regEvent.start_time) : config.EVENT.time,
-              venue: regEvent?.venue_name || 'Online (Google Meet)'
-            }
+            event: eventPayload
           });
           await run(
-            `UPDATE registrations SET registration_email_sent_at = ? WHERE registration_id = ?`,
+            `UPDATE registrations SET approval_email_sent_at = ? WHERE registration_id = ?`,
             [new Date().toISOString(), cleanRegId]
           );
           confirmationEmailSent = true;
         } catch (err) {
-          console.error('[OTP] Failed to send confirmation email:', err.message);
-          await run(
-            `UPDATE registrations SET last_email_error = ? WHERE registration_id = ?`,
-            [err.message, cleanRegId]
-          ).catch(() => {});
+          console.error('[OTP] Failed to send free approval email:', err.message);
         }
       } else {
-        confirmationEmailSent = true;
+        // Standard flow: send registration confirmation awaiting payment
+        if (!reg.registration_email_sent_at) {
+          try {
+            await emailService.sendRegistrationConfirmationEmail({
+              registrationId: cleanRegId,
+              email: cleanEmail,
+              name: reg.full_name,
+              category: reg.category,
+              performanceTitle: reg.performance_title,
+              event: eventPayload
+            });
+            await run(
+              `UPDATE registrations SET registration_email_sent_at = ? WHERE registration_id = ?`,
+              [new Date().toISOString(), cleanRegId]
+            );
+            confirmationEmailSent = true;
+          } catch (err) {
+            console.error('[OTP] Failed to send confirmation email:', err.message);
+            await run(
+              `UPDATE registrations SET last_email_error = ? WHERE registration_id = ?`,
+              [err.message, cleanRegId]
+            ).catch(() => {});
+          }
+        } else {
+          confirmationEmailSent = true;
+        }
       }
     }
 
     return res.json({
       success: true,
-      message: 'Email verified successfully. Your registration is confirmed!',
+      message: isFree 
+        ? 'Email verified successfully! Your free registration is confirmed and approved.'
+        : 'Email verified successfully. Your registration is confirmed!',
       registrationId: cleanRegId,
       verificationToken: result.verificationToken,
-      status: 'VERIFIED',
+      status: isFree ? 'APPROVED' : 'VERIFIED',
+      isFree,
       emailSent: confirmationEmailSent
     });
 

@@ -322,6 +322,9 @@
           const ageInput = document.getElementById('age');
           if (ageInput && !ageInput.value && loggedInUser.age) ageInput.value = loggedInUser.age;
 
+          const igInput = document.getElementById('instagram');
+          if (igInput && !igInput.value && loggedInUser.instagram) igInput.value = loggedInUser.instagram;
+
           if (submitBtnText) {
             submitBtnText.textContent = 'PROCEED TO PAYMENT';
           }
@@ -361,6 +364,7 @@
   let otpExpiresAt = null;
   let otpExpiryTimer = null;
   let resendCooldownTimer = null;
+  let appliedPromoInfo = null;
 
   // ── Alert Helpers ─────────────────────────────────────────────────────────────
   function showError(msg) {
@@ -410,9 +414,44 @@
       startResendCooldown(60);
     } else if (step === 3) {
       if (step3Card) step3Card.style.display = 'block';
-      const feeLabel = eventFee > 0 ? ('₹' + eventFee) : 'Free';
-      if (pageHeading) pageHeading.innerHTML = `Complete Entry<br><em>${feeLabel} Payment</em>`;
-      if (pageSubheading) pageSubheading.textContent = 'Scan the UPI QR code, make the payment, and upload your payment proof screenshot with the UTR number.';
+      const effectiveFee = appliedPromoInfo ? appliedPromoInfo.finalFee : eventFee;
+      const isFree = effectiveFee === 0;
+
+      const feeLabel = effectiveFee > 0 ? ('₹' + effectiveFee) : 'Free';
+      if (pageHeading) pageHeading.innerHTML = isFree ? 'Confirm Free<br><em>Registration</em>' : `Complete Entry<br><em>${feeLabel} Payment</em>`;
+      if (pageSubheading) pageSubheading.textContent = isFree
+        ? 'Your promo discount has been applied. Click confirm to complete your registration.'
+        : 'Scan the UPI QR code, make the payment, and upload your payment proof screenshot with the UTR number.';
+
+      const step3PillText = document.getElementById('step3PillText');
+      if (step3PillText) step3PillText.textContent = isFree ? 'Free Pass' : `${feeLabel} Payment`;
+
+      const step3FeeHeading = document.getElementById('step3FeeHeading');
+      if (step3FeeHeading) step3FeeHeading.textContent = feeLabel;
+
+      const step3FeeDesc = document.getElementById('step3FeeDesc');
+      if (step3FeeDesc) step3FeeDesc.textContent = feeLabel;
+
+      const step3FeeScan = document.getElementById('step3FeeScan');
+      if (step3FeeScan) step3FeeScan.textContent = feeLabel;
+
+      const upiPaymentGrid = document.getElementById('upiPaymentGrid');
+      const zeroFeeBox = document.getElementById('zeroFeeBox');
+
+      if (isFree) {
+        if (upiPaymentGrid) upiPaymentGrid.style.display = 'none';
+        if (zeroFeeBox) {
+          zeroFeeBox.style.display = 'block';
+          const zfOrig = document.getElementById('zeroFeeOriginal');
+          if (zfOrig) zfOrig.textContent = `₹${appliedPromoInfo?.originalFee || eventFee}`;
+          const zfDisc = document.getElementById('zeroFeeDiscount');
+          if (zfDisc) zfDisc.textContent = `-₹${appliedPromoInfo?.discountAmount || eventFee} (100% OFF)`;
+        }
+      } else {
+        if (zeroFeeBox) zeroFeeBox.style.display = 'none';
+        if (upiPaymentGrid) upiPaymentGrid.style.display = 'grid';
+      }
+
       if (paymentPerformerName) paymentPerformerName.textContent = activeName || '—';
       if (paymentRegIdDisplay) paymentRegIdDisplay.textContent = activeRegistrationId || '—';
       clearTimers();
@@ -632,6 +671,159 @@
     });
   }
 
+  // ── Promo Code Handler ────────────────────────────────────────────────────────
+  const promoCodeInput = document.getElementById('promoCodeInput');
+  const applyPromoBtn = document.getElementById('applyPromoBtn');
+  const promoFeedbackBox = document.getElementById('promoFeedbackBox');
+
+  async function handleApplyPromo() {
+    clearAlerts();
+    const rawCode = (promoCodeInput?.value || '').trim();
+    if (!rawCode) {
+      if (promoFeedbackBox) {
+        promoFeedbackBox.style.display = 'block';
+        promoFeedbackBox.style.background = 'rgba(226, 105, 71, 0.1)';
+        promoFeedbackBox.style.border = '1px solid rgba(226, 105, 71, 0.35)';
+        promoFeedbackBox.style.color = '#ff8566';
+        promoFeedbackBox.innerHTML = 'Please enter a promo code.';
+      }
+      return;
+    }
+
+    const applyBtnText = document.getElementById('applyPromoBtnText');
+    if (applyPromoBtn) applyPromoBtn.disabled = true;
+    if (applyBtnText) applyBtnText.textContent = 'CHECKING…';
+
+    try {
+      const email = (document.getElementById('email')?.value || '').trim();
+      const res = await fetch('/api/registrations/validate-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: rawCode,
+          eventSlug: currentEvent ? (currentEvent.slug || currentEvent.id) : undefined,
+          email
+        })
+      });
+      const data = await res.json();
+
+      if (applyPromoBtn) applyPromoBtn.disabled = false;
+      if (applyBtnText) applyBtnText.textContent = 'APPLY';
+
+      if (!res.ok || !data.success || !data.valid) {
+        appliedPromoInfo = null;
+        if (promoFeedbackBox) {
+          promoFeedbackBox.style.display = 'block';
+          promoFeedbackBox.style.background = 'rgba(226, 105, 71, 0.1)';
+          promoFeedbackBox.style.border = '1px solid rgba(226, 105, 71, 0.35)';
+          promoFeedbackBox.style.color = '#ff8566';
+          promoFeedbackBox.innerHTML = `✕ ${escapeHtml(data.error || 'Invalid promo code.')}`;
+        }
+        return;
+      }
+
+      appliedPromoInfo = data;
+      if (promoFeedbackBox) {
+        promoFeedbackBox.style.display = 'block';
+        promoFeedbackBox.style.background = 'rgba(110, 219, 140, 0.1)';
+        promoFeedbackBox.style.border = '1px solid rgba(110, 219, 140, 0.4)';
+        promoFeedbackBox.style.color = '#6edb8c';
+
+        const discountText = data.discountAmount > 0 
+          ? `<span style="color:#6edb8c; font-weight:700;">-₹${data.discountAmount}</span> (${data.discountType === 'percentage' ? data.discountValue + '% OFF' : 'Flat Discount'})`
+          : '<span style="color:#e4ad57;">No Discount (Referral Tracking Only)</span>';
+        const finalPayableText = data.finalFee === 0 
+          ? '<span style="color:#6edb8c; font-weight:800; font-size:14px;">₹0 (Free Entry)</span>'
+          : `<span style="color:#f7eee1; font-weight:800; font-size:14px;">₹${data.finalFee}</span>`;
+        const refNote = data.assignedPerson ? `<div style="font-size:11.5px; color:#d5cbbd; margin-top:4px;">Referrer: <strong>${escapeHtml(data.assignedPerson)}</strong></div>` : '';
+
+        promoFeedbackBox.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <strong style="color:#6edb8c; font-size:13px;">✓ Code ${escapeHtml(data.code)} Applied!</strong>
+            <button type="button" id="removePromoBtn" style="background:none; border:none; color:#8e8477; font-size:11px; cursor:pointer; text-decoration:underline;">Remove</button>
+          </div>
+          <div style="font-size:12px; color:#d5cbbd; margin-top:2px;">
+            Original: <span style="text-decoration:line-through; color:#8e8477;">₹${data.originalFee}</span> · Discount: ${discountText}
+          </div>
+          <div style="font-size:13px; margin-top:4px;">
+            Final Payable: ${finalPayableText}
+          </div>
+          ${refNote}
+        `;
+
+        document.getElementById('removePromoBtn')?.addEventListener('click', () => {
+          appliedPromoInfo = null;
+          if (promoCodeInput) promoCodeInput.value = '';
+          if (promoFeedbackBox) promoFeedbackBox.style.display = 'none';
+        });
+      }
+
+    } catch (err) {
+      console.error('[Promo] Validation error:', err);
+      if (applyPromoBtn) applyPromoBtn.disabled = false;
+      if (applyBtnText) applyBtnText.textContent = 'APPLY';
+      if (promoFeedbackBox) {
+        promoFeedbackBox.style.display = 'block';
+        promoFeedbackBox.style.background = 'rgba(226, 105, 71, 0.1)';
+        promoFeedbackBox.style.border = '1px solid rgba(226, 105, 71, 0.35)';
+        promoFeedbackBox.style.color = '#ff8566';
+        promoFeedbackBox.innerHTML = 'Network error checking code. Please try again.';
+      }
+    }
+  }
+
+  if (applyPromoBtn) {
+    applyPromoBtn.addEventListener('click', handleApplyPromo);
+  }
+  if (promoCodeInput) {
+    promoCodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleApplyPromo();
+      }
+    });
+  }
+
+  // ── Confirm Free Registration Handler ─────────────────────────────────────────
+  const confirmFreeBtn = document.getElementById('confirmFreeBtn');
+  if (confirmFreeBtn) {
+    confirmFreeBtn.addEventListener('click', async () => {
+      clearAlerts();
+      confirmFreeBtn.disabled = true;
+      const btnText = document.getElementById('confirmFreeBtnText');
+      if (btnText) btnText.textContent = 'CONFIRMING…';
+
+      try {
+        const res = await fetch('/api/payments/confirm-free', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ registrationId: activeRegistrationId })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          showError(data.error || 'Failed to confirm registration.');
+          confirmFreeBtn.disabled = false;
+          if (btnText) btnText.textContent = 'CONFIRM FREE REGISTRATION';
+          return;
+        }
+
+        if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
+        if (confirmedName) confirmedName.textContent = activeName;
+        if (confirmedUtr) confirmedUtr.textContent = appliedPromoInfo?.code ? `PROMO: ${appliedPromoInfo.code}` : 'FREE PASS';
+        if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
+
+        goToStep(4);
+
+      } catch (err) {
+        console.error('[Free Confirm] Error:', err);
+        showError('Network error while confirming. Please try again.');
+        confirmFreeBtn.disabled = false;
+        if (btnText) btnText.textContent = 'CONFIRM FREE REGISTRATION';
+      }
+    });
+  }
+
   // ── Step 1: Submit Details Form ───────────────────────────────────────────────
   if (regForm) {
     regForm.addEventListener('submit', async (e) => {
@@ -644,10 +836,11 @@
       const city = (document.getElementById('city')?.value || '').trim();
       const ageVal = (document.getElementById('age')?.value || '').trim();
       const category = (document.getElementById('category')?.value || '').trim();
-      const instagram = (document.getElementById('instagram')?.value || '').trim().replace(/^@/, '');
+      const instagram = (document.getElementById('instagram')?.value || '').trim();
       const performanceTitle = (document.getElementById('performanceTitle')?.value || '').trim();
       const performanceDescription = (document.getElementById('performanceDescription')?.value || '').trim();
       const terms = document.getElementById('terms')?.checked;
+      const promoVal = (appliedPromoInfo?.code || document.getElementById('promoCodeInput')?.value || '').trim();
 
       // Validation
       if (fullName.length < 2) return showError('Please enter your full name.');
@@ -665,6 +858,7 @@
         const payload = {
           fullName, phone, email, city, category, instagram,
           performanceTitle, performanceDescription, terms,
+          promoCode: promoVal || undefined,
           age: ageVal ? parseInt(ageVal, 10) : undefined,
           eventId: currentEvent ? (currentEvent.slug || currentEvent.id) : undefined
         };
@@ -707,11 +901,21 @@
         activeEmail = email;
         activeName = fullName;
 
-        // Returning authenticated user: skip OTP directly to Payment proof
+        // Returning authenticated user: skip OTP directly to Payment proof or Completed
         if (data.skipOtp) {
           activeVerificationToken = data.verificationToken;
           submitBtn.disabled = false;
           submitBtnText.textContent = 'PROCEED TO PAYMENT';
+
+          if (data.isFree || data.status === 'APPROVED') {
+            if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
+            if (confirmedName) confirmedName.textContent = activeName;
+            if (confirmedUtr) confirmedUtr.textContent = data.promoCode ? `PROMO: ${data.promoCode}` : 'FREE PASS';
+            if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
+            goToStep(4);
+            return;
+          }
+
           goToStep(3);
           return;
         }
@@ -783,7 +987,16 @@
       setOTPSuccess();
       activeVerificationToken = data.verificationToken || null;
 
-      // Advance directly to Step 3: ₹79 Payment & Screenshot Submission
+      if (data.isFree || data.status === 'APPROVED') {
+        if (confirmedRegId) confirmedRegId.textContent = activeRegistrationId;
+        if (confirmedName) confirmedName.textContent = activeName;
+        if (confirmedUtr) confirmedUtr.textContent = appliedPromoInfo?.code ? `PROMO: ${appliedPromoInfo.code}` : 'FREE PASS';
+        if (viewPassLink) viewPassLink.href = `/registration/${activeRegistrationId}`;
+        goToStep(4);
+        return;
+      }
+
+      // Advance directly to Step 3: Payment
       goToStep(3);
 
     } catch (err) {

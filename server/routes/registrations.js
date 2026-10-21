@@ -11,6 +11,7 @@ const { run, get, getSetting, getActiveEvent, getEventBySlug } = require('../db'
 const config = require('../config');
 const otpService = require('../services/otp');
 const emailService = require('../services/email');
+const { normalizeInstagramHandle, validatePromoCode, calculateDiscount, normalizePromoCode } = require('../services/promo');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,8 @@ router.post('/', async (req, res) => {
     const {
       fullName, phone, email, city, category,
       instagram, performanceTitle, performanceDescription, terms,
-      eventId: requestedEventId, eventSlug, age
+      eventId: requestedEventId, eventSlug, age,
+      promoCode, promo_code
     } = req.body;
 
     // Check if user is authenticated via session
@@ -97,8 +99,8 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const cleanCity = String(effectiveCity || '').trim();
-    if (!cleanCity || cleanCity.length < 2) {
+    const cleanCity = String(effectiveCity || 'New Delhi').trim();
+    if (city !== undefined && (!cleanCity || cleanCity.length < 2)) {
       return res.status(400).json({ success: false, error: 'Please enter your city.' });
     }
 
@@ -110,7 +112,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please enter a title for your performance.' });
     }
 
-    if (!terms) {
+    if (terms !== undefined && !terms) {
       return res.status(400).json({ success: false, error: 'You must agree to the event guidelines and terms.' });
     }
 
@@ -172,15 +174,54 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Registration is currently closed.' });
     }
 
+    const incomingPromo = (promoCode || promo_code || '').trim();
+
+    // ── Instagram Handle Normalization ─────────────────────────────────────────
+    const rawInstagram = instagram !== undefined ? instagram : (loggedInUser ? loggedInUser.instagram : '');
+    const cleanInstagram = normalizeInstagramHandle(rawInstagram);
+    if (loggedInUser && !loggedInUser.instagram && cleanInstagram) {
+      await run(`UPDATE users SET instagram = ? WHERE id = ?`, [cleanInstagram, loggedInUser.id]).catch(() => {});
+    }
+
+    // ── Validate Promo Code & Calculate Fee ───────────────────────────────────
+    let promoValidation = null;
+    let originalFee = eventAmount;
+    let discountAmount = 0;
+    let finalFee = eventAmount;
+    let appliedPromo = null;
+
+    if (incomingPromo) {
+      promoValidation = await validatePromoCode({
+        code: incomingPromo,
+        eventSlug: eventId,
+        email: cleanEmail,
+        userId: targetUserId,
+        currentRegId: null
+      });
+
+      if (!promoValidation.valid) {
+        return res.status(400).json({ success: false, error: promoValidation.error });
+      }
+
+      appliedPromo = promoValidation.promo;
+      const discountCalc = calculateDiscount(appliedPromo, originalFee);
+      originalFee = discountCalc.originalFee;
+      discountAmount = discountCalc.discountAmount;
+      finalFee = discountCalc.finalFee;
+    }
+
+    const appliedPromoCode = appliedPromo ? appliedPromo.code : null;
+    const appliedPromoId = appliedPromo ? appliedPromo.id : null;
+    const appliedReferrer = appliedPromo ? (appliedPromo.assigned_person || null) : null;
+
     const cleanFullName = effectiveName.trim();
     const cleanCategory = category.trim();
-    const cleanInstagram = (instagram || '').trim().replace(/^@/, '');
     const cleanTitle = performanceTitle.trim();
     const cleanDesc = (performanceDescription || '').trim();
     const now = new Date().toISOString();
 
     // ── Duplicate check ───────────────────────────────────────────────────────
-    // Block if already APPROVED or VERIFIED with payment proof for this email/user and this event
+    // Block if already APPROVED or VERIFIED for this email/user and this event
     const existing = await get(
       `SELECT * FROM registrations WHERE event_id = ? AND (email = ? ${targetUserId ? 'OR user_id = ?' : ''}) AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
       targetUserId ? [eventId, cleanEmail, targetUserId] : [eventId, cleanEmail]
@@ -200,10 +241,21 @@ router.post('/', async (req, res) => {
 
     if (loggedInUser) {
       // Returning user flow: already authenticated with verified account
-      const pendingOrExisting = existing || await get(
-        `SELECT * FROM registrations WHERE event_id = ? AND (user_id = ? OR email = ?) ORDER BY id DESC LIMIT 1`,
-        [eventId, targetUserId, cleanEmail]
-      );
+      const requestedRegId = (req.body.registrationId || '').trim().toUpperCase();
+      let pendingOrExisting = null;
+      if (requestedRegId) {
+        pendingOrExisting = await get(
+          `SELECT * FROM registrations WHERE registration_id = ? AND (user_id = ? OR email = ?)`,
+          [requestedRegId, targetUserId, cleanEmail]
+        );
+      }
+
+      const isFree = finalFee === 0;
+      const finalRegStatus = isFree ? 'APPROVED' : 'VERIFIED';
+      const finalPaymentStatus = isFree ? 'PAID' : 'PENDING';
+      const finalPaymentVerifiedBy = isFree ? 'PROMO_FREE' : null;
+      const finalApprovedAt = isFree ? now : null;
+      const finalApprovedBy = isFree ? 'AUTO_PROMO_FREE' : null;
 
       if (pendingOrExisting && pendingOrExisting.reg_status !== 'APPROVED' && !pendingOrExisting.transaction_id) {
         regId = pendingOrExisting.registration_id;
@@ -211,11 +263,22 @@ router.post('/', async (req, res) => {
           `UPDATE registrations SET
              full_name = ?, phone = ?, city = ?, category = ?,
              instagram = ?, performance_title = ?, performance_description = ?,
-             amount = ?, user_id = ?, age = ?, otp_verified = 1, reg_status = 'VERIFIED',
-             updated_at = ?
+             amount = ?, original_fee = ?, discount_amount = ?, final_fee = ?,
+             promo_code = ?, promo_code_id = ?, referrer_name = ?,
+             user_id = ?, age = ?, otp_verified = 1,
+             reg_status = ?, payment_status = ?, payment_verified_by = ?,
+             approved_at = ?, approved_by = ?, updated_at = ?
            WHERE id = ?`,
-          [cleanFullName, cleanPhone, cleanCity, cleanCategory,
-           cleanInstagram, cleanTitle, cleanDesc, eventAmount, targetUserId, effectiveAge, now, pendingOrExisting.id]
+          [
+            cleanFullName, cleanPhone, cleanCity, cleanCategory,
+            cleanInstagram, cleanTitle, cleanDesc,
+            finalFee, originalFee, discountAmount, finalFee,
+            appliedPromoCode, appliedPromoId, appliedReferrer,
+            targetUserId, effectiveAge,
+            finalRegStatus, finalPaymentStatus, finalPaymentVerifiedBy,
+            finalApprovedAt, finalApprovedBy, now,
+            pendingOrExisting.id
+          ]
         );
       } else {
         regId = generateRegistrationId();
@@ -223,13 +286,42 @@ router.post('/', async (req, res) => {
           `INSERT INTO registrations (
              registration_id, event_id, full_name, phone, email, city,
              category, instagram, performance_title, performance_description,
-             amount, otp_verified, reg_status, checked_in, certificate_eligible,
+             amount, original_fee, discount_amount, final_fee,
+             promo_code, promo_code_id, referrer_name,
+             otp_verified, reg_status, payment_status, payment_verified_by,
+             approved_at, approved_by, checked_in, certificate_eligible,
              user_id, age, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
-           cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount,
-           1, 'VERIFIED', 0, 0, targetUserId, effectiveAge, now, now]
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
+            cleanCategory, cleanInstagram, cleanTitle, cleanDesc,
+            finalFee, originalFee, discountAmount, finalFee,
+            appliedPromoCode, appliedPromoId, appliedReferrer,
+            1, finalRegStatus, finalPaymentStatus, finalPaymentVerifiedBy,
+            finalApprovedAt, finalApprovedBy, 0, 0,
+            targetUserId, effectiveAge, now, now
+          ]
         );
+      }
+
+      if (isFree) {
+        try {
+          await emailService.sendApprovalEmail({
+            registrationId: regId,
+            email: cleanEmail,
+            name: cleanFullName,
+            event: {
+              title: targetEvent?.title || config.EVENT.title,
+              date: targetEvent?.event_date || config.EVENT.date,
+              time: targetEvent?.start_time ? (targetEvent?.end_time ? `${targetEvent.start_time} – ${targetEvent.end_time}` : targetEvent.start_time) : config.EVENT.time,
+              venue: targetEvent?.venue_name || 'Online (Google Meet)',
+              meetLink: targetEvent?.meet_link || ''
+            }
+          });
+          await run(`UPDATE registrations SET approval_email_sent_at = ? WHERE registration_id = ?`, [now, regId]).catch(() => {});
+        } catch (e) {
+          console.warn('[Registration] Could not send free approval email:', e.message);
+        }
       }
 
       const verificationToken = otpService.generateVerificationToken(regId, cleanEmail);
@@ -237,13 +329,35 @@ router.post('/', async (req, res) => {
       return res.status(201).json({
         success: true,
         skipOtp: true,
-        message: `Registration created for ${targetEvent?.title || 'event'}. Please complete payment.`,
+        isFree,
+        message: isFree
+          ? `Registration confirmed and approved for ${targetEvent?.title || 'event'}! (Free pass applied)`
+          : `Registration created for ${targetEvent?.title || 'event'}. Please complete payment.`,
         registrationId: regId,
         email: cleanEmail,
         eventId,
-        amount: eventAmount,
+        amount: finalFee,
+        originalFee,
+        discountAmount,
+        finalFee,
+        promoCode: appliedPromoCode,
+        referrerName: appliedReferrer,
         verificationToken,
-        status: 'VERIFIED'
+        status: finalRegStatus,
+        registration: {
+          registrationId: regId,
+          eventId,
+          fullName: cleanFullName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          amount: finalFee,
+          originalFee,
+          discountAmount,
+          finalFee,
+          promoCode: appliedPromoCode,
+          referrerName: appliedReferrer,
+          status: finalRegStatus
+        }
       });
     }
 
@@ -259,10 +373,15 @@ router.post('/', async (req, res) => {
         `UPDATE registrations SET
            full_name = ?, phone = ?, city = ?, category = ?,
            instagram = ?, performance_title = ?, performance_description = ?,
-           amount = ?, age = ?, updated_at = ?
+           amount = ?, original_fee = ?, discount_amount = ?, final_fee = ?,
+           promo_code = ?, promo_code_id = ?, referrer_name = ?,
+           age = ?, updated_at = ?
          WHERE id = ?`,
         [cleanFullName, cleanPhone, cleanCity, cleanCategory,
-         cleanInstagram, cleanTitle, cleanDesc, eventAmount, effectiveAge, now, pending.id]
+         cleanInstagram, cleanTitle, cleanDesc,
+         finalFee, originalFee, discountAmount, finalFee,
+         appliedPromoCode, appliedPromoId, appliedReferrer,
+         effectiveAge, now, pending.id]
       );
     } else {
       regId = generateRegistrationId();
@@ -270,11 +389,15 @@ router.post('/', async (req, res) => {
         `INSERT INTO registrations (
            registration_id, event_id, full_name, phone, email, city,
            category, instagram, performance_title, performance_description,
-           amount, otp_verified, reg_status, checked_in, certificate_eligible,
+           amount, original_fee, discount_amount, final_fee,
+           promo_code, promo_code_id, referrer_name,
+           otp_verified, reg_status, checked_in, certificate_eligible,
            age, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [regId, eventId, cleanFullName, cleanPhone, cleanEmail, cleanCity,
-         cleanCategory, cleanInstagram, cleanTitle, cleanDesc, eventAmount,
+         cleanCategory, cleanInstagram, cleanTitle, cleanDesc,
+         finalFee, originalFee, discountAmount, finalFee,
+         appliedPromoCode, appliedPromoId, appliedReferrer,
          0, 'PENDING_VERIFICATION', 0, 0, effectiveAge, now, now]
       );
     }
@@ -299,9 +422,29 @@ router.post('/', async (req, res) => {
         registrationId: regId,
         email: cleanEmail,
         eventId,
-        amount: eventAmount,
+        amount: finalFee,
+        originalFee,
+        discountAmount,
+        finalFee,
+        isFree: finalFee === 0,
+        promoCode: appliedPromoCode,
+        referrerName: appliedReferrer,
         expiresAt,
-        expiryMinutes: config.OTP_EXPIRY_MINUTES
+        expiryMinutes: config.OTP_EXPIRY_MINUTES,
+        registration: {
+          registrationId: regId,
+          eventId,
+          fullName: cleanFullName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          amount: finalFee,
+          originalFee,
+          discountAmount,
+          finalFee,
+          promoCode: appliedPromoCode,
+          referrerName: appliedReferrer,
+          status: 'PENDING_VERIFICATION'
+        }
       });
 
     } catch (emailErr) {
@@ -313,14 +456,116 @@ router.post('/', async (req, res) => {
         registrationId: regId,
         email: cleanEmail,
         eventId,
-        amount: eventAmount,
-        expiryMinutes: config.OTP_EXPIRY_MINUTES
+        amount: finalFee,
+        originalFee,
+        discountAmount,
+        finalFee,
+        isFree: finalFee === 0,
+        promoCode: appliedPromoCode,
+        referrerName: appliedReferrer,
+        expiryMinutes: config.OTP_EXPIRY_MINUTES,
+        registration: {
+          registrationId: regId,
+          eventId,
+          fullName: cleanFullName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          amount: finalFee,
+          originalFee,
+          discountAmount,
+          finalFee,
+          promoCode: appliedPromoCode,
+          referrerName: appliedReferrer,
+          status: 'PENDING_VERIFICATION'
+        }
       });
     }
 
   } catch (err) {
     console.error('[Registration] Error in POST /api/registrations:', err);
     return res.status(500).json({ success: false, error: 'Server error while creating registration.' });
+  }
+});
+
+// ─── POST /api/registrations/validate-promo ──────────────────────────────────
+
+router.post('/validate-promo', async (req, res) => {
+  try {
+    const rawCode = String(req.body.code || req.body.promoCode || '').trim();
+    if (!rawCode) {
+      return res.status(400).json({ success: false, valid: false, error: 'Please enter a promo code.' });
+    }
+
+    const eventSlug = (req.body.eventSlug || req.body.eventId || '').trim();
+    let targetEvent = null;
+    if (eventSlug) {
+      targetEvent = await getEventBySlug(eventSlug);
+    }
+    if (!targetEvent) {
+      targetEvent = await getActiveEvent();
+    }
+
+    const eventAmount = targetEvent && targetEvent.fee !== undefined ? Number(targetEvent.fee) : (config.OPEN_MIC_FEE_INR || 79);
+    const email = (req.body.email || (req.session && req.session.userEmail) || '').trim().toLowerCase();
+    const userId = (req.session && req.session.userId) || null;
+
+    const validation = await validatePromoCode({
+      code: rawCode,
+      eventSlug: eventSlug || (targetEvent ? targetEvent.slug : null),
+      email,
+      userId
+    });
+
+    if (!validation.valid) {
+      return res.status(400).json({
+        success: false,
+        valid: false,
+        error: validation.error
+      });
+    }
+
+    const promo = validation.promo;
+    const calc = calculateDiscount(promo, eventAmount);
+
+    let message = 'Promo code applied!';
+    if (promo.discount_type === 'none' || promo.discount_type === 'referral_only') {
+      message = promo.assigned_person 
+        ? `Referral code for ${promo.assigned_person} applied!` 
+        : 'Referral code applied!';
+    } else if (calc.isFree || calc.finalFee === 0) {
+      message = '100% discount applied! Your registration is free.';
+    } else if (promo.discount_type === 'percentage') {
+      message = `${promo.discount_value}% discount applied! You save ₹${calc.discountAmount}.`;
+    } else if (promo.discount_type === 'fixed') {
+      message = `₹${calc.discountAmount} discount applied!`;
+    }
+
+    return res.json({
+      success: true,
+      valid: true,
+      code: promo.code,
+      assignedPerson: promo.assigned_person || null,
+      referrerName: promo.assigned_person || null,
+      discountType: promo.discount_type,
+      discountValue: promo.discount_value,
+      originalFee: calc.originalFee,
+      discountAmount: calc.discountAmount,
+      finalFee: calc.finalFee,
+      isFree: calc.finalFee === 0,
+      calculation: calc,
+      promo: {
+        code: promo.code,
+        assignedPerson: promo.assigned_person || null,
+        referrerName: promo.assigned_person || null,
+        discountType: promo.discount_type,
+        discountValue: promo.discount_value
+      },
+      message
+    });
+
+  } catch (err) {
+    console.error('[Registration] Error validating promo:', err);
+    return res.status(500).json({ success: false, valid: false, error: 'Failed to validate promo code.' });
   }
 });
 
@@ -412,6 +657,13 @@ router.get('/:id', async (req, res) => {
         performanceTitle: record.performance_title,
         city: record.city,
         instagram: record.instagram,
+        promoCode: record.promo_code || null,
+        referrerName: record.referrer_name || null,
+        originalFee: record.original_fee !== undefined && record.original_fee !== null ? Number(record.original_fee) : Number(record.amount ?? 79),
+        discountAmount: record.discount_amount !== undefined && record.discount_amount !== null ? Number(record.discount_amount) : 0,
+        finalFee: record.final_fee !== undefined && record.final_fee !== null ? Number(record.final_fee) : Number(record.amount ?? 79),
+        isFree: Number(record.final_fee !== undefined && record.final_fee !== null ? record.final_fee : record.amount) === 0,
+        paymentStatus: record.payment_status || (record.reg_status === 'APPROVED' ? 'PAID' : 'PENDING'),
         status: record.reg_status || 'PENDING_VERIFICATION',
         statusLabel: statusLabels[record.reg_status] || 'Unknown',
         isValidPass: isApproved,

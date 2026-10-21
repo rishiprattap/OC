@@ -405,8 +405,8 @@
           </div>
 
           <div class="form-group">
-            <label for="instagram">Instagram Handle (Optional)</label>
-            <input type="text" id="instagram" name="instagram" class="form-control" placeholder="e.g. aarav_writes">
+            <label for="instagram">Instagram Handle <span style="color: #8e8477; font-weight: normal; font-size: 11px;">(Optional — @username or URL)</span></label>
+            <input type="text" id="instagram" name="instagram" class="form-control" placeholder="e.g. @yourhandle or instagram.com/yourhandle">
           </div>
 
           <div class="form-group full">
@@ -417,6 +417,20 @@
           <div class="form-group full">
             <label for="performanceDescription">Brief Description / Notes (Optional)</label>
             <textarea id="performanceDescription" name="performanceDescription" class="form-control" placeholder="What is your piece about? Any instruments or tech notes?"></textarea>
+          </div>
+
+          <div class="form-group full" style="margin-top: 4px; background: rgba(228, 173, 87, 0.04); border: 1px solid #2a231c; border-radius: 10px; padding: 14px 16px;">
+            <label for="promoCodeInput" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 13px; font-weight: 700; color: #f7eee1;">Have a Promo Code or Referral Code?</span>
+              <span style="color: #8e8477; font-weight: normal; font-size: 11px;">Optional</span>
+            </label>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="promoCodeInput" name="promoCode" class="form-control" placeholder="Enter code (e.g. ARTIST10)" style="text-transform: uppercase; font-family: monospace; letter-spacing: 0.05em; font-weight: 700;">
+              <button type="button" id="applyPromoBtn" class="cta" style="padding: 10px 18px; font-size: 12px; white-space: nowrap;">
+                <span id="applyPromoBtnText">APPLY</span>
+              </button>
+            </div>
+            <div id="promoFeedbackBox" style="display: none; margin-top: 10px; border-radius: 8px; padding: 10px 12px; font-size: 12.5px;"></div>
           </div>
 
           <div class="form-group full">
@@ -496,7 +510,34 @@
         </p>
       </div>
 
-      <div class="payment-grid">
+      <!-- ZERO-FEE CONFIRMATION BOX (Shown when final fee is ₹0) -->
+      <div id="zeroFeeBox" style="display: none; max-width: 520px; margin: 0 auto; text-align: center; background: #141210; border: 1px solid rgba(110, 219, 140, 0.4); border-radius: 12px; padding: 32px 24px;">
+        <div style="font-size: 40px; margin-bottom: 12px;">🎉</div>
+        <h3 style="font-family:'Cormorant Garamond',Georgia,serif; font-size: 28px; color: #6edb8c; margin: 0 0 8px;">100% Free Entry Applied!</h3>
+        <p style="color: #d5cbbd; font-size: 14px; margin-bottom: 20px;">Your promo code has waived the entire registration fee. No UPI payment or screenshot submission is required.</p>
+        
+        <div style="background: #0d0c0a; border: 1px solid #2a231c; border-radius: 8px; padding: 14px; margin-bottom: 24px; text-align: left; font-size: 13px;">
+          <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+            <span style="color: #8e8477;">Original Fee:</span>
+            <span style="color: #8e8477; text-decoration: line-through;" id="zeroFeeOriginal">—</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom: 6px;">
+            <span style="color: #6edb8c;">Promo Discount:</span>
+            <span style="color: #6edb8c;" id="zeroFeeDiscount">—</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; border-top: 1px solid #1f1b16; padding-top: 6px; font-weight: 700;">
+            <span style="color: #f7eee1;">Final Payable:</span>
+            <span style="color: #6edb8c;">₹0 (Free)</span>
+          </div>
+        </div>
+
+        <button type="button" id="confirmFreeBtn" class="cta" style="width: 100%; justify-content: center;">
+          <span id="confirmFreeBtnText">CONFIRM FREE REGISTRATION</span>
+          <b>✓</b>
+        </button>
+      </div>
+
+      <div class="payment-grid" id="upiPaymentGrid">
         <!-- LEFT: UPI QR & DETAILS -->
         <div class="upi-qr-card">
           <div style="font-size:11px; font-weight:800; letter-spacing:0.18em; color:#e4ad57; text-transform:uppercase;" id="scanPayBanner">

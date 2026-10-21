@@ -17,6 +17,7 @@ const bcrypt = require('bcryptjs');
 const { run, get, all, getSetting, setSetting, getEventBySlug, getActiveEvent } = require('../db');
 const config = require('../config');
 const emailService = require('../services/email');
+const { normalizePromoCode } = require('../services/promo');
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
@@ -208,11 +209,11 @@ router.get('/registrations', async (req, res) => {
       const q = `%${trimmed}%`;
       const num = parseInt(trimmed.replace(/^0+/, ''), 10);
       if (!isNaN(num) && num > 0) {
-        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR id = ?)`;
-        params.push(q, q, q, q, q, num);
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR promo_code LIKE ? OR referrer_name LIKE ? OR id = ?)`;
+        params.push(q, q, q, q, q, q, q, num);
       } else {
-        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ?)`;
-        params.push(q, q, q, q, q);
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR promo_code LIKE ? OR referrer_name LIKE ?)`;
+        params.push(q, q, q, q, q, q, q);
       }
     }
 
@@ -239,6 +240,12 @@ router.get('/registrations', async (req, res) => {
         category: r.category,
         performanceTitle: r.performance_title,
         instagram: r.instagram,
+        promoCode: r.promo_code || null,
+        referrerName: r.referrer_name || null,
+        originalFee: r.original_fee !== undefined && r.original_fee !== null ? Number(r.original_fee) : null,
+        discountAmount: r.discount_amount !== undefined && r.discount_amount !== null ? Number(r.discount_amount) : 0,
+        finalFee: r.final_fee !== undefined && r.final_fee !== null ? Number(r.final_fee) : null,
+        paymentStatus: r.payment_status || (r.reg_status === 'APPROVED' ? 'PAID' : 'PENDING'),
         status: r.reg_status || 'PENDING_VERIFICATION',
         otpVerified: Boolean(r.otp_verified),
         otpVerifiedAt: r.otp_verified_at,
@@ -302,11 +309,11 @@ router.get('/registrations/export', async (req, res) => {
       const q = `%${trimmed}%`;
       const num = parseInt(trimmed.replace(/^0+/, ''), 10);
       if (!isNaN(num) && num > 0) {
-        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR id = ?)`;
-        params.push(q, q, q, q, q, num);
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR promo_code LIKE ? OR referrer_name LIKE ? OR id = ?)`;
+        params.push(q, q, q, q, q, q, q, num);
       } else {
-        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ?)`;
-        params.push(q, q, q, q, q);
+        sql += ` AND (full_name LIKE ? OR email LIKE ? OR registration_id LIKE ? OR phone LIKE ? OR transaction_id LIKE ? OR promo_code LIKE ? OR referrer_name LIKE ?)`;
+        params.push(q, q, q, q, q, q, q);
       }
     }
 
@@ -343,6 +350,11 @@ router.get('/registrations/export', async (req, res) => {
       'Performance Title',
       'Performance Description',
       'Instagram Handle',
+      'Promo Code',
+      'Referrer',
+      'Original Fee (INR)',
+      'Discount Amount (INR)',
+      'Final Fee (INR)',
       'Fee Amount (INR)',
       'Registration Status',
       'Payment Status',
@@ -375,6 +387,10 @@ router.get('/registrations/export', async (req, res) => {
       const serial = String(r.serial_number || r.id).padStart(6, '0');
       const certUrl = `${baseUrl}/certificate.html?id=${encodeURIComponent(r.registration_id)}`;
 
+      const origFee = r.original_fee !== undefined && r.original_fee !== null ? r.original_fee : (r.amount ?? 79);
+      const discAmt = r.discount_amount !== undefined && r.discount_amount !== null ? r.discount_amount : 0;
+      const finFee = r.final_fee !== undefined && r.final_fee !== null ? r.final_fee : (r.amount ?? 79);
+
       return [
         serial,
         r.registration_id,
@@ -388,7 +404,12 @@ router.get('/registrations/export', async (req, res) => {
         r.performance_title || '',
         r.performance_description || '',
         r.instagram || '',
-        r.amount ?? 79,
+        r.promo_code || '',
+        r.referrer_name || '',
+        origFee,
+        discAmt,
+        finFee,
+        r.amount ?? finFee,
         r.reg_status || 'PENDING_VERIFICATION',
         r.payment_status || 'PAID',
         r.transaction_id || '',
@@ -457,6 +478,12 @@ router.get('/registrations/:id', async (req, res) => {
         performanceTitle: record.performance_title,
         performanceDescription: record.performance_description,
         instagram: record.instagram,
+        promoCode: record.promo_code || null,
+        referrerName: record.referrer_name || null,
+        originalFee: record.original_fee !== undefined && record.original_fee !== null ? Number(record.original_fee) : null,
+        discountAmount: record.discount_amount !== undefined && record.discount_amount !== null ? Number(record.discount_amount) : 0,
+        finalFee: record.final_fee !== undefined && record.final_fee !== null ? Number(record.final_fee) : null,
+        paymentStatus: record.payment_status || (record.reg_status === 'APPROVED' ? 'PAID' : 'PENDING'),
         amount: record.amount,
         status: record.reg_status || 'PENDING_VERIFICATION',
         otpVerified: Boolean(record.otp_verified),
@@ -1641,6 +1668,7 @@ function sanitizeAdminUser(u, registrationCount = 0) {
     createdAt: u.created_at,
     updated_at: u.updated_at,
     updatedAt: u.updated_at,
+    instagram: u.instagram || null,
     registrationCount: Number(registrationCount || 0)
   };
 }
@@ -1844,10 +1872,570 @@ router.post('/users/:id/unblock', requireAdmin, async (req, res) => {
       message: `User ${user.name} has been unblocked successfully.`,
       user: sanitizeAdminUser(updatedUser)
     });
-
   } catch (err) {
     console.error('[Admin] Error unblocking user:', err);
     return res.status(500).json({ success: false, error: 'Server error while unblocking user.' });
+  }
+});
+
+// ─── PROMO CODES & REFERRAL MANAGEMENT ────────────────────────────────────────
+
+// Helper to format a promo code row with stats
+function formatPromoCode(p, stats = {}) {
+  let events = [];
+  if (p.eligible_events) {
+    if (Array.isArray(p.eligible_events)) {
+      events = p.eligible_events;
+    } else {
+      try {
+        events = JSON.parse(p.eligible_events);
+      } catch (_) {
+        events = [p.eligible_events];
+      }
+    }
+  }
+
+  const isActive = Number(p.is_active !== undefined ? p.is_active : 1) === 1;
+
+  return {
+    id: p.id,
+    code: p.code,
+    assigned_person: p.assigned_person || null,
+    assignedPerson: p.assigned_person || null,
+    referrerName: p.assigned_person || null,
+    discount_type: p.discount_type || 'percentage',
+    discountType: p.discount_type || 'percentage',
+    discount_value: Number(p.discount_value || 0),
+    discountValue: Number(p.discount_value || 0),
+    eligible_events: events,
+    eligibleEvents: events,
+    starts_at: p.starts_at || null,
+    startsAt: p.starts_at || null,
+    startDate: p.starts_at || null,
+    expires_at: p.expires_at || null,
+    expiresAt: p.expires_at || null,
+    endDate: p.expires_at || null,
+    total_usage_limit: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
+    totalUsageLimit: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
+    maxUses: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
+    per_user_limit: p.per_user_limit !== null && p.per_user_limit !== undefined ? Number(p.per_user_limit) : 1,
+    perUserLimit: p.per_user_limit !== null && p.per_user_limit !== undefined ? Number(p.per_user_limit) : 1,
+    is_active: isActive ? 1 : 0,
+    isActive,
+    notes: p.notes || null,
+    created_at: p.created_at,
+    createdAt: p.created_at,
+    updated_at: p.updated_at,
+    updatedAt: p.updated_at,
+    usage_count: stats.usage_count || 0,
+    usageCount: stats.usage_count || 0,
+    paid_count: stats.paid_count || 0,
+    paidCount: stats.paid_count || 0,
+    total_revenue: stats.total_revenue || 0,
+    totalRevenue: stats.total_revenue || 0,
+    total_discount: stats.total_discount || 0,
+    totalDiscount: stats.total_discount || 0
+  };
+}
+
+// ─── GET /api/admin/promo-codes ───────────────────────────────────────────────
+router.get('/promo-codes', async (req, res) => {
+  try {
+    const codes = await all(`SELECT * FROM promo_codes ORDER BY created_at DESC`);
+    const registrations = await all(`SELECT id, promo_code, promo_code_id, reg_status, payment_status, original_fee, discount_amount, final_fee, amount FROM registrations WHERE promo_code IS NOT NULL OR promo_code_id IS NOT NULL`);
+
+    const statsMap = {};
+    for (const r of registrations) {
+      const codeKey = (r.promo_code || '').toUpperCase().trim();
+      const codeId = r.promo_code_id;
+      const isPaid = r.payment_status === 'PAID' || r.reg_status === 'APPROVED';
+      const finFee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+      const discAmt = Number(r.discount_amount || 0);
+
+      const keys = [];
+      if (codeKey) keys.push(`code:${codeKey}`);
+      if (codeId) keys.push(`id:${codeId}`);
+
+      for (const k of keys) {
+        if (!statsMap[k]) {
+          statsMap[k] = { usage_count: 0, paid_count: 0, total_revenue: 0, total_discount: 0 };
+        }
+        statsMap[k].usage_count += 1;
+        if (isPaid) {
+          statsMap[k].paid_count += 1;
+          statsMap[k].total_revenue += finFee;
+          statsMap[k].total_discount += discAmt;
+        }
+      }
+    }
+
+    const result = codes.map(p => {
+      const stats = statsMap[`id:${p.id}`] || statsMap[`code:${p.code.toUpperCase()}`] || {};
+      return formatPromoCode(p, stats);
+    });
+
+    return res.json({ success: true, promoCodes: result });
+  } catch (err) {
+    console.error('[Admin] Error listing promo codes:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load promo codes.' });
+  }
+});
+
+// ─── GET /api/admin/promo-codes/referrers (MUST be before /:id) ───────────────
+router.get('/promo-codes/referrers', async (req, res) => {
+  try {
+    const codes = await all(`SELECT * FROM promo_codes`);
+    const registrations = await all(`SELECT id, promo_code, promo_code_id, referrer_name, reg_status, payment_status, original_fee, discount_amount, final_fee, amount, created_at FROM registrations WHERE promo_code IS NOT NULL OR referrer_name IS NOT NULL`);
+
+    // Map promo code string to assigned person
+    const codeToReferrer = {};
+    for (const c of codes) {
+      if (c.code && c.assigned_person) {
+        codeToReferrer[c.code.toUpperCase().trim()] = c.assigned_person.trim();
+      }
+    }
+
+    const referrersMap = {};
+
+    // First seed with all referrers known from promo_codes
+    for (const c of codes) {
+      const ref = (c.assigned_person || '').trim();
+      if (ref) {
+        if (!referrersMap[ref]) {
+          referrersMap[ref] = {
+            referrer_name: ref,
+            codes: new Set(),
+            total_registrations: 0,
+            confirmed_paid_registrations: 0,
+            total_revenue: 0,
+            total_discount_given: 0,
+            last_registration_at: null
+          };
+        }
+        referrersMap[ref].codes.add(c.code.toUpperCase());
+      }
+    }
+
+    // Now aggregate from registrations
+    for (const r of registrations) {
+      const cUpper = (r.promo_code || '').toUpperCase().trim();
+      const refName = (r.referrer_name || codeToReferrer[cUpper] || '').trim();
+      if (!refName) continue;
+
+      if (!referrersMap[refName]) {
+        referrersMap[refName] = {
+          referrer_name: refName,
+          codes: new Set(),
+          total_registrations: 0,
+          confirmed_paid_registrations: 0,
+          total_revenue: 0,
+          total_discount_given: 0,
+          last_registration_at: null
+        };
+      }
+
+      if (cUpper) referrersMap[refName].codes.add(cUpper);
+      referrersMap[refName].total_registrations += 1;
+
+      const isPaid = r.payment_status === 'PAID' || r.reg_status === 'APPROVED';
+      const finFee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+      const discAmt = Number(r.discount_amount || 0);
+
+      if (isPaid) {
+        referrersMap[refName].confirmed_paid_registrations += 1;
+        referrersMap[refName].total_revenue += finFee;
+        referrersMap[refName].total_discount_given += discAmt;
+      }
+
+      if (r.created_at) {
+        if (!referrersMap[refName].last_registration_at || new Date(r.created_at) > new Date(referrersMap[refName].last_registration_at)) {
+          referrersMap[refName].last_registration_at = r.created_at;
+        }
+      }
+    }
+
+    const list = Object.values(referrersMap).map(item => ({
+      referrer_name: item.referrer_name,
+      codes: Array.from(item.codes),
+      total_registrations: item.total_registrations,
+      confirmed_paid_registrations: item.confirmed_paid_registrations,
+      total_revenue: item.total_revenue,
+      total_discount_given: item.total_discount_given,
+      last_registration_at: item.last_registration_at
+    })).sort((a, b) => {
+      if (b.confirmed_paid_registrations !== a.confirmed_paid_registrations) {
+        return b.confirmed_paid_registrations - a.confirmed_paid_registrations;
+      }
+      return b.total_revenue - a.total_revenue;
+    });
+
+    return res.json({ success: true, referrers: list });
+  } catch (err) {
+    console.error('[Admin] Error getting referrers report:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate referrers report.' });
+  }
+});
+
+// Alias for convenience
+router.get('/promo-codes/analytics/referrers', (req, res) => {
+  res.redirect(307, '/api/admin/promo-codes/referrers');
+});
+
+// ─── POST /api/admin/promo-codes ─────────────────────────────────────────────
+router.post('/promo-codes', async (req, res) => {
+  try {
+    const rawCode = String(req.body.code || '').trim();
+    const code = normalizePromoCode(rawCode);
+
+    if (!code || code.length < 2 || code.length > 30) {
+      return res.status(400).json({ success: false, error: 'Promo code must be 2-30 alphanumeric characters.' });
+    }
+
+    const existing = await get(`SELECT * FROM promo_codes WHERE UPPER(code) = UPPER(?)`, [code]);
+    if (existing) {
+      return res.status(409).json({ success: false, error: `Promo code "${code}" already exists.` });
+    }
+
+    const discountType = (req.body.discount_type || req.body.discountType || 'percentage').toLowerCase();
+    if (!['percentage', 'fixed', 'none', 'referral_only'].includes(discountType)) {
+      return res.status(400).json({ success: false, error: 'Invalid discount type. Allowed: percentage, fixed, none' });
+    }
+
+    const normalizedDiscountType = discountType === 'referral_only' ? 'none' : discountType;
+    let discountValue = Number(req.body.discount_value !== undefined ? req.body.discount_value : (req.body.discountValue ?? 0));
+    if (isNaN(discountValue) || discountValue < 0) {
+      return res.status(400).json({ success: false, error: 'Discount value must be a non-negative number.' });
+    }
+    if (normalizedDiscountType === 'percentage' && discountValue > 100) {
+      return res.status(400).json({ success: false, error: 'Percentage discount cannot exceed 100%.' });
+    }
+    if (normalizedDiscountType === 'none') {
+      discountValue = 0;
+    }
+
+    const assignedPerson = (req.body.referrerName || req.body.referrer_name || req.body.assignedPerson || req.body.assigned_person || '').trim() || null;
+
+    let eligibleEvents = null;
+    const rawEvents = req.body.eligible_events || req.body.eligibleEvents;
+    if (rawEvents) {
+      if (Array.isArray(rawEvents)) {
+        eligibleEvents = JSON.stringify(rawEvents.filter(Boolean));
+      } else if (typeof rawEvents === 'string' && rawEvents.trim()) {
+        try {
+          const parsed = JSON.parse(rawEvents);
+          eligibleEvents = Array.isArray(parsed) ? JSON.stringify(parsed) : JSON.stringify([rawEvents.trim()]);
+        } catch (_) {
+          eligibleEvents = JSON.stringify([rawEvents.trim()]);
+        }
+      }
+    }
+
+    const startsAt = req.body.starts_at || req.body.startsAt || req.body.startDate || null;
+    const expiresAt = req.body.expires_at || req.body.expiresAt || req.body.endDate || null;
+
+    const rawMaxUses = req.body.total_usage_limit !== undefined ? req.body.total_usage_limit : (req.body.totalUsageLimit !== undefined ? req.body.totalUsageLimit : req.body.maxUses);
+    const totalUsageLimit = rawMaxUses !== undefined && rawMaxUses !== null && rawMaxUses !== ''
+      ? Math.max(0, parseInt(rawMaxUses, 10))
+      : null;
+
+    const rawPerUser = req.body.per_user_limit !== undefined ? req.body.per_user_limit : (req.body.perUserLimit !== undefined ? req.body.perUserLimit : req.body.maxUsesPerUser);
+    const perUserLimit = rawPerUser !== undefined && rawPerUser !== null && rawPerUser !== ''
+      ? Math.max(1, parseInt(rawPerUser, 10))
+      : 1;
+
+    let isActive = 1;
+    if (req.body.is_active !== undefined) {
+      isActive = req.body.is_active ? 1 : 0;
+    } else if (req.body.isActive !== undefined) {
+      isActive = req.body.isActive ? 1 : 0;
+    }
+    const notes = (req.body.notes || '').trim() || null;
+    const now = new Date().toISOString();
+
+    const insertResult = await run(
+      `INSERT INTO promo_codes (
+        code, assigned_person, discount_type, discount_value, eligible_events,
+        starts_at, expires_at, total_usage_limit, per_user_limit, is_active,
+        notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        code, assignedPerson, normalizedDiscountType, discountValue, eligibleEvents,
+        startsAt, expiresAt, totalUsageLimit, perUserLimit, isActive,
+        notes, now, now
+      ]
+    );
+
+    const newId = insertResult?.lastID;
+    const created = await get(`SELECT * FROM promo_codes WHERE ${newId ? 'id = ?' : 'UPPER(code) = UPPER(?)'}`, [newId || code]);
+
+    return res.status(201).json({
+      success: true,
+      message: `Promo code "${code}" created successfully.`,
+      promoCode: formatPromoCode(created)
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error creating promo code:', err);
+    return res.status(500).json({ success: false, error: 'Server error while creating promo code.' });
+  }
+});
+
+// ─── PUT /api/admin/promo-codes/:id ──────────────────────────────────────────
+router.put('/promo-codes/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Invalid promo code ID.' });
+    }
+
+    const existing = await get(`SELECT * FROM promo_codes WHERE id = ?`, [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Promo code not found.' });
+    }
+
+    let code = existing.code;
+    if (req.body.code) {
+      code = normalizePromoCode(req.body.code);
+      if (!code || code.length < 2 || code.length > 30) {
+        return res.status(400).json({ success: false, error: 'Promo code must be 2-30 alphanumeric characters.' });
+      }
+      if (code !== existing.code) {
+        const dup = await get(`SELECT * FROM promo_codes WHERE UPPER(code) = UPPER(?) AND id != ?`, [code, id]);
+        if (dup) {
+          return res.status(409).json({ success: false, error: `Promo code "${code}" already exists.` });
+        }
+      }
+    }
+
+    let discountType = existing.discount_type;
+    if (req.body.discount_type || req.body.discountType) {
+      discountType = (req.body.discount_type || req.body.discountType).toLowerCase();
+      if (!['percentage', 'fixed', 'none', 'referral_only'].includes(discountType)) {
+        return res.status(400).json({ success: false, error: 'Invalid discount type.' });
+      }
+      if (discountType === 'referral_only') discountType = 'none';
+    }
+
+    let discountValue = existing.discount_value;
+    if (req.body.discount_value !== undefined || req.body.discountValue !== undefined) {
+      discountValue = Number(req.body.discount_value !== undefined ? req.body.discount_value : req.body.discountValue);
+      if (isNaN(discountValue) || discountValue < 0) {
+        return res.status(400).json({ success: false, error: 'Discount value must be a non-negative number.' });
+      }
+      if (discountType === 'percentage' && discountValue > 100) {
+        return res.status(400).json({ success: false, error: 'Percentage discount cannot exceed 100%.' });
+      }
+      if (discountType === 'none') {
+        discountValue = 0;
+      }
+    }
+
+    const assignedPerson = req.body.referrerName !== undefined 
+      ? (String(req.body.referrerName || '').trim() || null)
+      : (req.body.referrer_name !== undefined
+        ? (String(req.body.referrer_name || '').trim() || null)
+        : (req.body.assignedPerson !== undefined 
+          ? (String(req.body.assignedPerson || '').trim() || null) 
+          : (req.body.assigned_person !== undefined
+            ? (String(req.body.assigned_person || '').trim() || null)
+            : existing.assigned_person)));
+
+    let eligibleEvents = existing.eligible_events;
+    if (req.body.eligible_events !== undefined || req.body.eligibleEvents !== undefined) {
+      const rawEvents = req.body.eligible_events !== undefined ? req.body.eligible_events : req.body.eligibleEvents;
+      if (!rawEvents || (Array.isArray(rawEvents) && rawEvents.length === 0)) {
+        eligibleEvents = null;
+      } else if (Array.isArray(rawEvents)) {
+        eligibleEvents = JSON.stringify(rawEvents.filter(Boolean));
+      } else if (typeof rawEvents === 'string' && rawEvents.trim()) {
+        try {
+          const parsed = JSON.parse(rawEvents);
+          eligibleEvents = Array.isArray(parsed) ? JSON.stringify(parsed) : JSON.stringify([rawEvents.trim()]);
+        } catch (_) {
+          eligibleEvents = JSON.stringify([rawEvents.trim()]);
+        }
+      }
+    }
+
+    const startsAt = req.body.starts_at !== undefined 
+      ? req.body.starts_at 
+      : (req.body.startsAt !== undefined 
+        ? req.body.startsAt 
+        : (req.body.startDate !== undefined ? req.body.startDate : existing.starts_at));
+
+    const expiresAt = req.body.expires_at !== undefined 
+      ? req.body.expires_at 
+      : (req.body.expiresAt !== undefined 
+        ? req.body.expiresAt 
+        : (req.body.endDate !== undefined ? req.body.endDate : existing.expires_at));
+
+    let totalUsageLimit = existing.total_usage_limit;
+    if (req.body.total_usage_limit !== undefined || req.body.totalUsageLimit !== undefined || req.body.maxUses !== undefined) {
+      const rawLimit = req.body.total_usage_limit !== undefined 
+        ? req.body.total_usage_limit 
+        : (req.body.totalUsageLimit !== undefined ? req.body.totalUsageLimit : req.body.maxUses);
+      totalUsageLimit = (rawLimit !== null && rawLimit !== '') ? Math.max(0, parseInt(rawLimit, 10)) : null;
+    }
+
+    let perUserLimit = existing.per_user_limit;
+    if (req.body.per_user_limit !== undefined || req.body.perUserLimit !== undefined || req.body.maxUsesPerUser !== undefined) {
+      const rawPerUser = req.body.per_user_limit !== undefined 
+        ? req.body.per_user_limit 
+        : (req.body.perUserLimit !== undefined ? req.body.perUserLimit : req.body.maxUsesPerUser);
+      perUserLimit = (rawPerUser !== null && rawPerUser !== '') ? Math.max(1, parseInt(rawPerUser, 10)) : 1;
+    }
+
+    let isActive = existing.is_active;
+    if (req.body.is_active !== undefined) {
+      isActive = req.body.is_active ? 1 : 0;
+    } else if (req.body.isActive !== undefined) {
+      isActive = req.body.isActive ? 1 : 0;
+    }
+
+    const notes = req.body.notes !== undefined ? (String(req.body.notes || '').trim() || null) : existing.notes;
+    const now = new Date().toISOString();
+
+    await run(
+      `UPDATE promo_codes SET
+        code = ?,
+        assigned_person = ?,
+        discount_type = ?,
+        discount_value = ?,
+        eligible_events = ?,
+        starts_at = ?,
+        expires_at = ?,
+        total_usage_limit = ?,
+        per_user_limit = ?,
+        is_active = ?,
+        notes = ?,
+        updated_at = ?
+      WHERE id = ?`,
+      [
+        code, assignedPerson, discountType, discountValue, eligibleEvents,
+        startsAt, expiresAt, totalUsageLimit, perUserLimit, isActive,
+        notes, now, id
+      ]
+    );
+
+    const updated = await get(`SELECT * FROM promo_codes WHERE id = ?`, [id]);
+    return res.json({
+      success: true,
+      message: `Promo code "${code}" updated successfully.`,
+      promoCode: formatPromoCode(updated)
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error updating promo code:', err);
+    return res.status(500).json({ success: false, error: 'Server error while updating promo code.' });
+  }
+});
+
+// ─── PATCH /api/admin/promo-codes/:id/toggle ──────────────────────────────────
+router.patch('/promo-codes/:id/toggle', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Invalid promo code ID.' });
+    }
+
+    const existing = await get(`SELECT * FROM promo_codes WHERE id = ?`, [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Promo code not found.' });
+    }
+
+    let newStatus = Number(existing.is_active) === 1 ? 0 : 1;
+    if (req.body.is_active !== undefined) {
+      newStatus = req.body.is_active ? 1 : 0;
+    }
+
+    const now = new Date().toISOString();
+    await run(`UPDATE promo_codes SET is_active = ?, updated_at = ? WHERE id = ?`, [newStatus, now, id]);
+
+    return res.json({
+      success: true,
+      message: `Promo code "${existing.code}" is now ${newStatus === 1 ? 'active' : 'inactive'}.`,
+      is_active: newStatus
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error toggling promo code:', err);
+    return res.status(500).json({ success: false, error: 'Server error while toggling promo code.' });
+  }
+});
+
+// ─── GET /api/admin/promo-codes/:id/registrations ─────────────────────────────
+router.get('/promo-codes/:id/registrations', async (req, res) => {
+  try {
+    const idParam = req.params.id.trim();
+    let promo = null;
+    if (/^\d+$/.test(idParam)) {
+      promo = await get(`SELECT * FROM promo_codes WHERE id = ?`, [parseInt(idParam, 10)]);
+    }
+    if (!promo) {
+      promo = await get(`SELECT * FROM promo_codes WHERE UPPER(code) = UPPER(?)`, [idParam]);
+    }
+
+    if (!promo) {
+      return res.status(404).json({ success: false, error: 'Promo code not found.' });
+    }
+
+    const rows = await all(
+      `SELECT * FROM registrations WHERE promo_code_id = ? OR UPPER(promo_code) = UPPER(?) ORDER BY created_at DESC`,
+      [promo.id, promo.code]
+    );
+
+    let paidCount = 0;
+    let totalRevenue = 0;
+    let totalDiscount = 0;
+
+    const list = rows.map(r => {
+      const isPaid = r.payment_status === 'PAID' || r.reg_status === 'APPROVED';
+      const finFee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+      const discAmt = Number(r.discount_amount || 0);
+
+      if (isPaid) {
+        paidCount += 1;
+        totalRevenue += finFee;
+        totalDiscount += discAmt;
+      }
+
+      return {
+        id: r.id,
+        registrationId: r.registration_id,
+        fullName: r.full_name,
+        email: r.email,
+        phone: r.phone,
+        eventId: r.event_id || 'online-open-mic-2026',
+        category: r.category,
+        regStatus: r.reg_status || 'PENDING_VERIFICATION',
+        paymentStatus: r.payment_status || (r.reg_status === 'APPROVED' ? 'PAID' : 'PENDING'),
+        originalFee: r.original_fee !== undefined && r.original_fee !== null ? Number(r.original_fee) : Number(r.amount ?? 79),
+        discountAmount: discAmt,
+        finalFee: finFee,
+        createdAt: r.created_at
+      };
+    });
+
+    return res.json({
+      success: true,
+      promoCode: formatPromoCode(promo, {
+        usage_count: rows.length,
+        paid_count: paidCount,
+        total_revenue: totalRevenue,
+        total_discount: totalDiscount
+      }),
+      stats: {
+        totalRegistrations: rows.length,
+        paidRegistrations: paidCount,
+        totalRevenue,
+        totalDiscount
+      },
+      registrations: list
+    });
+
+  } catch (err) {
+    console.error('[Admin] Error fetching promo code registrations:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch promo code registrations.' });
   }
 });
 

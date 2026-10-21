@@ -276,7 +276,7 @@ async function runUserAuthAndFlowTests() {
 
     const loginCookie = goodLoginRes.headers['set-cookie'];
     assert(Boolean(loginCookie), 'Login returns new session cookie');
-    userSessionCookie = Array.isArray(loginCookie) ? loginCookie[0].split(';')[0] : '';
+    userSessionCookie = Array.isArray(loginCookie) ? loginCookie[0].split(';')[0] : (typeof loginCookie === 'string' ? loginCookie.split(';')[0] : '');
 
     // ─── 4. PASSWORD RECOVERY FLOW ─────────────────────────────────────────────
     console.log('\n>>> [4/11] Testing Password Recovery (Forgot & Reset Password)...');
@@ -328,7 +328,7 @@ async function runUserAuthAndFlowTests() {
     });
     assert(newPassLoginRes.status === 200, 'Login with updated password succeeds with HTTP 200');
     const newPassCookie = newPassLoginRes.headers['set-cookie'];
-    userSessionCookie = Array.isArray(newPassCookie) ? newPassCookie[0].split(';')[0] : userSessionCookie;
+    userSessionCookie = Array.isArray(newPassCookie) ? newPassCookie[0].split(';')[0] : (typeof newPassCookie === 'string' ? newPassCookie.split(';')[0] : userSessionCookie);
 
     // ─── 5. USER PROFILE RETRIEVAL & UPDATES ───────────────────────────────────
     console.log('\n>>> [5/11] Testing User Profile Endpoints (GET & PUT /api/user/profile)...');

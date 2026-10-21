@@ -422,6 +422,9 @@
         <button class="admin-nav-item" data-tab="users" onclick="showTab('users')">
           <span class="nav-icon">👥</span> Users
         </button>
+        <button class="admin-nav-item" data-tab="promoCodes" onclick="showTab('promoCodes')">
+          <span class="nav-icon">🏷️</span> Promo &amp; Referrals
+        </button>
         <button class="admin-nav-item" data-tab="certificates" onclick="showTab('certificates')">
           <span class="nav-icon">🏆</span> Certificates &amp; Winners
         </button>
@@ -643,6 +646,78 @@
 
         <div id="usersTableWrapper">
           <div class="empty-state"><p>Loading users…</p></div>
+        </div>
+      </div>
+
+      <!-- ── PROMO CODES & REFERRALS TAB ────────────────── -->
+      <div id="tabPromoCodes" style="display:none;">
+        <div style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Promo Codes &amp; Referrals</h1>
+            <p style="color:#8e8477; font-size:13px; margin:0;">Create and track promo codes, assign promoter and artist referrals, monitor usage, and view revenue attribution.</p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button type="button" class="cta" onclick="openCreatePromoModal()">+ CREATE PROMO CODE</button>
+            <button type="button" class="cta cta-secondary" onclick="loadPromoCodesTab()">⟳ Refresh</button>
+          </div>
+        </div>
+
+        <div class="subnav-bar">
+          <button class="subnav-btn active" id="subnavBtnPromoCodes" onclick="switchPromoSubtab('codes')">🏷️ Promo Codes (<span id="promoCodesCount">0</span>)</button>
+          <button class="subnav-btn" id="subnavBtnPromoReferrers" onclick="switchPromoSubtab('referrers')">👥 Referrers &amp; Revenue (<span id="promoReferrersCount">0</span>)</button>
+        </div>
+
+        <!-- SUBTAB 1: PROMO CODES LIST -->
+        <div id="promoSubtabCodes">
+          <div class="controls-bar" style="margin-bottom:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <input type="search" class="search-input" id="promoSearchInput" placeholder="Search code, referrer / promoter name…" oninput="filterPromoCodesList()" style="flex:1; min-width:220px;">
+            <select class="filter-select" id="promoStatusFilter" onchange="filterPromoCodesList()">
+              <option value="ALL">All Statuses</option>
+              <option value="ACTIVE">Active Only</option>
+              <option value="INACTIVE">Inactive / Deactivated Only</option>
+            </select>
+            <select class="filter-select" id="promoDiscountFilter" onchange="filterPromoCodesList()">
+              <option value="ALL">All Types</option>
+              <option value="PERCENTAGE">Percentage (%)</option>
+              <option value="FIXED">Fixed Amount (₹)</option>
+              <option value="NONE">Referral Only (₹0 Discount)</option>
+            </select>
+          </div>
+
+          <div id="promoCodesTableWrapper">
+            <div class="empty-state"><p>Loading promo codes…</p></div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: REFERRERS & REVENUE -->
+        <div id="promoSubtabReferrers" style="display:none;">
+          <!-- Referrers Summary Stats -->
+          <div class="stats-grid" id="referrersStatsGrid" style="margin-bottom:24px;">
+            <div class="stat-card">
+              <div class="stat-label">Total Referrers</div>
+              <div class="stat-value" id="refTotalReferrers">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Total Referred Registrations</div>
+              <div class="stat-value gold" id="refTotalRegistrations">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Confirmed Paid</div>
+              <div class="stat-value green" id="refTotalPaid">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Referred Revenue</div>
+              <div class="stat-value green" id="refTotalRevenue">₹0</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Discounts Absorbed</div>
+              <div class="stat-value orange" id="refTotalDiscounts">₹0</div>
+            </div>
+          </div>
+
+          <div id="promoReferrersTableWrapper">
+            <div class="empty-state"><p>Loading referrer revenue totals…</p></div>
+          </div>
         </div>
       </div>
 
@@ -1731,6 +1806,121 @@
             <button type="submit" class="cta" id="btnSaveWinner">✓ Issue Award &amp; Update Certificate</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create / Edit Promo Code Modal -->
+  <div class="modal-overlay" id="promoCodeModal" style="display:none;">
+    <div class="modal-card" style="width: min(640px, 94vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;" id="promoModalKicker">PROMO CODE MANAGEMENT</div>
+          <div style="font-size:18px; font-weight:800; color:#f7eee1;" id="promoModalHeading">Create New Promo Code</div>
+        </div>
+        <button class="modal-close" onclick="closePromoModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <form id="promoCodeForm" onsubmit="submitPromoCodeForm(event)">
+          <input type="hidden" id="promoEditId" value="">
+
+          <div class="form-grid-2">
+            <div>
+              <label class="admin-label">Promo Code <span style="color:#e4ad57;">*</span></label>
+              <input type="text" class="admin-input" id="promoInputCode" placeholder="e.g. SUMMER20, RISHI100" style="text-transform:uppercase; font-family:monospace; font-weight:700;" required>
+              <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">Alphanumeric uppercase code</small>
+            </div>
+            <div>
+              <label class="admin-label">Assigned Referrer / Promoter</label>
+              <input type="text" class="admin-input" id="promoInputReferrer" placeholder="e.g. Suhavani, Rahul, Campus Partner">
+              <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">Person or affiliate credited for this code</small>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="admin-label">Discount Type <span style="color:#e4ad57;">*</span></label>
+              <select class="admin-select" id="promoInputDiscountType" onchange="onPromoDiscountTypeChange()" required>
+                <option value="PERCENTAGE">Percentage Discount (%)</option>
+                <option value="FIXED">Fixed Amount Discount (₹)</option>
+                <option value="NONE">Referral Only (₹0 Discount)</option>
+              </select>
+            </div>
+            <div id="promoDiscountValueWrapper">
+              <label class="admin-label" id="promoDiscountValueLabel">Discount Value <span style="color:#e4ad57;">*</span></label>
+              <input type="number" class="admin-input" id="promoInputDiscountValue" min="0" max="100000" step="any" placeholder="e.g. 20 or 50">
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="admin-label">Eligible Events</label>
+              <select class="admin-select" id="promoInputEligibleEvents">
+                <option value="">All Events (Universal)</option>
+              </select>
+              <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">Restrict code to a specific edition or allow everywhere</small>
+            </div>
+            <div>
+              <label class="admin-label">Per-User Limit</label>
+              <input type="number" class="admin-input" id="promoInputPerUserLimit" min="1" value="1" placeholder="1">
+              <small style="color:#8e8477; font-size:11px; display:block; margin-top:-10px; margin-bottom:12px;">Max times a single user/email can use this code</small>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="admin-label">Total Usage Limit (0 for unlimited)</label>
+              <input type="number" class="admin-input" id="promoInputMaxUses" min="0" value="0" placeholder="0 = unlimited">
+            </div>
+            <div>
+              <label class="admin-label">Status</label>
+              <label style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#f7eee1; font-size:13px; padding-top:10px;">
+                <input type="checkbox" id="promoInputIsActive" checked style="accent-color:#e4ad57;">
+                <span style="font-weight:700;">Code Active &amp; Redeemable</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="form-grid-2">
+            <div>
+              <label class="admin-label">Valid From Date (Optional)</label>
+              <input type="date" class="admin-input" id="promoInputStartDate">
+            </div>
+            <div>
+              <label class="admin-label">Expiration Date (Optional)</label>
+              <input type="date" class="admin-input" id="promoInputEndDate">
+            </div>
+          </div>
+
+          <div class="auth-error" id="promoFormError" style="margin-bottom:12px; text-align:left;"></div>
+
+          <div class="modal-actions" style="padding:16px 0 0; border-top:1px solid #2a231c; justify-content:flex-end; gap:10px;">
+            <button type="button" class="action-btn btn-view" onclick="closePromoModal()">Cancel</button>
+            <button type="submit" class="cta" id="btnSavePromo">✓ Save Promo Code</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Associated Promo Registrations Modal -->
+  <div class="modal-overlay" id="promoRegistrationsModal" style="display:none;">
+    <div class="modal-card" style="width: min(880px, 95vw);">
+      <div class="modal-header">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">PROMO ATTRIBUTION &amp; PARTICIPANTS</div>
+          <div style="font-size:18px; font-weight:800; color:#f7eee1;" id="promoRegsModalTitle">Registrations for Code</div>
+        </div>
+        <button class="modal-close" onclick="closePromoRegistrationsModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:20px;">
+        <div id="promoRegsSummary" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;"></div>
+        <div id="promoRegsTableWrapper">
+          <div class="empty-state"><p>Loading registrations…</p></div>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-end;">
+        <button type="button" class="action-btn btn-view" onclick="closePromoRegistrationsModal()">Close</button>
       </div>
     </div>
   </div>

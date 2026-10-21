@@ -232,7 +232,8 @@
     const firstChar = (user.name || 'C').charAt(0).toUpperCase();
     if (dashAvatar) dashAvatar.textContent = firstChar;
     if (dashName) dashName.textContent = user.name;
-    if (dashMeta) dashMeta.textContent = `${user.email} · Age: ${user.age} · City: ${user.city}`;
+    const igText = user.instagram ? ` · Instagram: @${user.instagram}` : '';
+    if (dashMeta) dashMeta.textContent = `${user.email} · Age: ${user.age} · City: ${user.city}${igText}`;
 
     // Fill Edit Profile form
     const editName = document.getElementById('editName');
@@ -240,12 +241,14 @@
     const editEmail = document.getElementById('editEmail');
     const editAge = document.getElementById('editAge');
     const editCity = document.getElementById('editCity');
+    const editInstagram = document.getElementById('editInstagram');
 
     if (editName) editName.value = user.name || '';
     if (editPhone) editPhone.value = user.phone || '';
     if (editEmail) editEmail.value = user.email || '';
     if (editAge) editAge.value = user.age || '';
     if (editCity) editCity.value = user.city || '';
+    if (editInstagram) editInstagram.value = user.instagram ? `@${user.instagram}` : '';
 
     loadRegistrations();
   }
@@ -436,6 +439,7 @@
       const email = (document.getElementById('regEmail')?.value || '').trim().toLowerCase();
       const age = parseInt(document.getElementById('regAge')?.value, 10);
       const city = (document.getElementById('regCity')?.value || '').trim();
+      const instagram = (document.getElementById('regInstagram')?.value || '').trim();
       const password = document.getElementById('regPassword')?.value || '';
 
       if (name.length < 2) return showError('Please enter your full name (minimum 2 characters).');
@@ -454,7 +458,7 @@
         const res = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, phone, email, age, city, password })
+          body: JSON.stringify({ name, phone, email, age, city, password, instagram })
         });
         const data = await res.json();
 
@@ -668,6 +672,7 @@
       const phone = (document.getElementById('editPhone')?.value || '').trim().replace(/\D/g, '');
       const age = parseInt(document.getElementById('editAge')?.value, 10);
       const city = (document.getElementById('editCity')?.value || '').trim();
+      const instagram = (document.getElementById('editInstagram')?.value || '').trim();
 
       if (name.length < 2) return showError('Please enter your full name (minimum 2 characters).');
       if (phone.length < 10) return showError('Please enter a valid 10-digit phone number.');
@@ -683,7 +688,7 @@
         const res = await fetch('/api/user/profile', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, phone, age, city })
+          body: JSON.stringify({ name, phone, age, city, instagram })
         });
         const data = await res.json();
 

@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { run, get, all, getEventBySlug, getActiveEvent } = require('../db');
 const { requireUser, sanitizeUser } = require('./auth');
+const { normalizeInstagramHandle } = require('../services/promo');
 const config = require('../config');
 
 // Protect all routes in this router
@@ -39,7 +40,7 @@ router.get('/profile', async (req, res) => {
 
 router.put('/profile', async (req, res) => {
   try {
-    const { name, phone, age, city } = req.body;
+    const { name, phone, age, city, instagram } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return res.status(400).json({ success: false, error: 'Please enter a valid full name (minimum 2 characters).' });
@@ -61,11 +62,15 @@ router.put('/profile', async (req, res) => {
 
     const cleanName = name.trim();
     const cleanCity = city.trim();
+    const cleanInstagram = instagram !== undefined ? (normalizeInstagramHandle(instagram) || null) : undefined;
     const now = new Date().toISOString();
 
+    const currentUser = await get(`SELECT * FROM users WHERE id = ?`, [req.session.userId]);
+    const finalInstagram = cleanInstagram !== undefined ? cleanInstagram : (currentUser ? currentUser.instagram : null);
+
     await run(
-      `UPDATE users SET name = ?, phone = ?, age = ?, city = ?, updated_at = ? WHERE id = ?`,
-      [cleanName, cleanPhone, numAge, cleanCity, now, req.session.userId]
+      `UPDATE users SET name = ?, phone = ?, age = ?, city = ?, instagram = ?, updated_at = ? WHERE id = ?`,
+      [cleanName, cleanPhone, numAge, cleanCity, finalInstagram, now, req.session.userId]
     );
 
     req.session.userName = cleanName;

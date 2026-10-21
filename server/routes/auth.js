@@ -11,6 +11,7 @@ const { run, get, all } = require('../db');
 const config = require('../config');
 const emailService = require('../services/email');
 const otpService = require('../services/otp');
+const { normalizeInstagramHandle } = require('../services/promo');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ function sanitizeUser(user) {
     phone: user.phone,
     age: user.age,
     city: user.city,
+    instagram: user.instagram ? normalizeInstagramHandle(user.instagram) : null,
     is_verified: user.is_verified,
     is_blocked: Number(user.is_blocked || 0),
     block_reason: user.block_reason || null,
@@ -105,7 +107,7 @@ async function requireUser(req, res, next) {
 
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, phone, age, city, password } = req.body;
+    const { name, email, phone, age, city, password, instagram } = req.body;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return res.status(400).json({ success: false, error: 'Please enter a valid full name (minimum 2 characters).' });
@@ -136,6 +138,7 @@ router.post('/register', async (req, res) => {
 
     const cleanName = name.trim();
     const cleanCity = city.trim();
+    const cleanInstagram = normalizeInstagramHandle(instagram) || null;
 
     // Check if user with this email already exists
     const existing = await get(`SELECT * FROM users WHERE email = ?`, [cleanEmail]);
@@ -166,18 +169,18 @@ router.post('/register', async (req, res) => {
       await run(
         `UPDATE users SET
            name = ?, phone = ?, age = ?, city = ?, password_hash = ?,
-           verification_token = ?, verification_token_expires_at = ?, updated_at = ?
+           verification_token = ?, verification_token_expires_at = ?, instagram = ?, updated_at = ?
          WHERE email = ?`,
-        [cleanName, cleanPhone, numAge, cleanCity, passwordHash, storedToken, expiresAt, now.toISOString(), cleanEmail]
+        [cleanName, cleanPhone, numAge, cleanCity, passwordHash, storedToken, expiresAt, cleanInstagram, now.toISOString(), cleanEmail]
       );
     } else {
       // Insert new unverified user
       await run(
         `INSERT INTO users (
            name, email, phone, age, city, password_hash, is_verified,
-           verification_token, verification_token_expires_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [cleanName, cleanEmail, cleanPhone, numAge, cleanCity, passwordHash, 0, storedToken, expiresAt, now.toISOString(), now.toISOString()]
+           verification_token, verification_token_expires_at, instagram, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [cleanName, cleanEmail, cleanPhone, numAge, cleanCity, passwordHash, 0, storedToken, expiresAt, cleanInstagram, now.toISOString(), now.toISOString()]
       );
     }
 
@@ -638,5 +641,6 @@ router.post('/reset-password', async (req, res) => {
 module.exports = {
   router,
   requireUser,
-  sanitizeUser
+  sanitizeUser,
+  normalizeInstagramHandle
 };
