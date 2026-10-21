@@ -32,6 +32,131 @@
     });
   }
 
+  // ── Safe JSON Response Parser (handles 413, 502, 500 without SyntaxError) ────
+  async function safeJson(res) {
+    if (!res) return { ok: false, status: 0, data: null, raw: '' };
+    try {
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        data = null;
+      }
+      return { ok: res.ok, status: res.status, data, raw: text };
+    } catch (err) {
+      return { ok: false, status: res.status || 0, data: null, raw: err.message };
+    }
+  }
+
+  // ── Client-Side Image Compression (prevents HTTP 413 & accelerates uploads) ──
+  async function compressImageFile(file, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
+    if (!file || !(file instanceof Blob)) return file;
+    const mime = (file.type || '').toLowerCase();
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(mime)) {
+      return file;
+    }
+    // If already under 250 KB, don't re-compress
+    if (file.size < 250 * 1024) {
+      return file;
+    }
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      const objUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        let { width, height } = img;
+        if (!width || !height) return resolve(file);
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / maxWidth > height / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(file);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const outMime = (mime === 'image/png' && file.size > 700 * 1024) ? 'image/jpeg' : mime;
+        canvas.toBlob((blob) => {
+          if (!blob || blob.size >= file.size) {
+            resolve(file);
+          } else {
+            const ext = outMime === 'image/jpeg' ? '.jpg' : (outMime === 'image/webp' ? '.webp' : '.png');
+            const cleanName = (file.name || 'image').replace(/\.[^.]+$/, ext);
+            const compressed = new File([blob], cleanName, { type: outMime, lastModified: Date.now() });
+            resolve(compressed);
+          }
+        }, outMime, quality);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        resolve(file);
+      };
+      img.src = objUrl;
+    });
+  }
+
+  // ── Compress Data URLs before payload serialization ──────────────────────────
+  async function compressDataUrl(dataUrl, { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {}) {
+    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      return dataUrl;
+    }
+    // Skip if small (< 250KB chars) or SVG/GIF
+    if (dataUrl.length < 250000 || dataUrl.startsWith('data:image/svg') || dataUrl.startsWith('data:image/gif')) {
+      return dataUrl;
+    }
+
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (!width || !height) return resolve(dataUrl);
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width / maxWidth > height / maxHeight) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(dataUrl);
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const compressed = canvas.toDataURL('image/jpeg', quality);
+        if (compressed && compressed.length < dataUrl.length) {
+          resolve(compressed);
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
   // ── Session Check ─────────────────────────────────────────────────────────────
   async function checkSession() {
     try {
@@ -2434,28 +2559,43 @@
       activeUploadCount++;
       updateSaveButtonUploadState();
       if (progressWrap) progressWrap.style.display = 'block';
-      if (progressBar) progressBar.style.width = '30%';
-      if (progressLabel) progressLabel.textContent = `Uploading ${file.name}…`;
+      if (progressBar) progressBar.style.width = '20%';
+      if (progressLabel) progressLabel.textContent = `Optimizing ${file.name}…`;
 
       try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('assetType', assetType);
+        let fileToUpload = file;
+        if (validImg && !isPdf) {
+          const maxWidth = assetType === 'banner' ? 1920 : (['poster', 'venue'].includes(assetType) ? 1400 : 1000);
+          fileToUpload = await compressImageFile(file, { maxWidth, quality: 0.82 });
+        }
 
-        if (progressBar) progressBar.style.width = '65%';
+        if (progressBar) progressBar.style.width = '60%';
+        if (progressLabel) progressLabel.textContent = `Uploading ${fileToUpload.name}…`;
+
+        const formData = new FormData();
+        formData.append('file', fileToUpload);
+        formData.append('assetType', assetType);
 
         const res = await adminFetch('/api/admin/events/upload', {
           method: 'POST',
           body: formData
         });
 
-        const data = await res.json();
+        const { ok, status, data, raw } = await safeJson(res);
         if (progressBar) progressBar.style.width = '100%';
 
-        if (res.ok && data.success && data.url) {
-          setPreview(data.url, data.originalName || file.name, data.sizeFormatted || `${Math.round(file.size / 1024)} KB`);
+        if (ok && data && data.success && data.url) {
+          setPreview(data.url, data.originalName || fileToUpload.name, data.sizeFormatted || `${Math.round(fileToUpload.size / 1024)} KB`);
         } else {
-          showError(data.error || 'Failed to upload file. Please try again.');
+          let errMsg = (data && data.error) ? data.error : null;
+          if (!errMsg) {
+            if (status === 413 || (raw && raw.toLowerCase().includes('entity too large'))) {
+              errMsg = 'File is too large for the server. Please upload an image under 2MB.';
+            } else {
+              errMsg = `Upload failed (${status}). Please try again.`;
+            }
+          }
+          showError(errMsg);
           if (dropzone) dropzone.style.display = 'block';
         }
       } catch (err) {
@@ -2644,9 +2784,11 @@
 
     try {
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        let file = files[i];
         if (file.size > 10 * 1024 * 1024) continue;
         if (progressBar) progressBar.style.width = `${Math.round(((i + 1) / files.length) * 100)}%`;
+
+        file = await compressImageFile(file, { maxWidth: 1600, maxHeight: 1400, quality: 0.82 });
 
         const formData = new FormData();
         formData.append('file', file);
@@ -2659,8 +2801,8 @@
           method: 'POST',
           body: formData
         });
-        const data = await res.json();
-        if (res.ok && data.success && data.url) {
+        const { ok, data } = await safeJson(res);
+        if (ok && data && data.success && data.url) {
           eventGalleryPhotos.push({
             id: data.id || null,
             imageUrl: data.url,
@@ -2744,9 +2886,9 @@
     try {
       const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}`);
       if (res.status === 401) { showLoginOverlay(); return; }
-      const data = await res.json();
-      if (!res.ok || !data.success || !data.event) {
-        alert('Failed to load event details: ' + (data.error || 'Server error'));
+      const { ok, data, raw } = await safeJson(res);
+      if (!ok || !data || !data.success || !data.event) {
+        alert('Failed to load event details: ' + (data?.error || raw || 'Server error'));
         return;
       }
 
@@ -2970,6 +3112,8 @@
       }
     }
 
+    if (btn) { btn.disabled = true; btn.textContent = 'Optimizing media…'; }
+
     const defaultAsset = (slug === 'delhi-adhure-musafir-2026') ? '/assets/adhure-musafir-poster.png' : '/assets/event-poster.png';
     let posterUrl = (document.getElementById('evtPosterUrl').value || '').trim();
     if (!posterUrl || posterUrl === '/assets/poster.jpeg') {
@@ -2980,7 +3124,18 @@
       bannerUrl = posterUrl;
     }
 
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    // Automatically optimize any large data URLs before serialization & transmission
+    posterUrl = await compressDataUrl(posterUrl, { maxWidth: 1400, quality: 0.82 });
+    bannerUrl = await compressDataUrl(bannerUrl, { maxWidth: 1920, quality: 0.82 });
+    let venueImage = await compressDataUrl(document.getElementById('evtVenueImage').value.trim(), { maxWidth: 1400, quality: 0.82 });
+    let paymentQr = await compressDataUrl(document.getElementById('evtPaymentQr').value.trim(), { maxWidth: 800, quality: 0.85 });
+    let logoUrl = await compressDataUrl(document.getElementById('evtLogoUrl').value.trim(), { maxWidth: 600, quality: 0.88 });
+    let receiptTemplateUrl = (document.getElementById('evtReceiptTemplateUrl')?.value || '').trim();
+    if (receiptTemplateUrl.startsWith('data:image/')) {
+      receiptTemplateUrl = await compressDataUrl(receiptTemplateUrl, { maxWidth: 1400, quality: 0.82 });
+    }
+
+    if (btn) { btn.textContent = 'Saving…'; }
 
     const payload = {
       slug: document.getElementById('evtSlug').value.trim().toLowerCase(),
@@ -3001,7 +3156,7 @@
       state: document.getElementById('evtState').value.trim(),
       googleMapsUrl: document.getElementById('evtGoogleMapsUrl').value.trim(),
       venueAddress: document.getElementById('evtVenueAddress').value.trim(),
-      venueImage: document.getElementById('evtVenueImage').value.trim(),
+      venueImage,
       fee: Number(document.getElementById('evtFee').value) || 0,
       currency: document.getElementById('evtCurrency').value.trim() || '₹',
       earlyBirdPrice: document.getElementById('evtEarlyBirdPrice').value ? Number(document.getElementById('evtEarlyBirdPrice').value) : null,
@@ -3009,12 +3164,12 @@
       allowedCategories,
       payeeName: document.getElementById('evtPayeeName').value.trim(),
       upiId: document.getElementById('evtUpiId').value.trim(),
-      paymentQr: document.getElementById('evtPaymentQr').value.trim(),
+      paymentQr,
       paymentInstructions: document.getElementById('evtPaymentInstructions').value.trim(),
-      receiptTemplateUrl: (document.getElementById('evtReceiptTemplateUrl')?.value || '').trim(),
+      receiptTemplateUrl,
       posterUrl,
-      bannerUrl: document.getElementById('evtBannerUrl').value.trim(),
-      logoUrl: document.getElementById('evtLogoUrl').value.trim(),
+      bannerUrl,
+      logoUrl,
       promoVideoUrl: document.getElementById('evtPromoVideoUrl').value.trim(),
       registrationProvider,
       externalRegistrationUrl,
@@ -3034,25 +3189,40 @@
       googleMeetLink: document.getElementById('evtGoogleMeetLink').value.trim()
     };
 
+    const payloadJson = JSON.stringify(payload);
+    if (payloadJson.length > 3.8 * 1024 * 1024) {
+      alert('Event data is too large (' + (payloadJson.length / (1024 * 1024)).toFixed(1) + 'MB). Please upload smaller or compressed poster/banner images under 1MB.');
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
+      return;
+    }
+
     try {
       let res;
       if (currentEditingEventSlug) {
         res = await adminFetch(`/api/admin/events/${encodeURIComponent(currentEditingEventSlug)}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: payloadJson
         });
       } else {
         res = await adminFetch('/api/admin/events', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: payloadJson
         });
       }
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        alert('Failed to save event: ' + (data.error || 'Server error'));
+      const { ok, status, data, raw } = await safeJson(res);
+      if (!ok || !data || !data.success) {
+        let errDesc = (data && data.error) ? data.error : null;
+        if (!errDesc) {
+          if (status === 413 || (raw && (raw.toLowerCase().includes('entity too large') || raw.toLowerCase().includes('payload too large')))) {
+            errDesc = 'Event media (poster, banner, or QR) is too large for the server. Please upload smaller or compressed images.';
+          } else {
+            errDesc = `Server error (${status}): ${(raw || '').substring(0, 150) || 'Unknown error'}`;
+          }
+        }
+        alert('Failed to save event: ' + errDesc);
         if (btn) { btn.disabled = false; btn.textContent = '✓ Save Event'; }
         return;
       }
@@ -3094,14 +3264,14 @@
       const res = await adminFetch(`/api/admin/events/${encodeURIComponent(slug)}/set-active`, {
         method: 'POST'
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const { ok, data, raw } = await safeJson(res);
+      if (ok && data && data.success) {
         activeAdminEventId = slug;
         await loadAdminEventsList();
         renderEventsList(eventsTabFilter);
         loadOverview();
       } else {
-        alert('Failed to set active event: ' + (data.error || 'Server error'));
+        alert('Failed to set active event: ' + (data?.error || raw || 'Server error'));
       }
     } catch (err) {
       alert('Network error: ' + err.message);
@@ -3116,12 +3286,12 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const { ok, data, raw } = await safeJson(res);
+      if (ok && data && data.success) {
         await loadAdminEventsList();
         renderEventsList(eventsTabFilter);
       } else {
-        alert('Failed to update event status: ' + (data.error || 'Server error'));
+        alert('Failed to update event status: ' + (data?.error || raw || 'Server error'));
       }
     } catch (err) {
       alert('Network error: ' + err.message);

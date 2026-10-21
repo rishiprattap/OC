@@ -266,7 +266,7 @@ router.post('/upload', (req, res) => {
   upload.any()(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ success: false, error: 'File size exceeds 10MB limit. Please upload a smaller file.' });
+        return res.status(413).json({ success: false, error: 'File size exceeds limit. Please upload an image under 3MB.' });
       }
       return res.status(400).json({ success: false, error: err.message || 'File upload failed.' });
     }
@@ -274,6 +274,18 @@ router.post('/upload', (req, res) => {
     try {
       if (!req.files || req.files.length === 0) {
         return res.status(400).json({ success: false, error: 'No file uploaded. Please select a file.' });
+      }
+
+      // On serverless hosting (Vercel), enforce max 2.5MB per file to avoid base64 response payload limits
+      if (isVercel) {
+        for (const f of req.files) {
+          if (f.size > 2.5 * 1024 * 1024) {
+            return res.status(413).json({
+              success: false,
+              error: `File "${f.originalname}" is too large (${formatFileSize(f.size)}). On serverless hosting, files must be under 2.5MB. Please compress the image.`
+            });
+          }
+        }
       }
 
       const assetType = String(req.body.assetType || req.query.assetType || 'asset').toLowerCase();

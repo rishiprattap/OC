@@ -258,7 +258,14 @@ app.get('*', (req, res) => sendHydratedHtml(path.join(publicDir, 'index.html'), 
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('[Server] Unhandled error:', err);
-  res.status(500).json({ success: false, error: err.message || 'Internal server error.' });
+  const status = err.status || err.statusCode || 500;
+  if (err.type === 'entity.too.large' || status === 413) {
+    return res.status(413).json({
+      success: false,
+      error: 'Request payload is too large. Please upload smaller or compressed media under 2MB.'
+    });
+  }
+  res.status(status).json({ success: false, error: err.message || 'Internal server error.' });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
