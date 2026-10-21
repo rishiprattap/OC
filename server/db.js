@@ -1921,20 +1921,36 @@ const initSchema = async () => {
       CREATE TABLE IF NOT EXISTS promo_codes (
         id SERIAL PRIMARY KEY,
         code TEXT UNIQUE NOT NULL,
-        assigned_to TEXT NOT NULL,
+        assigned_person TEXT,
+        assigned_to TEXT,
         discount_type TEXT NOT NULL DEFAULT 'percentage',
         discount_value NUMERIC NOT NULL DEFAULT 0,
         eligible_events TEXT DEFAULT 'ALL',
         starts_at TEXT,
         expires_at TEXT,
+        total_usage_limit INTEGER,
+        per_user_limit INTEGER DEFAULT 1,
         max_uses INTEGER DEFAULT 0,
         max_uses_per_user INTEGER DEFAULT 1,
         times_used INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
+        notes TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     `);
+
+    // Safe column migrations for promo_codes
+    await addColumnIfNotExists('promo_codes', 'assigned_person TEXT');
+    await addColumnIfNotExists('promo_codes', 'assigned_to TEXT');
+    await addColumnIfNotExists('promo_codes', 'total_usage_limit INTEGER');
+    await addColumnIfNotExists('promo_codes', 'per_user_limit INTEGER DEFAULT 1');
+    await addColumnIfNotExists('promo_codes', 'max_uses INTEGER DEFAULT 0');
+    await addColumnIfNotExists('promo_codes', 'max_uses_per_user INTEGER DEFAULT 1');
+    await addColumnIfNotExists('promo_codes', 'notes TEXT');
+    try { await rawRun(`ALTER TABLE promo_codes ALTER COLUMN assigned_to DROP NOT NULL`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE promo_codes ALTER COLUMN eligible_events DROP NOT NULL`); } catch (_) {}
+
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_promo_code ON promo_codes(code)`);
     await rawRun(`CREATE INDEX IF NOT EXISTS idx_promo_active ON promo_codes(is_active)`);
 

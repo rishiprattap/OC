@@ -1882,13 +1882,15 @@ router.post('/users/:id/unblock', requireAdmin, async (req, res) => {
 
 // Helper to format a promo code row with stats
 function formatPromoCode(p, stats = {}) {
+  if (!p) return null;
   let events = [];
   if (p.eligible_events) {
     if (Array.isArray(p.eligible_events)) {
       events = p.eligible_events;
-    } else {
+    } else if (typeof p.eligible_events === 'string') {
       try {
         events = JSON.parse(p.eligible_events);
+        if (!Array.isArray(events)) events = [events];
       } catch (_) {
         events = [p.eligible_events];
       }
@@ -1896,13 +1898,22 @@ function formatPromoCode(p, stats = {}) {
   }
 
   const isActive = Number(p.is_active !== undefined ? p.is_active : 1) === 1;
+  const assigned = (p.assigned_person || p.assigned_to || '').trim() || null;
+  const totalLimit = p.total_usage_limit !== null && p.total_usage_limit !== undefined 
+    ? Number(p.total_usage_limit) 
+    : (p.max_uses !== null && p.max_uses !== undefined && Number(p.max_uses) > 0 ? Number(p.max_uses) : null);
+  const perUserLimit = p.per_user_limit !== null && p.per_user_limit !== undefined 
+    ? Number(p.per_user_limit) 
+    : (p.max_uses_per_user !== null && p.max_uses_per_user !== undefined ? Number(p.max_uses_per_user) : 1);
 
   return {
     id: p.id,
     code: p.code,
-    assigned_person: p.assigned_person || null,
-    assignedPerson: p.assigned_person || null,
-    referrerName: p.assigned_person || null,
+    assigned_person: assigned,
+    assignedPerson: assigned,
+    assigned_to: assigned,
+    assignedTo: assigned,
+    referrerName: assigned,
     discount_type: p.discount_type || 'percentage',
     discountType: p.discount_type || 'percentage',
     discount_value: Number(p.discount_value || 0),
@@ -1915,11 +1926,14 @@ function formatPromoCode(p, stats = {}) {
     expires_at: p.expires_at || null,
     expiresAt: p.expires_at || null,
     endDate: p.expires_at || null,
-    total_usage_limit: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
-    totalUsageLimit: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
-    maxUses: p.total_usage_limit !== null && p.total_usage_limit !== undefined ? Number(p.total_usage_limit) : null,
-    per_user_limit: p.per_user_limit !== null && p.per_user_limit !== undefined ? Number(p.per_user_limit) : 1,
-    perUserLimit: p.per_user_limit !== null && p.per_user_limit !== undefined ? Number(p.per_user_limit) : 1,
+    total_usage_limit: totalLimit,
+    totalUsageLimit: totalLimit,
+    max_uses: totalLimit,
+    maxUses: totalLimit,
+    per_user_limit: perUserLimit,
+    perUserLimit: perUserLimit,
+    max_uses_per_user: perUserLimit,
+    maxUsesPerUser: perUserLimit,
     is_active: isActive ? 1 : 0,
     isActive,
     notes: p.notes || null,
@@ -1990,8 +2004,9 @@ router.get('/promo-codes/referrers', async (req, res) => {
     // Map promo code string to assigned person
     const codeToReferrer = {};
     for (const c of codes) {
-      if (c.code && c.assigned_person) {
-        codeToReferrer[c.code.toUpperCase().trim()] = c.assigned_person.trim();
+      const ref = (c.assigned_person || c.assigned_to || '').trim();
+      if (c.code && ref) {
+        codeToReferrer[c.code.toUpperCase().trim()] = ref;
       }
     }
 
@@ -1999,7 +2014,7 @@ router.get('/promo-codes/referrers', async (req, res) => {
 
     // First seed with all referrers known from promo_codes
     for (const c of codes) {
-      const ref = (c.assigned_person || '').trim();
+      const ref = (c.assigned_person || c.assigned_to || '').trim();
       if (ref) {
         if (!referrersMap[ref]) {
           referrersMap[ref] = {
@@ -2154,19 +2169,43 @@ router.post('/promo-codes', async (req, res) => {
 
     const insertResult = await run(
       `INSERT INTO promo_codes (
-        code, assigned_person, discount_type, discount_value, eligible_events,
-        starts_at, expires_at, total_usage_limit, per_user_limit, is_active,
-        notes, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        code, assigned_person, assigned_to, discount_type, discount_value, eligible_events,
+        starts_at, expires_at, total_usage_limit, max_uses, per_user_limit, max_uses_per_user,
+        is_active, notes, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        code, assignedPerson, normalizedDiscountType, discountValue, eligibleEvents,
-        startsAt, expiresAt, totalUsageLimit, perUserLimit, isActive,
-        notes, now, now
+        code, assignedPerson, assignedPerson || '', normalizedDiscountType, discountValue, eligibleEvents,
+        startsAt, expiresAt, totalUsageLimit, totalUsageLimit || 0, perUserLimit, perUserLimit,
+        isActive, notes, now, now
       ]
     );
 
     const newId = insertResult?.lastID;
-    const created = await get(`SELECT * FROM promo_codes WHERE ${newId ? 'id = ?' : 'UPPER(code) = UPPER(?)'}`, [newId || code]);
+    let created = await get(`SELECT * FROM promo_codes WHERE ${newId ? 'id = ?' : 'UPPER(code) = UPPER(?)'}`, [newId || code]);
+    if (!created && newId) {
+      created = await get(`SELECT * FROM promo_codes WHERE UPPER(code) = UPPER(?)`, [code]);
+    }
+    if (!created) {
+      created = {
+        id: newId || 0,
+        code,
+        assigned_person: assignedPerson,
+        assigned_to: assignedPerson,
+        discount_type: normalizedDiscountType,
+        discount_value: discountValue,
+        eligible_events: eligibleEvents,
+        starts_at: startsAt,
+        expires_at: expiresAt,
+        total_usage_limit: totalUsageLimit,
+        max_uses: totalUsageLimit,
+        per_user_limit: perUserLimit,
+        max_uses_per_user: perUserLimit,
+        is_active: isActive,
+        notes,
+        created_at: now,
+        updated_at: now
+      };
+    }
 
     return res.status(201).json({
       success: true,
@@ -2176,7 +2215,7 @@ router.post('/promo-codes', async (req, res) => {
 
   } catch (err) {
     console.error('[Admin] Error creating promo code:', err);
-    return res.status(500).json({ success: false, error: 'Server error while creating promo code.' });
+    return res.status(500).json({ success: false, error: err.message || 'Server error while creating promo code.' });
   }
 });
 
@@ -2230,6 +2269,7 @@ router.put('/promo-codes/:id', async (req, res) => {
       }
     }
 
+    const existingAssigned = (existing.assigned_person || existing.assigned_to || '').trim() || null;
     const assignedPerson = req.body.referrerName !== undefined 
       ? (String(req.body.referrerName || '').trim() || null)
       : (req.body.referrer_name !== undefined
@@ -2238,7 +2278,7 @@ router.put('/promo-codes/:id', async (req, res) => {
           ? (String(req.body.assignedPerson || '').trim() || null) 
           : (req.body.assigned_person !== undefined
             ? (String(req.body.assigned_person || '').trim() || null)
-            : existing.assigned_person)));
+            : existingAssigned)));
 
     let eligibleEvents = existing.eligible_events;
     if (req.body.eligible_events !== undefined || req.body.eligibleEvents !== undefined) {
@@ -2269,7 +2309,9 @@ router.put('/promo-codes/:id', async (req, res) => {
         ? req.body.expiresAt 
         : (req.body.endDate !== undefined ? req.body.endDate : existing.expires_at));
 
-    let totalUsageLimit = existing.total_usage_limit;
+    let totalUsageLimit = existing.total_usage_limit !== undefined && existing.total_usage_limit !== null
+      ? existing.total_usage_limit
+      : (existing.max_uses ? existing.max_uses : null);
     if (req.body.total_usage_limit !== undefined || req.body.totalUsageLimit !== undefined || req.body.maxUses !== undefined) {
       const rawLimit = req.body.total_usage_limit !== undefined 
         ? req.body.total_usage_limit 
@@ -2277,7 +2319,9 @@ router.put('/promo-codes/:id', async (req, res) => {
       totalUsageLimit = (rawLimit !== null && rawLimit !== '') ? Math.max(0, parseInt(rawLimit, 10)) : null;
     }
 
-    let perUserLimit = existing.per_user_limit;
+    let perUserLimit = existing.per_user_limit !== undefined && existing.per_user_limit !== null
+      ? existing.per_user_limit
+      : (existing.max_uses_per_user ? existing.max_uses_per_user : 1);
     if (req.body.per_user_limit !== undefined || req.body.perUserLimit !== undefined || req.body.maxUsesPerUser !== undefined) {
       const rawPerUser = req.body.per_user_limit !== undefined 
         ? req.body.per_user_limit 
@@ -2299,25 +2343,32 @@ router.put('/promo-codes/:id', async (req, res) => {
       `UPDATE promo_codes SET
         code = ?,
         assigned_person = ?,
+        assigned_to = ?,
         discount_type = ?,
         discount_value = ?,
         eligible_events = ?,
         starts_at = ?,
         expires_at = ?,
         total_usage_limit = ?,
+        max_uses = ?,
         per_user_limit = ?,
+        max_uses_per_user = ?,
         is_active = ?,
         notes = ?,
         updated_at = ?
       WHERE id = ?`,
       [
-        code, assignedPerson, discountType, discountValue, eligibleEvents,
-        startsAt, expiresAt, totalUsageLimit, perUserLimit, isActive,
-        notes, now, id
+        code, assignedPerson, assignedPerson || '', discountType, discountValue, eligibleEvents,
+        startsAt, expiresAt, totalUsageLimit, totalUsageLimit || 0, perUserLimit, perUserLimit,
+        isActive, notes, now, id
       ]
     );
 
-    const updated = await get(`SELECT * FROM promo_codes WHERE id = ?`, [id]);
+    let updated = await get(`SELECT * FROM promo_codes WHERE id = ?`, [id]);
+    if (!updated) {
+      updated = await get(`SELECT * FROM promo_codes WHERE UPPER(code) = UPPER(?)`, [code]);
+    }
+
     return res.json({
       success: true,
       message: `Promo code "${code}" updated successfully.`,
@@ -2326,7 +2377,7 @@ router.put('/promo-codes/:id', async (req, res) => {
 
   } catch (err) {
     console.error('[Admin] Error updating promo code:', err);
-    return res.status(500).json({ success: false, error: 'Server error while updating promo code.' });
+    return res.status(500).json({ success: false, error: err.message || 'Server error while updating promo code.' });
   }
 });
 
