@@ -479,9 +479,10 @@
     }
   }
 
-  // ── Download / Export Filtered Registrations CSV ───────────────────────────────
-  window.exportRegistrationsCsv = async function (overrides = {}) {
-    const btn = document.getElementById('btnExportCsv');
+  // ── Download / Export Filtered Registrations (Excel XLSX or CSV) ───────────────
+  window.exportRegistrations = async function (format = 'xlsx', overrides = {}) {
+    const isXlsx = format === 'xlsx';
+    const btn = isXlsx ? document.getElementById('btnExportXlsx') : document.getElementById('btnExportCsv');
     const originalText = btn ? btn.innerHTML : '';
     if (btn) {
       btn.disabled = true;
@@ -496,6 +497,7 @@
       const search = overrides.search !== undefined ? overrides.search : (document.getElementById('searchInput')?.value.trim() || '');
 
       const params = new URLSearchParams();
+      params.append('format', format);
       if (eventFilterVal && eventFilterVal !== 'ALL') params.append('eventId', eventFilterVal);
       if (status && status !== 'ALL') params.append('status', status);
       if (category && category !== 'ALL') params.append('category', category);
@@ -512,7 +514,7 @@
         return;
       }
 
-      let filename = 'participants_export.csv';
+      let filename = isXlsx ? 'participants_export.xlsx' : 'participants_export.csv';
       const disposition = res.headers.get('Content-Disposition');
       if (disposition && disposition.includes('filename=')) {
         const match = disposition.match(/filename="?([^";]+)"?/);
@@ -531,7 +533,7 @@
       document.body.removeChild(a);
 
     } catch (err) {
-      console.error('[Admin] CSV Export Error:', err);
+      console.error('[Admin] Export Error:', err);
       alert('Error downloading participant list: ' + err.message);
     } finally {
       if (btn) {
@@ -539,6 +541,14 @@
         btn.innerHTML = originalText;
       }
     }
+  };
+
+  // Backward-compatible aliases
+  window.exportRegistrationsCsv = async function (overrides = {}) {
+    return window.exportRegistrations('csv', overrides);
+  };
+  window.exportRegistrationsXlsx = async function (overrides = {}) {
+    return window.exportRegistrations('xlsx', overrides);
   };
 
   // Debounce search input

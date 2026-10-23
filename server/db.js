@@ -1627,15 +1627,17 @@ function handleLocalAll(sql, params = []) {
     }
     if (sqlLower.includes('full_name like') && pIdx < params.length) {
       const rawSearch = String(params[pIdx] || '').replace(/^%|%$/g, '').toLowerCase();
-      const paramSlots = sqlLower.includes('id = ?') ? 6 : 5;
+      const paramSlots = sqlLower.includes('id = ?') ? 8 : (sqlLower.includes('promo_code like') ? 7 : 5);
       pIdx += paramSlots;
       if (rawSearch) {
         list = list.filter(r =>
-          (r.full_name && r.full_name.toLowerCase().includes(rawSearch)) ||
-          (r.email && r.email.toLowerCase().includes(rawSearch)) ||
-          (r.registration_id && r.registration_id.toLowerCase().includes(rawSearch)) ||
-          (r.phone && r.phone.toLowerCase().includes(rawSearch)) ||
-          (r.transaction_id && r.transaction_id.toLowerCase().includes(rawSearch)) ||
+          (r.full_name && String(r.full_name).toLowerCase().includes(rawSearch)) ||
+          (r.email && String(r.email).toLowerCase().includes(rawSearch)) ||
+          (r.registration_id && String(r.registration_id).toLowerCase().includes(rawSearch)) ||
+          (r.phone !== undefined && r.phone !== null && String(r.phone).toLowerCase().includes(rawSearch)) ||
+          (r.transaction_id && String(r.transaction_id).toLowerCase().includes(rawSearch)) ||
+          (r.promo_code && String(r.promo_code).toLowerCase().includes(rawSearch)) ||
+          (r.referrer_name && String(r.referrer_name).toLowerCase().includes(rawSearch)) ||
           String(r.id) === rawSearch
         );
       }

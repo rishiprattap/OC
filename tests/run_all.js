@@ -10,6 +10,7 @@ const runLogoTests = require('./test_email_logo');
 const runUserAuthTests = require('./test_user_auth_and_flow');
 const runAdminUserManagementTests = require('./test_admin_user_management');
 const runPromoAndInstagramTests = require('./test_promo_and_instagram');
+const runExportTests = require('./test_export_csv');
 
 let serverInstance = null;
 
@@ -48,6 +49,7 @@ async function runMasterSuite() {
   let adminUsersOk = false;
   let analyticsOk = false;
   let promoInstagramOk = false;
+  let exportOk = false;
 
   try {
     console.log('>>> [1/8] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
@@ -83,9 +85,13 @@ async function runMasterSuite() {
     }
     if (!analyticsOk) allPassed = false;
 
-    console.log('>>> [8/8] EXECUTING PROMO CODES, REFERRALS & INSTAGRAM TESTS...');
+    console.log('>>> [8/9] EXECUTING PROMO CODES, REFERRALS & INSTAGRAM TESTS...');
     promoInstagramOk = await runPromoAndInstagramTests();
     if (!promoInstagramOk) allPassed = false;
+
+    console.log('>>> [9/9] EXECUTING CSV & EXCEL (.XLSX) EXPORT TESTS...');
+    exportOk = await runExportTests();
+    if (!exportOk) allPassed = false;
 
   } finally {
     if (serverInstance) {
@@ -107,6 +113,7 @@ async function runMasterSuite() {
   console.log(`Email Brand Logo       : ${logoOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Analytics & Insights   : ${analyticsOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Promo Codes & Instagram: ${promoInstagramOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`CSV & Excel Export     : ${exportOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Total Execution Time   : ${duration}s`);
   console.log('======================================================\n');
 

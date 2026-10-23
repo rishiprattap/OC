@@ -18,6 +18,7 @@ const { run, get, all, getSetting, setSetting, getEventBySlug, getActiveEvent } 
 const config = require('../config');
 const emailService = require('../services/email');
 const { normalizePromoCode } = require('../services/promo');
+const { generateCsv, generateXlsxBuffer } = require('../services/export');
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
@@ -275,11 +276,13 @@ router.get('/registrations', async (req, res) => {
   }
 });
 
-// ─── GET /api/admin/registrations/export (DOWNLOAD PARTICIPANTS WITH FILTERS) ──
+// ─── GET /api/admin/registrations/export & /registrations/export.xlsx (DOWNLOAD PARTICIPANTS WITH FILTERS) ──
 
-router.get('/registrations/export', async (req, res) => {
+router.get(['/registrations/export', '/registrations/export.xlsx'], async (req, res) => {
   try {
     const { status, search, eventId, category, checkedIn } = req.query;
+    const format = (req.query.format || (req.path.endsWith('.xlsx') ? 'xlsx' : 'csv')).toLowerCase();
+    const isXlsx = format === 'xlsx';
 
     let sql = `SELECT * FROM registrations WHERE 1=1`;
     const params = [];
@@ -331,128 +334,34 @@ router.get('/registrations/export', async (req, res) => {
       }
     } catch (_) {}
 
-    function csvCell(val) {
-      if (val === null || val === undefined) return '""';
-      const str = String(val).replace(/"/g, '""');
-      return `"${str}"`;
-    }
-
-    const headers = [
-      'Serial Number',
-      'Registration ID',
-      'Event Slug',
-      'Event Name',
-      'Full Name',
-      'Email',
-      'Phone',
-      'City',
-      'Category',
-      'Performance Title',
-      'Performance Description',
-      'Instagram Handle',
-      'Promo Code',
-      'Referrer',
-      'Original Fee (INR)',
-      'Discount Amount (INR)',
-      'Final Fee (INR)',
-      'Fee Amount (INR)',
-      'Registration Status',
-      'Payment Status',
-      'Transaction ID',
-      'OTP Verified',
-      'Checked In (Attended)',
-      'Check-in Time',
-      'Certificate Eligible',
-      'Position / Award',
-      'Achievement',
-      'Badge Text',
-      'Citation',
-      'Certificate Title',
-      'Registered At',
-      'Approved At',
-      'Approved By',
-      'Rejection Reason',
-      'Admin Notes',
-      'Payment Screenshot URL',
-      'Certificate Verification URL'
-    ];
-
-    const host = req.get('host') || 'offstagecreators.com';
+    const host = req.get('host') || 'offstagecreators.in';
     const protocol = req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
-
-    const csvDataRows = rows.map(r => {
-      const evSlug = r.event_id || 'online-open-mic-2026';
-      const evName = eventMap[evSlug] || (evSlug === 'online-open-mic-2026' ? 'Online Open Mic 2026' : evSlug);
-      const serial = String(r.serial_number || r.id).padStart(6, '0');
-      const certUrl = `${baseUrl}/certificate.html?id=${encodeURIComponent(r.registration_id)}`;
-
-      const origFee = r.original_fee !== undefined && r.original_fee !== null ? r.original_fee : (r.amount ?? 79);
-      const discAmt = r.discount_amount !== undefined && r.discount_amount !== null ? r.discount_amount : 0;
-      const finFee = r.final_fee !== undefined && r.final_fee !== null ? r.final_fee : (r.amount ?? 79);
-
-      return [
-        serial,
-        r.registration_id,
-        evSlug,
-        evName,
-        r.full_name || '',
-        r.email || '',
-        r.phone || '',
-        r.city || '',
-        r.category || '',
-        r.performance_title || '',
-        r.performance_description || '',
-        r.instagram || '',
-        r.promo_code || '',
-        r.referrer_name || '',
-        origFee,
-        discAmt,
-        finFee,
-        r.amount ?? finFee,
-        r.reg_status || 'PENDING_VERIFICATION',
-        r.payment_status || 'PAID',
-        r.transaction_id || '',
-        r.otp_verified ? 'YES' : 'NO',
-        r.checked_in ? 'YES' : 'NO',
-        r.checkin_at || '',
-        r.certificate_eligible ? 'YES' : 'NO',
-        r.position || 'Participant',
-        r.achievement || '',
-        r.badge_text || '',
-        r.citation || '',
-        r.certificate_title || 'CERTIFICATE OF PARTICIPATION',
-        r.created_at || '',
-        r.approved_at || '',
-        r.approved_by || '',
-        r.rejected_reason || '',
-        r.admin_notes || '',
-        r.payment_screenshot_url || '',
-        certUrl
-      ];
-    });
 
     const dateStr = new Date().toISOString().slice(0, 10);
     const eventPart = (eventId && eventId !== 'ALL') ? eventId.replace(/[^a-zA-Z0-9_-]/g, '') : 'all-events';
     const statusPart = (status && status !== 'ALL') ? status.toLowerCase() : 'all-statuses';
-    const filename = `participants_${eventPart}_${statusPart}_${dateStr}.csv`;
 
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-
-    // \uFEFF is UTF-8 Byte Order Mark for Excel compatibility
-    const csvOutput = '\uFEFF' + [
-      headers.map(csvCell).join(','),
-      ...csvDataRows.map(row => row.map(csvCell).join(','))
-    ].join('\r\n');
-
-    return res.send(csvOutput);
+    if (isXlsx) {
+      const filename = `participants_${eventPart}_${statusPart}_${dateStr}.xlsx`;
+      const xlsxBuffer = await generateXlsxBuffer(rows, eventMap, baseUrl);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(xlsxBuffer);
+    } else {
+      const filename = `participants_${eventPart}_${statusPart}_${dateStr}.csv`;
+      const csvOutput = generateCsv(rows, eventMap, baseUrl);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csvOutput);
+    }
 
   } catch (err) {
     console.error('[Admin] Export registrations error:', err);
     return res.status(500).json({ success: false, error: 'Failed to export registrations.' });
   }
 });
+
 
 // ─── GET /api/admin/registrations/:id ────────────────────────────────────────
 
@@ -509,6 +418,38 @@ router.get('/registrations/:id', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Get registration error:', err);
     return res.status(500).json({ success: false, error: 'Server error.' });
+  }
+});
+
+// ─── GET /api/admin/registrations/:id/screenshot ─────────────────────────────
+
+router.get('/registrations/:id/screenshot', async (req, res) => {
+  try {
+    const regId = req.params.id.trim().toUpperCase();
+    const record = await get(`SELECT payment_screenshot_url FROM registrations WHERE registration_id = ?`, [regId]);
+
+    if (!record || !record.payment_screenshot_url) {
+      return res.status(404).send('No payment screenshot found.');
+    }
+
+    const url = record.payment_screenshot_url;
+    if (url.startsWith('data:')) {
+      const match = url.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mime = match[1];
+        const buffer = Buffer.from(match[2], 'base64');
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer);
+      }
+    } else if (url.startsWith('/uploads/') || url.startsWith('http')) {
+      return res.redirect(url);
+    }
+
+    return res.status(404).send('Screenshot format not supported.');
+  } catch (err) {
+    console.error('[Admin] View screenshot error:', err);
+    return res.status(500).send('Failed to retrieve screenshot.');
   }
 });
 

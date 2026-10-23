@@ -551,9 +551,12 @@
             <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">All Registrations</h1>
             <p style="color:#8e8477; font-size:13px; margin:0;">Filter, search, review, and download participant details.</p>
           </div>
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="cta cta-primary" id="btnExportCsv" onclick="exportRegistrationsCsv()" style="display:inline-flex; align-items:center; gap:6px;">
-              <span>📥</span> Download Filtered CSV
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="cta cta-primary" id="btnExportXlsx" onclick="exportRegistrations('xlsx')" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📊</span> Download Excel (.xlsx)
+            </button>
+            <button type="button" class="cta cta-secondary" id="btnExportCsv" onclick="exportRegistrations('csv')" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Download CSV
             </button>
           </div>
         </div>
@@ -592,9 +595,12 @@
             <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Pending Review</h1>
             <p style="color:#8e8477; font-size:13px; margin:0;">Verified registrations waiting for approval.</p>
           </div>
-          <div>
-            <button type="button" class="cta cta-secondary" onclick="exportRegistrationsCsv({ status: 'PENDING_VERIFICATION' })" style="display:inline-flex; align-items:center; gap:6px;">
-              <span>📥</span> Export Pending CSV
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="cta cta-primary" onclick="exportRegistrations('xlsx', { status: 'PENDING_VERIFICATION' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📊</span> Export Excel
+            </button>
+            <button type="button" class="cta cta-secondary" onclick="exportRegistrations('csv', { status: 'PENDING_VERIFICATION' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Export CSV
             </button>
           </div>
         </div>
@@ -610,9 +616,12 @@
             <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:32px; margin:0 0 4px;">Approved Registrations</h1>
             <p style="color:#8e8477; font-size:13px; margin:0;">Confirmed and approved performers.</p>
           </div>
-          <div>
-            <button type="button" class="cta cta-secondary" onclick="exportRegistrationsCsv({ status: 'APPROVED' })" style="display:inline-flex; align-items:center; gap:6px;">
-              <span>📥</span> Export Approved CSV
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="cta cta-primary" onclick="exportRegistrations('xlsx', { status: 'APPROVED' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📊</span> Export Excel
+            </button>
+            <button type="button" class="cta cta-secondary" onclick="exportRegistrations('csv', { status: 'APPROVED' })" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📥</span> Export CSV
             </button>
           </div>
         </div>
