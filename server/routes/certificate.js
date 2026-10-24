@@ -4,6 +4,11 @@ const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { get, all, getEventBySlug } = require('../db');
 const config = require('../config');
+const {
+  resolveCertificateData,
+  isRecordWinner,
+  generateCertificateSvg
+} = require('../services/certificate');
 
 function normalizeName(str) {
   return String(str || '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -15,43 +20,6 @@ function normalizePhone(str) {
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
-}
-
-// ─── Default Winner Registrations (Backward Compatibility) ─────────────────────
-const DEFAULT_WINNER_REGISTRATIONS = {
-  'OC-OM-2440F923': {
-    isWinner: true,
-    position: 'WINNER',
-    achievement: 'Winner — First Place',
-    certificateTitle: 'CERTIFICATE OF EXCELLENCE',
-    badgeText: '★ EVENT WINNER ★',
-    citation: 'for securing 1st Place as the Event Winner with an exceptional and captivating performance in'
-  }
-};
-
-function resolveWinnerInfo(record) {
-  if (!record) return null;
-  // 1. Check if stored directly on participant record
-  if (record.achievement || record.badge_text || (record.position && record.position !== 'Participant')) {
-    return {
-      isWinner: Boolean(record.position === 'WINNER' || record.badge_text),
-      position: record.position || 'Winner',
-      achievement: record.achievement || record.position,
-      certificateTitle: record.certificate_title || 'CERTIFICATE OF EXCELLENCE',
-      badgeText: record.badge_text || '★ EVENT WINNER ★',
-      citation: record.citation || 'for exceptional performance in'
-    };
-  }
-  // 2. Fallback to default winners table (preserves Suhavani Kaur)
-  const regId = String(record.registration_id || '').trim().toUpperCase();
-  if (DEFAULT_WINNER_REGISTRATIONS[regId]) {
-    return DEFAULT_WINNER_REGISTRATIONS[regId];
-  }
-  const cleanName = normalizeName(record.full_name);
-  if (cleanName === 'suhavani kaur' || cleanName.includes('suhavani')) {
-    return DEFAULT_WINNER_REGISTRATIONS['OC-OM-2440F923'];
-  }
-  return null;
 }
 
 async function generateQr(url) {
@@ -73,12 +41,17 @@ async function generateQr(url) {
 // Verification handler for POST and GET
 async function handleVerify(req, res) {
   try {
+    // Prevent client/proxy caching so regenerating a certificate always reflects latest options
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const body = req.method === 'GET' ? req.query : req.body;
     const { name, phone } = body;
     const registrationId = body.registrationId || body.regId || body.id;
 
-    const host = req.get('host') || 'offstagecreators.com';
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
 
     // Helper to format certificate response
@@ -97,8 +70,8 @@ async function handleVerify(req, res) {
         };
       }
 
-      const winnerInfoPreCheck = resolveWinnerInfo(record);
-      if (!record.checked_in && !record.certificate_eligible && !winnerInfoPreCheck) {
+      const isWinner = isRecordWinner(record);
+      if (!record.checked_in && !record.certificate_eligible && !isWinner) {
         return {
           status: 403,
           data: { success: false, error: 'Participation certificate is issued after attending and checking in to the event.' }
@@ -106,50 +79,25 @@ async function handleVerify(req, res) {
       }
 
       // Dynamic Event Resolution
-      let eventTitle = config.EVENT.title;
-      let eventDate = config.EVENT.date;
-      let eventSlug = record.event_id || config.EVENT.id;
-
+      let evt = null;
       if (record.event_id) {
-        const evt = await getEventBySlug(record.event_id);
-        if (evt) {
-          eventTitle = evt.title || evt.name;
-          eventDate = evt.event_date || config.EVENT.date;
-          eventSlug = evt.slug;
-        }
+        evt = await getEventBySlug(record.event_id);
+      }
+      if (!evt) {
+        evt = await getEventBySlug(config.EVENT.id);
       }
 
-      const verificationUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(record.registration_id)}`;
-      const qrCode = await generateQr(verificationUrl);
-      const winnerInfo = resolveWinnerInfo(record);
-
+      const certData = await resolveCertificateData(record, evt, baseUrl);
       return {
         status: 200,
         data: {
           success: true,
-          verifiedName: record.full_name,
-          registrationId: record.registration_id,
-          certificateId: record.registration_id,
-          eventId: eventSlug,
-          event: eventTitle,
-          eventName: eventTitle,
-          category: record.category || 'Performer',
-          performanceTitle: record.performance_title || null,
-          city: record.city || null,
-          date: eventDate,
-          verificationUrl,
-          qrCode,
-          isWinner: Boolean(winnerInfo),
-          position: winnerInfo ? winnerInfo.position : (record.position || 'Participant'),
-          achievement: winnerInfo ? winnerInfo.achievement : (record.achievement || null),
-          certificateTitle: winnerInfo ? winnerInfo.certificateTitle : (record.certificate_title || 'CERTIFICATE OF PARTICIPATION'),
-          badgeText: winnerInfo ? winnerInfo.badgeText : (record.badge_text || null),
-          citation: winnerInfo ? winnerInfo.citation : (record.citation || null)
+          ...certData
         }
       };
     }
 
-    // Check if looking up directly by registrationId
+    // 1. Check if looking up directly by registrationId
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
@@ -163,7 +111,7 @@ async function handleVerify(req, res) {
       }
     }
 
-    // Name + Phone verification
+    // 2. Name + Phone verification
     const cleanName = normalizeName(name);
     const cleanPhone = normalizePhone(phone);
 
@@ -174,13 +122,13 @@ async function handleVerify(req, res) {
       });
     }
 
-    // 1. Check registrations database
+    // Check registrations database
     let matchingRecords = await all(
       `SELECT * FROM registrations WHERE phone = ?`,
       [cleanPhone]
     );
 
-    // Optional event filter if passed in query/body
+    // Optional event filter if passed in query/body (strictly scopes verification to selected event)
     const targetEventId = body.eventId || body.event;
     if (targetEventId && matchingRecords) {
       const filteredByEvent = matchingRecords.filter(r => r.event_id === targetEventId);
@@ -197,7 +145,7 @@ async function handleVerify(req, res) {
       return res.status(resp.status).json(resp.data);
     }
 
-    // 2. Check legacy certificates hash (preserves previous participants from certificate.html)
+    // 3. Check legacy certificates hash (preserves previous participants from certificate.html)
     const combinedHash = sha256(cleanName + '|' + cleanPhone);
     const legacy = await get(
       `SELECT * FROM legacy_certificates WHERE hash = ?`,
@@ -221,6 +169,7 @@ async function handleVerify(req, res) {
         verificationUrl,
         qrCode,
         isWinner: false,
+        position: 'Participant',
         certificateTitle: 'CERTIFICATE OF PARTICIPATION'
       });
     }
@@ -236,8 +185,49 @@ async function handleVerify(req, res) {
   }
 }
 
+// Direct Certificate SVG / Download Endpoint
+async function handleDownload(req, res) {
+  try {
+    const regId = (req.params.id || req.query.id || '').trim().toUpperCase();
+    if (!regId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
+
+    const record = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    if (!record) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    let evt = null;
+    if (record.event_id) {
+      evt = await getEventBySlug(record.event_id);
+    }
+    if (!evt) {
+      evt = await getEventBySlug(config.EVENT.id);
+    }
+
+    const certData = await resolveCertificateData(record, evt, baseUrl);
+    const svg = generateCertificateSvg(certData);
+
+    const cleanName = (certData.verifiedName || 'Participant').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `Offstage-Creators-Certificate-${certData.registrationId}-${cleanName}.svg`;
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.send(svg);
+  } catch (err) {
+    console.error('[Certificate] Download error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate certificate file.' });
+  }
+}
+
 // POST and GET /api/certificate/verify
 router.post('/verify', handleVerify);
 router.get('/verify', handleVerify);
+
+// GET /api/certificate/download/:id
+router.get('/download/:id', handleDownload);
+router.get('/svg/:id', handleDownload);
 
 module.exports = router;

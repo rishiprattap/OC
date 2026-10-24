@@ -3479,15 +3479,76 @@
   };
 
   // ── Certificates & Winners Management ─────────────────────────────────────────
+  let currentEventCertSettings = null;
+
+  window.onCertEventFilterChange = function (slug) {
+    activeAdminEventId = slug || '';
+    const certFilter = document.getElementById('certEventFilter');
+    if (certFilter && certFilter.value !== activeAdminEventId) {
+      certFilter.value = activeAdminEventId;
+    }
+    const globalSel = document.getElementById('globalEventSelect');
+    if (globalSel && globalSel.value !== activeAdminEventId) {
+      globalSel.value = activeAdminEventId;
+    }
+    // Clear stale state from previous event
+    cachedCertParticipants = [];
+    currentEventCertSettings = null;
+    loadCertificatesTab();
+  };
+
+  window.toggleEventCertSettings = function (forceState) {
+    const card = document.getElementById('eventCertSettingsCard');
+    if (!card) return;
+    if (forceState !== undefined) {
+      card.style.display = forceState ? 'block' : 'none';
+    } else {
+      card.style.display = card.style.display === 'none' ? 'block' : 'none';
+    }
+  };
+
   window.loadCertificatesTab = async function () {
     const wrapper = document.getElementById('certTableWrapper');
     if (!wrapper) return;
+    // Clear stale participant cache immediately
+    cachedCertParticipants = [];
     wrapper.innerHTML = '<div class="empty-state"><p>Loading certificates…</p></div>';
 
-    const eventSlug = document.getElementById('certEventFilter')?.value || activeAdminEventId;
+    const eventSlug = document.getElementById('certEventFilter')?.value || activeAdminEventId || 'online-open-mic-2026';
+    const certFilter = document.getElementById('certEventFilter');
+    if (certFilter && certFilter.value !== eventSlug) {
+      certFilter.value = eventSlug;
+    }
+
+    const slugLabel = document.getElementById('eventCertSettingsSlug');
+    if (slugLabel) slugLabel.textContent = eventSlug;
+
+    // Load event-scoped certificate settings
+    try {
+      const setRes = await adminFetch(`/api/admin/events/${encodeURIComponent(eventSlug)}/certificate-settings?_t=${Date.now()}`);
+      if (setRes.ok) {
+        const setData = await setRes.json();
+        if (setData.success && setData.settings) {
+          currentEventCertSettings = setData.settings;
+          const defTitleInput = document.getElementById('evtCertDefaultTitle');
+          const dateInput = document.getElementById('evtCertDate');
+          const sig1NameInput = document.getElementById('evtCertSig1Name');
+          const sig1TitleInput = document.getElementById('evtCertSig1Title');
+          const sig2NameInput = document.getElementById('evtCertSig2Name');
+          const sig2TitleInput = document.getElementById('evtCertSig2Title');
+
+          if (defTitleInput) defTitleInput.value = currentEventCertSettings.certificateTitle || 'CERTIFICATE OF PARTICIPATION';
+          if (dateInput) dateInput.value = currentEventCertSettings.date || '';
+          if (sig1NameInput) sig1NameInput.value = currentEventCertSettings.signatory1Name || 'Muskaan';
+          if (sig1TitleInput) sig1TitleInput.value = currentEventCertSettings.signatory1Title || 'Co-Founder & Creative Director';
+          if (sig2NameInput) sig2NameInput.value = currentEventCertSettings.signatory2Name || 'Shlok';
+          if (sig2TitleInput) sig2TitleInput.value = currentEventCertSettings.signatory2Title || 'Co-Founder & Managing Director';
+        }
+      }
+    } catch (_) {}
 
     try {
-      let url = '/api/admin/registrations?limit=300';
+      let url = `/api/admin/registrations?limit=500&_t=${Date.now()}`;
       if (eventSlug) url += `&eventId=${encodeURIComponent(eventSlug)}`;
 
       const res = await adminFetch(url);
@@ -3495,14 +3556,55 @@
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        wrapper.innerHTML = `<div class="empty-state"><p>Failed to load registrations: ${data.error}</p></div>`;
+        wrapper.innerHTML = `<div class="empty-state"><p>Failed to load registrations: ${data.error || 'Unknown error'}</p></div>`;
         return;
       }
 
-      cachedCertParticipants = data.registrations || [];
+      // Filter strictly by the current eventSlug if specified
+      const allRegs = data.registrations || [];
+      cachedCertParticipants = eventSlug && eventSlug !== 'ALL'
+        ? allRegs.filter(r => (r.eventId || 'online-open-mic-2026') === eventSlug)
+        : allRegs;
+
       renderCertificatesTable(cachedCertParticipants);
     } catch (err) {
       wrapper.innerHTML = `<div class="empty-state"><p>Network error: ${err.message}</p></div>`;
+    }
+  };
+
+  window.saveEventCertSettings = async function (e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const eventSlug = document.getElementById('certEventFilter')?.value || activeAdminEventId || 'online-open-mic-2026';
+    const payload = {
+      certificateTitle: document.getElementById('evtCertDefaultTitle')?.value.trim() || 'CERTIFICATE OF PARTICIPATION',
+      date: document.getElementById('evtCertDate')?.value.trim() || '',
+      signatory1Name: document.getElementById('evtCertSig1Name')?.value.trim() || 'Muskaan',
+      signatory1Title: document.getElementById('evtCertSig1Title')?.value.trim() || 'Co-Founder & Creative Director',
+      signatory2Name: document.getElementById('evtCertSig2Name')?.value.trim() || 'Shlok',
+      signatory2Title: document.getElementById('evtCertSig2Title')?.value.trim() || 'Co-Founder & Managing Director'
+    };
+
+    const btn = document.getElementById('btnSaveEvtCertSettings');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+    try {
+      const res = await adminFetch(`/api/admin/events/${encodeURIComponent(eventSlug)}/certificate-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert('Failed to save certificate settings: ' + (data.error || 'Server error'));
+        return;
+      }
+      alert(`Certificate settings saved for event "${eventSlug}"!`);
+      toggleEventCertSettings(false);
+      await loadCertificatesTab();
+    } catch (err) {
+      alert('Network error saving settings: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Save Event Certificate Settings'; }
     }
   };
 
@@ -3525,7 +3627,7 @@
     if (!wrapper) return;
 
     if (!list.length) {
-      wrapper.innerHTML = '<div class="empty-state"><p>No registrations found for certificate issuance.</p></div>';
+      wrapper.innerHTML = '<div class="empty-state"><p>No registrations found for certificate issuance in this event.</p></div>';
       return;
     }
 
@@ -3549,8 +3651,7 @@
       const isWinner = Boolean(
         p.position === 'WINNER' ||
         p.isWinner ||
-        p.registrationId === 'OC-OM-2440F923' ||
-        (p.fullName && p.fullName.toLowerCase().includes('suhavani'))
+        (p.registrationId === 'OC-OM-2440F923' && (p.eventId === 'online-open-mic-2026' || !p.eventId))
       );
 
       const posLabel = p.position || (isWinner ? 'WINNER' : 'PARTICIPANT');
@@ -3570,11 +3671,17 @@
             ${p.badgeText ? `<div style="font-size:11px; color:#e4ad57; margin-top:2px;">${escHtml(p.badgeText)}</div>` : ''}
           </td>
           <td>
-            <div style="display:flex; gap:6px;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
               <button type="button" class="action-btn btn-view" onclick="openWinnerModal('${p.registrationId}', '${escHtml(p.fullName)}', '${escHtml(p.position || '')}', '${escHtml(p.certificateTitle || '')}', '${escHtml(p.badgeText || '')}', '${escHtml(p.citation || '')}')">
                 🎖️ Award / Edit
               </button>
-              <a href="/certificate?id=${p.registrationId}" target="_blank" class="action-btn btn-view" style="text-decoration:none;">
+              <button type="button" class="action-btn btn-view" onclick="previewCertificate('${p.registrationId}')">
+                👁️ Preview
+              </button>
+              <a href="/api/admin/certificate/download/${encodeURIComponent(p.registrationId)}?_t=${Date.now()}" target="_blank" class="action-btn btn-view" style="text-decoration:none;">
+                📥 Download
+              </a>
+              <a href="/certificate?id=${encodeURIComponent(p.registrationId)}" target="_blank" class="action-btn btn-view" style="text-decoration:none;">
                 ↗ Verify
               </a>
             </div>
@@ -3591,10 +3698,12 @@
     document.getElementById('winnerTargetRegId').value = regId;
     document.getElementById('winnerModalRegId').textContent = regId;
     document.getElementById('winnerModalPerformerName').textContent = name;
-    document.getElementById('winnerPositionSelect').value = position || 'WINNER';
-    document.getElementById('winnerCertTitle').value = certTitle || 'CERTIFICATE OF EXCELLENCE';
-    document.getElementById('winnerBadgeText').value = badgeText || '✦ 1ST PLACE WINNER — OUTSTANDING ARTISTRY ✦';
-    document.getElementById('winnerCitationText').value = citation || 'For poetic excellence, heartfelt stage delivery, and resonant storytelling at Offstage Creators.';
+
+    const currentPos = position || 'PARTICIPANT';
+    document.getElementById('winnerPositionSelect').value = currentPos;
+    document.getElementById('winnerCertTitle').value = certTitle || (currentPos === 'WINNER' ? 'CERTIFICATE OF EXCELLENCE' : 'CERTIFICATE OF PARTICIPATION');
+    document.getElementById('winnerBadgeText').value = badgeText || (currentPos === 'WINNER' ? '✦ 1ST PLACE WINNER — OUTSTANDING ARTISTRY ✦' : '');
+    document.getElementById('winnerCitationText').value = citation || (currentPos === 'WINNER' ? 'For poetic excellence, heartfelt stage delivery, and resonant storytelling at Offstage Creators.' : '');
 
     const modal = document.getElementById('winnerModal');
     if (modal) modal.style.display = 'flex';
@@ -3604,6 +3713,48 @@
     const modal = document.getElementById('winnerModal');
     if (modal) modal.style.display = 'none';
   };
+
+  // Auto-switch defaults when position select changes, without destroying user intent
+  document.getElementById('winnerPositionSelect')?.addEventListener('change', function () {
+    const val = this.value;
+    const titleInput = document.getElementById('winnerCertTitle');
+    const badgeInput = document.getElementById('winnerBadgeText');
+    const citationInput = document.getElementById('winnerCitationText');
+
+    if (val === 'WINNER') {
+      if (!titleInput.value || titleInput.value === 'CERTIFICATE OF PARTICIPATION') {
+        titleInput.value = 'CERTIFICATE OF EXCELLENCE';
+      }
+      if (!badgeInput.value) {
+        badgeInput.value = '✦ 1ST PLACE WINNER — OUTSTANDING ARTISTRY ✦';
+      }
+      if (!citationInput.value) {
+        citationInput.value = 'For poetic excellence, heartfelt stage delivery, and resonant storytelling at Offstage Creators.';
+      }
+    } else if (val === 'RUNNER UP') {
+      if (!titleInput.value || titleInput.value === 'CERTIFICATE OF PARTICIPATION') {
+        titleInput.value = 'CERTIFICATE OF MERIT';
+      }
+      if (!badgeInput.value) {
+        badgeInput.value = '✦ 2ND PLACE — DISTINGUISHED PERFORMANCE ✦';
+      }
+    } else if (val === 'SPECIAL RECOGNITION') {
+      if (!titleInput.value || titleInput.value === 'CERTIFICATE OF PARTICIPATION') {
+        titleInput.value = 'CERTIFICATE OF SPECIAL RECOGNITION';
+      }
+      if (!badgeInput.value) {
+        badgeInput.value = '✦ JUDGES\' CHOICE AWARD ✦';
+      }
+    } else {
+      // PARTICIPANT
+      if (titleInput.value === 'CERTIFICATE OF EXCELLENCE' || titleInput.value === 'CERTIFICATE OF MERIT') {
+        titleInput.value = 'CERTIFICATE OF PARTICIPATION';
+      }
+      if (badgeInput.value.includes('1ST PLACE') || badgeInput.value.includes('2ND PLACE')) {
+        badgeInput.value = '';
+      }
+    }
+  });
 
   window.submitWinnerForm = async function (e) {
     e.preventDefault();
@@ -3637,6 +3788,75 @@
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = '✓ Issue Award & Update Certificate'; }
     }
+  };
+
+  // Certificate Live Preview Modal Methods
+  window.previewCertificate = async function (regId) {
+    const modal = document.getElementById('certPreviewModal');
+    const container = document.getElementById('certPreviewContainer');
+    const loading = document.getElementById('certPreviewLoading');
+    const heading = document.getElementById('certPreviewHeading');
+    const meta = document.getElementById('certPreviewMeta');
+    const dlLink = document.getElementById('certPreviewDownloadLink');
+
+    if (!modal) return;
+    modal.style.display = 'flex';
+    if (loading) loading.style.display = 'block';
+    if (container) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+    }
+    if (heading) heading.textContent = `Certificate Preview: ${regId}`;
+    if (meta) meta.textContent = 'Loading live vector credential…';
+    if (dlLink) {
+      dlLink.href = `/api/admin/certificate/download/${encodeURIComponent(regId)}?_t=${Date.now()}`;
+      dlLink.setAttribute('download', `Certificate-${regId}.svg`);
+    }
+
+    try {
+      const res = await adminFetch(`/api/admin/certificate/preview/${encodeURIComponent(regId)}?_t=${Date.now()}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (loading) loading.innerHTML = `<span style="color:#e06c75;">Failed to render certificate preview: ${data.error || 'Server error'}</span>`;
+        return;
+      }
+
+      if (container) {
+        container.innerHTML = data.svg;
+        container.style.display = 'block';
+      }
+      if (loading) loading.style.display = 'none';
+      if (meta) {
+        meta.textContent = `Verified: ${data.data.name} • Event: ${data.data.eventTitle} • Status: ${data.data.isWinner ? 'WINNER' : 'PARTICIPANT'}`;
+      }
+    } catch (err) {
+      if (loading) loading.innerHTML = `<span style="color:#e06c75;">Error: ${err.message}</span>`;
+    }
+  };
+
+  window.closeCertPreviewModal = function () {
+    const modal = document.getElementById('certPreviewModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  // Bulk Download ZIP Method
+  window.bulkDownloadCertificates = function () {
+    const eventSlug = document.getElementById('certEventFilter')?.value || activeAdminEventId || 'online-open-mic-2026';
+    const count = cachedCertParticipants.length;
+    if (count === 0) {
+      alert(`No certificates found for event "${eventSlug}".`);
+      return;
+    }
+    const confirmed = confirm(`Generate and download ZIP archive of ${count} certificates for event "${eventSlug}"?`);
+    if (!confirmed) return;
+
+    const downloadUrl = `/api/admin/certificate/bulk-download?eventId=${encodeURIComponent(eventSlug)}&_t=${Date.now()}`;
+    const a = document.createElement('a');
+    a.href = downloadUrl;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   // ── Users & Creators Management ───────────────────────────────────────────────

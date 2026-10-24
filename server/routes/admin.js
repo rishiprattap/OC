@@ -19,6 +19,12 @@ const config = require('../config');
 const emailService = require('../services/email');
 const { normalizePromoCode } = require('../services/promo');
 const { generateCsv, generateXlsxBuffer } = require('../services/export');
+const {
+  parseEventCertSettings,
+  resolveCertificateData,
+  generateCertificateSvg,
+  createBulkCertificatesArchive
+} = require('../services/certificate');
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
 
@@ -757,13 +763,31 @@ router.post('/checkin/:id', async (req, res) => {
 // POST /api/admin/certificate/winner — Assign Winner / Special Achievement
 router.post('/certificate/winner', async (req, res) => {
   try {
-    const { registrationId, position, achievement, badgeText, citation, certificateTitle } = req.body;
+    const { registrationId, position, achievement, badgeText, citation, certificateTitle, category } = req.body;
     if (!registrationId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
     const regId = registrationId.trim().toUpperCase();
     const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const now = new Date().toISOString();
+    const pos = position !== undefined ? String(position).trim() : (reg.position || 'WINNER');
+    const isParticipant = pos.toUpperCase() === 'PARTICIPANT';
+
+    // If setting to PARTICIPANT, remove winner badge unless explicitly provided
+    let finalBadge = badgeText !== undefined ? String(badgeText).trim() : reg.badge_text;
+    if (isParticipant && badgeText === undefined) finalBadge = '';
+
+    let finalTitle = certificateTitle !== undefined ? String(certificateTitle).trim() : reg.certificate_title;
+    if (!finalTitle) {
+      finalTitle = isParticipant ? 'CERTIFICATE OF PARTICIPATION' : 'CERTIFICATE OF EXCELLENCE';
+    }
+
+    let finalAchievement = achievement !== undefined ? String(achievement).trim() : reg.achievement;
+    if (isParticipant && achievement === undefined) finalAchievement = null;
+
+    let finalCitation = citation !== undefined ? String(citation).trim() : (reg.citation || '');
+    const finalCategory = category !== undefined ? String(category).trim() : reg.category;
+
     await run(
       `UPDATE registrations SET
         position = ?,
@@ -771,15 +795,17 @@ router.post('/certificate/winner', async (req, res) => {
         badge_text = ?,
         citation = ?,
         certificate_title = ?,
+        category = ?,
         certificate_eligible = 1,
         updated_at = ?
       WHERE registration_id = ?`,
       [
-        position || 'WINNER',
-        achievement || 'Winner — First Place',
-        badgeText || '★ EVENT WINNER ★',
-        citation || '',
-        certificateTitle || 'CERTIFICATE OF EXCELLENCE',
+        pos,
+        finalAchievement,
+        finalBadge,
+        finalCitation,
+        finalTitle,
+        finalCategory,
         now,
         regId
       ]
@@ -787,13 +813,254 @@ router.post('/certificate/winner', async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Updated achievement for ${reg.full_name}.`,
-      position: position || 'WINNER',
-      achievement: achievement || 'Winner — First Place'
+      message: `Updated certificate credentials for ${reg.full_name}.`,
+      position: pos,
+      achievement: finalAchievement,
+      badgeText: finalBadge,
+      citation: finalCitation,
+      certificateTitle: finalTitle,
+      category: finalCategory
     });
   } catch (err) {
     console.error('[Admin] Winner assign error:', err);
     return res.status(500).json({ success: false, error: 'Failed to assign winner.' });
+  }
+});
+
+// GET /api/admin/events/:slug/certificate-settings — Fetch event certificate settings
+router.get('/events/:slug/certificate-settings', async (req, res) => {
+  try {
+    const slug = req.params.slug.trim().toLowerCase();
+    const evt = await getEventBySlug(slug);
+    if (!evt) return res.status(404).json({ success: false, error: 'Event not found.' });
+    const settings = parseEventCertSettings(evt);
+    return res.json({ success: true, slug, certificateSettings: settings, settings });
+  } catch (err) {
+    console.error('[Admin] Fetch certificate settings error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/events/:slug/certificate-settings — Save event certificate settings
+router.post('/events/:slug/certificate-settings', async (req, res) => {
+  try {
+    const slug = req.params.slug.trim().toLowerCase();
+    const evt = await getEventBySlug(slug);
+    if (!evt) return res.status(404).json({ success: false, error: 'Event not found.' });
+
+    const currentSettings = parseEventCertSettings(evt);
+    const updatedSettings = {
+      certificateTitle: req.body.certificateTitle !== undefined ? req.body.certificateTitle : currentSettings.certificateTitle,
+      winnerCertificateTitle: req.body.winnerCertificateTitle !== undefined ? req.body.winnerCertificateTitle : currentSettings.winnerCertificateTitle,
+      issueDate: req.body.issueDate !== undefined ? req.body.issueDate : currentSettings.issueDate,
+      signatory1Name: req.body.signatory1Name !== undefined ? req.body.signatory1Name : currentSettings.signatory1Name,
+      signatory1Title: req.body.signatory1Title !== undefined ? req.body.signatory1Title : currentSettings.signatory1Title,
+      signatory2Name: req.body.signatory2Name !== undefined ? req.body.signatory2Name : currentSettings.signatory2Name,
+      signatory2Title: req.body.signatory2Title !== undefined ? req.body.signatory2Title : currentSettings.signatory2Title
+    };
+
+    const settingsJson = JSON.stringify(updatedSettings);
+    await run(
+      `UPDATE events SET certificate_settings = ?, certificate_title = ?, updated_at = ? WHERE lower(slug) = ?`,
+      [settingsJson, updatedSettings.certificateTitle, new Date().toISOString(), slug]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Certificate settings updated successfully.',
+      certificateSettings: updatedSettings
+    });
+  } catch (err) {
+    console.error('[Admin] Update certificate settings error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/admin/certificate/preview/:regId — Live preview certificate data & SVG
+router.get('/certificate/preview/:regId', async (req, res) => {
+  try {
+    const regId = req.params.regId.trim().toUpperCase();
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    const evt = reg.event_id ? await getEventBySlug(reg.event_id) : await getActiveEvent();
+    const certData = await resolveCertificateData(reg, evt, baseUrl);
+    const svg = generateCertificateSvg(certData);
+
+    return res.json({
+      success: true,
+      data: certData,
+      svg
+    });
+  } catch (err) {
+    console.error('[Admin] Certificate preview error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/admin/certificate/download/:regId — Direct individual certificate download
+router.get('/certificate/download/:regId', async (req, res) => {
+  try {
+    const regId = req.params.regId.trim().toUpperCase();
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    const evt = reg.event_id ? await getEventBySlug(reg.event_id) : await getActiveEvent();
+    const certData = await resolveCertificateData(reg, evt, baseUrl);
+    const svg = generateCertificateSvg(certData);
+
+    const cleanName = (certData.verifiedName || 'Participant').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const filename = `Offstage-Creators-Certificate-${certData.registrationId}-${cleanName}.svg`;
+
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    return res.send(svg);
+  } catch (err) {
+    console.error('[Admin] Certificate download error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate certificate file.' });
+  }
+});
+
+// GET /api/admin/certificate/bulk-download — Download all event certificates in a ZIP archive
+router.get('/certificate/bulk-download', async (req, res) => {
+  try {
+    const eventId = (req.query.eventId || '').trim().toLowerCase();
+    if (!eventId) {
+      return res.status(400).json({ success: false, error: 'Event ID parameter is required for bulk download.' });
+    }
+
+    const evt = await getEventBySlug(eventId);
+    if (!evt) {
+      return res.status(404).json({ success: false, error: 'Event not found.' });
+    }
+
+    // Load approved/eligible registrations for this event
+    const registrations = await all(
+      `SELECT * FROM registrations WHERE lower(event_id) = ? AND (reg_status = 'APPROVED' OR checked_in = 1 OR certificate_eligible = 1) ORDER BY id ASC`,
+      [eventId]
+    );
+
+    if (!registrations || registrations.length === 0) {
+      return res.status(404).json({ success: false, error: 'No certificate-eligible participants found for this event.' });
+    }
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    // Resolve each participant's certificate data strictly for their event and awards
+    const certDataList = [];
+    for (const r of registrations) {
+      const cert = await resolveCertificateData(r, evt, baseUrl);
+      certDataList.push(cert);
+    }
+
+    const zipFilename = `Offstage-Certificates-${eventId}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+    const archive = createBulkCertificatesArchive(certDataList, evt.title || evt.name);
+    archive.pipe(res);
+    await archive.finalize();
+  } catch (err) {
+    console.error('[Admin Bulk Certificates] Error:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: 'Failed to generate bulk certificates.' });
+    }
+  }
+});
+
+// POST /api/admin/certificate/send-email — Dispatch certificate as email attachment
+router.post('/certificate/send-email', async (req, res) => {
+  try {
+    const { registrationId, testOnly = false } = req.body;
+    if (!registrationId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
+
+    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId.trim().toUpperCase()]);
+    if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    const evt = reg.event_id ? await getEventBySlug(reg.event_id) : await getActiveEvent();
+    const certData = await resolveCertificateData(reg, evt, baseUrl);
+    const svg = generateCertificateSvg(certData);
+
+    const cleanName = (certData.verifiedName || 'Participant').replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const attachmentFilename = `Offstage-Creators-Certificate-${certData.registrationId}-${cleanName}.svg`;
+
+    // Safety guard: Test mode avoids sending to real performers
+    if (testOnly) {
+      return res.json({
+        success: true,
+        message: 'Certificate rendered successfully in test mode. Email was not sent.',
+        simulated: true,
+        recipient: reg.email,
+        certificate: certData
+      });
+    }
+
+    const emailHtml = buildFullEmailHtml({
+      title: `${certData.certificateTitle} — ${certData.event}`,
+      preheader: `Your official verified certificate for ${certData.event} is ready.`,
+      bodyContent: `
+        <p style="font-size:16px; color:#f7eee1; margin:0 0 16px;">Hi <strong>${escapeHtml(certData.verifiedName)}</strong>,</p>
+        <p style="font-size:14px; color:#d5cbbd; line-height:1.6; margin:0 0 16px;">
+          Congratulations on your ${certData.isWinner ? `winning performance (<strong>${escapeHtml(certData.position)}</strong>)` : 'participation'} at <strong>${escapeHtml(certData.event)}</strong>!
+        </p>
+        <div style="background:#141210; border:1px solid #2a231c; border-radius:8px; padding:16px; margin:16px 0;">
+          <div style="font-size:12px; color:#8e8477; margin-bottom:4px;">Credential Level:</div>
+          <div style="font-size:15px; font-weight:800; color:#e4ad57;">${escapeHtml(certData.certificateTitle)}</div>
+          <div style="font-size:12px; color:#8e8477; margin-top:8px;">Certificate Reference ID:</div>
+          <div style="font-size:14px; font-family:monospace; color:#f7eee1;">${escapeHtml(certData.registrationId)}</div>
+        </div>
+        <p style="font-size:14px; color:#d5cbbd; line-height:1.6; margin:0 0 20px;">
+          Your official vector certificate is attached to this email. You can also view and verify your credential online at any time:
+        </p>
+        <p style="text-align:center; margin:24px 0;">
+          <a href="${certData.verificationUrl}" style="background:#e4ad57; color:#120f0c; padding:12px 24px; border-radius:6px; font-weight:800; text-decoration:none; display:inline-block; font-size:13px; letter-spacing:0.05em;">
+            VIEW &amp; VERIFY CERTIFICATE ONLINE →
+          </a>
+        </p>
+      `
+    });
+
+    await emailService.sendEmail({
+      registrationId: reg.registration_id,
+      to: reg.email,
+      subject: `🏆 Your Official ${certData.certificateTitle} — ${certData.event}`,
+      html: emailHtml,
+      emailCategory: 'EVENTS',
+      emailType: 'CERTIFICATE_ISSUED',
+      isOptionalAnnouncement: true,
+      attachments: [
+        {
+          filename: attachmentFilename,
+          content: Buffer.from(svg, 'utf-8'),
+          contentType: 'image/svg+xml'
+        }
+      ]
+    });
+
+    return res.json({
+      success: true,
+      message: `Certificate sent to ${reg.email} with attachment.`,
+      certificate: certData
+    });
+  } catch (err) {
+    console.error('[Admin Send Certificate Email] Error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -469,9 +469,8 @@
 
       const isWinner = Boolean(
         currentCertData.isWinner ||
-        currentCertData.position === 'WINNER' ||
-        currentCertData.registrationId === 'OC-OM-2440F923' ||
-        (currentCertData.verifiedName && currentCertData.verifiedName.toLowerCase().includes('suhavani'))
+        (currentCertData.position && currentCertData.position.toUpperCase() === 'WINNER') ||
+        (currentCertData.registrationId === 'OC-OM-2440F923' && (currentCertData.eventId === 'online-open-mic-2026' || !currentCertData.eventId))
       );
 
       // Brand Title
@@ -494,10 +493,16 @@
       }
 
       // ── Main Certificate Title ──
+      const certTitle = (currentCertData.certificateTitle || (isWinner ? 'CERTIFICATE OF EXCELLENCE' : 'CERTIFICATE OF PARTICIPATION')).trim();
+      const badgeText = (currentCertData.badgeText !== undefined && currentCertData.badgeText !== null && currentCertData.badgeText !== '')
+        ? currentCertData.badgeText
+        : (isWinner ? '★   EVENT WINNER — FIRST PLACE   ★' : '');
+      const hasBadge = Boolean(badgeText && badgeText.trim());
+
       ctx.fillStyle = '#17120c';
       ctx.font = '700 52px "Cinzel", "Cormorant Garamond", Georgia, serif';
-      if (isWinner) {
-        ctx.fillText('CERTIFICATE OF EXCELLENCE', W / 2, 320);
+      if (hasBadge) {
+        ctx.fillText(certTitle, W / 2, 320);
 
         // Thin Elegant Gold Accent Line
         ctx.strokeStyle = '#caa558';
@@ -514,7 +519,7 @@
         ctx.fill();
 
         // ── Radiant Gold Winner Achievement Badge ──
-        const badgeW = 430;
+        const badgeW = Math.max(430, Math.min(650, badgeText.length * 15));
         const badgeH = 34;
         const badgeX = W / 2 - badgeW / 2;
         const badgeY = 349;
@@ -561,10 +566,10 @@
         // Badge Text
         ctx.fillStyle = '#3a2203';
         ctx.font = '800 13.5px "Cinzel", "DM Sans", serif';
-        ctx.fillText('★   EVENT WINNER — FIRST PLACE   ★', W / 2, badgeY + 22);
+        ctx.fillText(badgeText, W / 2, badgeY + 22);
 
       } else {
-        ctx.fillText('CERTIFICATE OF PARTICIPATION', W / 2, 326);
+        ctx.fillText(certTitle, W / 2, 326);
 
         // Thin Elegant Title Underline
         ctx.strokeStyle = '#caa558';
@@ -634,7 +639,9 @@
       // ── Narrative Body & Event Details ──
       ctx.fillStyle = '#4c4235';
       ctx.font = '400 20px "DM Sans", Arial, sans-serif';
-      if (isWinner) {
+      if (currentCertData.citation && currentCertData.citation.trim()) {
+        ctx.fillText(currentCertData.citation.trim(), W / 2, 552);
+      } else if (isWinner) {
         ctx.fillText('for being declared the Event Winner (1st Place) for outstanding creative excellence in', W / 2, 552);
       } else {
         ctx.fillText('for active participation and outstanding creative expression in', W / 2, 550);
@@ -723,7 +730,8 @@
       ctx.fillStyle = '#1e7b45';
       ctx.font = '700 11px "DM Sans", Arial, sans-serif';
       if (isWinner) {
-        ctx.fillText('● STATUS: VERIFIED WINNER (1ST PLACE)', metaX, metaStartY + 91);
+        const winStatus = currentCertData.position ? `● STATUS: VERIFIED WINNER (${currentCertData.position.toUpperCase()})` : '● STATUS: VERIFIED WINNER (1ST PLACE)';
+        ctx.fillText(winStatus, metaX, metaStartY + 91);
       } else {
         ctx.fillText('● STATUS: VERIFIED', metaX, metaStartY + 91);
       }
@@ -734,14 +742,19 @@
       // ── RIGHT COLUMN: Authorized Executive Signatures ──
       ctx.textAlign = 'center';
 
-      // Signatory 1: Muskaan
+      const sig1Name = currentCertData.signatory1Name || 'Muskaan';
+      const sig1Title = currentCertData.signatory1Title || 'Co-Founder & Creative Director';
+      const sig2Name = currentCertData.signatory2Name || 'Shlok';
+      const sig2Title = currentCertData.signatory2Title || 'Co-Founder & Managing Director';
+
+      // Signatory 1
       const sig1X = 1120;
       const sig1Y = 880;
 
       ctx.save();
       ctx.fillStyle = '#1c1610';
       ctx.font = 'italic 46px "Pinyon Script", "Cormorant Garamond", cursive, serif';
-      ctx.fillText('Muskaan', sig1X, sig1Y);
+      ctx.fillText(sig1Name, sig1X, sig1Y);
       ctx.restore();
 
       // Signature 1 Line
@@ -754,20 +767,20 @@
 
       ctx.fillStyle = '#221a12';
       ctx.font = '800 12.5px "DM Sans", Arial, sans-serif';
-      ctx.fillText('MUSKAAN', sig1X, sig1Y + 34);
+      ctx.fillText(sig1Name.toUpperCase(), sig1X, sig1Y + 34);
 
       ctx.fillStyle = '#7a6c5b';
       ctx.font = '600 10.5px "DM Sans", Arial, sans-serif';
-      ctx.fillText('Co-Founder & Creative Director', sig1X, sig1Y + 50);
+      ctx.fillText(sig1Title, sig1X, sig1Y + 50);
 
-      // Signatory 2: Shlok
+      // Signatory 2
       const sig2X = 1360;
       const sig2Y = 880;
 
       ctx.save();
       ctx.fillStyle = '#1c1610';
       ctx.font = 'italic 46px "Pinyon Script", "Cormorant Garamond", cursive, serif';
-      ctx.fillText('Shlok', sig2X, sig2Y);
+      ctx.fillText(sig2Name, sig2X, sig2Y);
       ctx.restore();
 
       // Signature 2 Line
@@ -780,11 +793,11 @@
 
       ctx.fillStyle = '#221a12';
       ctx.font = '800 12.5px "DM Sans", Arial, sans-serif';
-      ctx.fillText('SHLOK', sig2X, sig2Y + 34);
+      ctx.fillText(sig2Name.toUpperCase(), sig2X, sig2Y + 34);
 
       ctx.fillStyle = '#7a6c5b';
       ctx.font = '600 10.5px "DM Sans", Arial, sans-serif';
-      ctx.fillText('Co-Founder & Managing Director', sig2X, sig2Y + 50);
+      ctx.fillText(sig2Title, sig2X, sig2Y + 50);
 
       // ── Bottom Brand Motto & Verification Stamp ──
       ctx.textAlign = 'center';
@@ -827,13 +840,12 @@
 
         const isWinner = Boolean(
           data.isWinner ||
-          data.position === 'WINNER' ||
-          data.registrationId === 'OC-OM-2440F923' ||
-          (data.verifiedName && data.verifiedName.toLowerCase().includes('suhavani'))
+          (data.position && data.position.toUpperCase() === 'WINNER') ||
+          (data.registrationId === 'OC-OM-2440F923' && (data.eventId === 'online-open-mic-2026' || !data.eventId))
         );
 
         if (isWinner) {
-          showSuccess(`🏆 Event Winner Verified: ${data.verifiedName} (Winner — First Place). Your official Certificate of Excellence is ready!`);
+          showSuccess(`🏆 Event Winner Verified: ${data.verifiedName} (${data.achievement || 'Winner — First Place'}). Your official certificate is ready!`);
         } else {
           showSuccess(`✓ Participant verified: ${data.verifiedName}. Your official certificate is ready!`);
         }
@@ -844,13 +856,22 @@
           event: data.event,
           certificateId: data.certificateId || data.registrationId,
           registrationId: data.registrationId,
+          eventId: data.eventId,
           category: data.category,
           performanceTitle: data.performanceTitle,
           date: data.date,
           verificationUrl: data.verificationUrl,
           qrCode: data.qrCode,
           isWinner: isWinner,
-          position: data.position || (isWinner ? 'WINNER' : 'Participant')
+          position: data.position || (isWinner ? 'WINNER' : 'Participant'),
+          achievement: data.achievement,
+          badgeText: data.badgeText,
+          citation: data.citation,
+          certificateTitle: data.certificateTitle,
+          signatory1Name: data.signatory1Name,
+          signatory1Title: data.signatory1Title,
+          signatory2Name: data.signatory2Name,
+          signatory2Title: data.signatory2Title
         });
 
         previewBox.classList.add('show');

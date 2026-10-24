@@ -149,7 +149,8 @@ async function sendEmail({
   emailCategory = 'REGISTRATION',
   emailType = 'NOTIFICATION',
   registrationId = null,
-  isOptionalAnnouncement = false
+  isOptionalAnnouncement = false,
+  attachments = []
 }) {
   const cleanTo = String(to || '').trim().toLowerCase();
   if (!cleanTo) {
@@ -180,14 +181,22 @@ async function sendEmail({
   // 1. Try Resend if configured
   if (resend) {
     try {
-      const response = await resend.emails.send({
+      const resendPayload = {
         from: sender,
         to: cleanTo,
         reply_to: replyTo,
         subject,
         html,
         text: text || stripHtmlToPlainText(html)
-      });
+      };
+      if (attachments && attachments.length > 0) {
+        resendPayload.attachments = attachments.map(a => ({
+          filename: a.filename,
+          content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content)
+        }));
+      }
+
+      const response = await resend.emails.send(resendPayload);
 
       if (response.error) {
         throw new Error(response.error.message || 'Resend API returned an error.');
@@ -241,14 +250,23 @@ async function sendEmail({
   const transporter = getSmtpTransporter();
   if (transporter) {
     try {
-      const info = await transporter.sendMail({
+      const mailOptions = {
         from: sender,
         to: cleanTo,
         replyTo,
         subject,
         html,
         text: text || stripHtmlToPlainText(html)
-      });
+      };
+      if (attachments && attachments.length > 0) {
+        mailOptions.attachments = attachments.map(a => ({
+          filename: a.filename,
+          content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content),
+          contentType: a.contentType
+        }));
+      }
+
+      const info = await transporter.sendMail(mailOptions);
 
       console.log(`[Email / Dev Fallback] Sent ${emailType} to ${cleanTo} — ID: ${info.messageId}`);
       await logEmail({

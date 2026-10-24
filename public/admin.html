@@ -529,10 +529,57 @@
             <h1 style="font-family:'Cormorant Garamond',Georgia,serif; font-size:34px; margin:0 0 4px;">Certificates &amp; Winners</h1>
             <p style="color:#8e8477; font-size:13px; margin:0;">Assign official winner titles, citations, and badges to performers, and preview event-specific certificates.</p>
           </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="cta cta-secondary" id="btnToggleEventCertSettings" onclick="toggleEventCertSettings()" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>⚙</span> Event Settings &amp; Signatures
+            </button>
+            <button type="button" class="cta cta-primary" id="btnBulkDownloadCerts" onclick="bulkDownloadCertificates()" style="display:inline-flex; align-items:center; gap:6px;">
+              <span>📦</span> Bulk Download Certificates (.ZIP)
+            </button>
+          </div>
+        </div>
+
+        <!-- Event Certificate & Signatures Settings Panel -->
+        <div id="eventCertSettingsCard" style="display:none; background:#181410; border:1px solid #3a3024; border-radius:10px; padding:20px; margin-bottom:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <div style="font-size:16px; font-weight:700; color:#f7eee1;">⚙ Event Certificate &amp; Signatures Settings (<span id="eventCertSettingsSlug" style="color:#e4ad57;">—</span>)</div>
+            <button type="button" class="action-btn" onclick="toggleEventCertSettings(false)">Close ✕</button>
+          </div>
+          <form id="eventCertSettingsForm" onsubmit="saveEventCertSettings(event)">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; margin-bottom:14px;">
+              <div>
+                <label class="admin-label">Default Certificate Title</label>
+                <input type="text" class="admin-input" id="evtCertDefaultTitle" placeholder="CERTIFICATE OF PARTICIPATION">
+              </div>
+              <div>
+                <label class="admin-label">Certificate Date</label>
+                <input type="text" class="admin-input" id="evtCertDate" placeholder="e.g. 23 September 2026">
+              </div>
+              <div>
+                <label class="admin-label">Signatory 1 Name</label>
+                <input type="text" class="admin-input" id="evtCertSig1Name" placeholder="Muskaan">
+              </div>
+              <div>
+                <label class="admin-label">Signatory 1 Title</label>
+                <input type="text" class="admin-input" id="evtCertSig1Title" placeholder="Co-Founder &amp; Creative Director">
+              </div>
+              <div>
+                <label class="admin-label">Signatory 2 Name</label>
+                <input type="text" class="admin-input" id="evtCertSig2Name" placeholder="Shlok">
+              </div>
+              <div>
+                <label class="admin-label">Signatory 2 Title</label>
+                <input type="text" class="admin-input" id="evtCertSig2Title" placeholder="Co-Founder &amp; Managing Director">
+              </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+              <button type="submit" class="cta cta-primary" id="btnSaveEvtCertSettings">💾 Save Event Certificate Settings</button>
+            </div>
+          </form>
         </div>
 
         <div class="controls-bar">
-          <select class="filter-select" id="certEventFilter" onchange="loadCertificatesTab()">
+          <select class="filter-select" id="certEventFilter" onchange="onCertEventFilterChange(this.value)">
             <option value="">Select Event...</option>
           </select>
           <input type="search" class="search-input" id="certSearchInput" placeholder="Search participant name, registration ID…" oninput="filterCertificatesList()">
@@ -1826,6 +1873,30 @@
             <button type="submit" class="cta" id="btnSaveWinner">✓ Issue Award &amp; Update Certificate</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Certificate Live Vector Preview Modal -->
+  <div class="modal-overlay" id="certPreviewModal" style="display:none;">
+    <div class="modal-card" style="width: min(960px, 96vw); max-height: 94vh; display:flex; flex-direction:column;">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:11px; color:#8e8477; font-weight:800; letter-spacing:0.1em; text-transform:uppercase;">CERTIFICATE LIVE PREVIEW</div>
+          <div style="font-size:17px; font-weight:800; color:#f7eee1;" id="certPreviewHeading">Certificate Preview</div>
+        </div>
+        <button class="modal-close" onclick="closeCertPreviewModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px; flex:1; overflow:auto; text-align:center; background:#0e0c0a;">
+        <div id="certPreviewLoading" style="padding:40px; color:#c7b89e;">Rendering real-time certificate preview…</div>
+        <div id="certPreviewContainer" style="display:none; width:100%; max-width:900px; margin:0 auto; box-shadow:0 12px 36px rgba(0,0,0,0.6); border-radius:6px; overflow:hidden;"></div>
+      </div>
+      <div class="modal-actions" style="justify-content:space-between; align-items:center;">
+        <div id="certPreviewMeta" style="font-size:12px; color:#8e8477;"></div>
+        <div style="display:flex; gap:10px;">
+          <a id="certPreviewDownloadLink" href="#" target="_blank" class="cta cta-primary" style="text-decoration:none;">📥 Download Certificate</a>
+          <button type="button" class="cta cta-secondary" onclick="closeCertPreviewModal()">Close</button>
+        </div>
       </div>
     </div>
   </div>

@@ -84,6 +84,7 @@ const DEFAULT_EVENTS = [
     certificate_enabled: 1,
     certificate_title: 'CERTIFICATE OF PARTICIPATION',
     certificate_bg_url: '',
+    certificate_settings: '',
     registration_provider: 'internal',
     external_registration_url: '',
     external_platform_name: '',
@@ -145,6 +146,7 @@ const DEFAULT_EVENTS = [
     certificate_enabled: 1,
     certificate_title: 'CERTIFICATE OF ATTENDANCE',
     certificate_bg_url: '',
+    certificate_settings: '',
     registration_provider: 'external',
     external_registration_url: 'https://in.bookmyshow.com/events/adhure-musafir/ET00515735',
     external_platform_name: 'BookMyShow',
@@ -515,9 +517,17 @@ function handleLocalRun(sql, params = []) {
         updated_at: params[12] || new Date().toISOString()
       };
     }
-    localStore.registrations.push(newReg);
+    const existingIdx = newReg.registration_id
+      ? localStore.registrations.findIndex(r => String(r.registration_id).toUpperCase() === String(newReg.registration_id).toUpperCase())
+      : -1;
+    if (existingIdx !== -1) {
+      newReg.id = localStore.registrations[existingIdx].id;
+      localStore.registrations[existingIdx] = newReg;
+    } else {
+      localStore.registrations.push(newReg);
+    }
     saveLocalStore();
-    return { lastID: id, changes: 1 };
+    return { lastID: newReg.id, changes: 1 };
   }
 
   // 3. Registrations Update
@@ -829,6 +839,21 @@ function handleLocalRun(sql, params = []) {
       } else {
         evt.updated_at = params[54] || new Date().toISOString();
       }
+      saveLocalStore();
+    }
+    return { lastID: null, changes: evt ? 1 : 0 };
+  }
+
+  if (sqlLower.includes('update events set') && sqlLower.includes('certificate_settings = ?')) {
+    const certSettings = params[0];
+    const targetSlug = String(params[params.length - 1] || '');
+    const evt = localStore.events.find(e => e.slug.toLowerCase() === targetSlug.toLowerCase() || String(e.id) === targetSlug);
+    if (evt) {
+      evt.certificate_settings = certSettings;
+      if (sqlLower.includes('certificate_title = ?')) {
+        evt.certificate_title = params[1];
+      }
+      evt.updated_at = new Date().toISOString();
       saveLocalStore();
     }
     return { lastID: null, changes: evt ? 1 : 0 };
@@ -1165,9 +1190,13 @@ function handleLocalRun(sql, params = []) {
 
   // 17. Registrations Delete
   if (sqlLower.includes('delete from registrations')) {
-    if (sqlLower.includes('where registration_id = ?')) {
-      const regId = String(params[0] || '').trim();
-      localStore.registrations = (localStore.registrations || []).filter(r => r.registration_id !== regId);
+    if (sqlLower.includes('where registration_id in')) {
+      const regIds = params.map(p => String(p).trim().toUpperCase());
+      localStore.registrations = (localStore.registrations || []).filter(r => !regIds.includes(String(r.registration_id).toUpperCase()));
+      saveLocalStore();
+    } else if (sqlLower.includes('where registration_id = ?')) {
+      const regId = String(params[0] || '').trim().toUpperCase();
+      localStore.registrations = (localStore.registrations || []).filter(r => String(r.registration_id).toUpperCase() !== regId);
       saveLocalStore();
     } else if (sqlLower.includes('where email = ?')) {
       const email = String(params[0] || '').toLowerCase().trim();
@@ -1799,6 +1828,7 @@ const initSchema = async () => {
     try { await rawRun(`ALTER TABLE events ADD COLUMN external_platform_notes TEXT DEFAULT ''`); } catch (_) {}
     try { await rawRun(`ALTER TABLE events ADD COLUMN external_open_new_tab INTEGER DEFAULT 1`); } catch (_) {}
     try { await rawRun(`ALTER TABLE events ADD COLUMN receipt_template_url TEXT DEFAULT ''`); } catch (_) {}
+    try { await rawRun(`ALTER TABLE events ADD COLUMN certificate_settings TEXT DEFAULT ''`); } catch (_) {}
 
     // Seed default events if events table is empty
     for (const evt of DEFAULT_EVENTS) {
