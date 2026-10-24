@@ -142,32 +142,57 @@ router.get('/overview', async (req, res) => {
       params.push(eventId);
     }
 
-    const andEvent = eventId && eventId !== 'ALL' ? ' AND event_id = ?' : '';
-    const eventParam = eventId && eventId !== 'ALL' ? [eventId] : [];
+    const rows = await all(`SELECT reg_status, payment_status, checked_in, certificate_eligible, final_fee, amount FROM registrations${whereClause}`, params);
 
-    const [total, pendingVerif, verified, approved, rejected, revoked, checkedIn, certEligible] = await Promise.all([
-      get(`SELECT COUNT(*) as c FROM registrations${whereClause}`, params),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'PENDING_VERIFICATION'${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'VERIFIED'${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'APPROVED'${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status = 'REJECTED'${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE reg_status IN ('REVOKED', 'CANCELLED')${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE checked_in = 1 AND reg_status = 'APPROVED'${andEvent}`, eventParam),
-      get(`SELECT COUNT(*) as c FROM registrations WHERE certificate_eligible = 1 AND reg_status = 'APPROVED'${andEvent}`, eventParam)
-    ]);
+    let total = rows.length;
+    let pendingVerif = 0;
+    let verified = 0;
+    let approved = 0;
+    let rejected = 0;
+    let revoked = 0;
+    let checkedIn = 0;
+    let certEligible = 0;
+    let totalRevenue = 0;
+
+    for (const r of rows) {
+      const s = String(r.reg_status || 'PENDING_VERIFICATION').toUpperCase();
+      const p = String(r.payment_status || (s === 'APPROVED' ? 'PAID' : 'PENDING')).toUpperCase();
+      const isPaid = p === 'PAID' || s === 'APPROVED';
+      const fee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+
+      if (s === 'PENDING_VERIFICATION') pendingVerif++;
+      else if (s === 'VERIFIED') verified++;
+      else if (s === 'APPROVED') approved++;
+      else if (s === 'REJECTED') rejected++;
+      else if (['REVOKED', 'CANCELLED'].includes(s)) revoked++;
+
+      if (Number(r.checked_in || 0) === 1 && s === 'APPROVED') checkedIn++;
+      if (Number(r.certificate_eligible || 0) === 1 && s === 'APPROVED') certEligible++;
+
+      if (isPaid) {
+        totalRevenue += fee;
+      }
+    }
+
+    const pendingTotal = pendingVerif + verified;
+    totalRevenue = Math.round(totalRevenue);
 
     return res.json({
       success: true,
       eventId: eventId || 'ALL',
       stats: {
-        total: total?.c || 0,
-        pendingVerification: pendingVerif?.c || 0,
-        verified: verified?.c || 0,
-        approved: approved?.c || 0,
-        rejected: rejected?.c || 0,
-        revoked: revoked?.c || 0,
-        checkedIn: checkedIn?.c || 0,
-        certEligible: certEligible?.c || 0
+        total,
+        totalRegistrations: total,
+        pending: pendingTotal,
+        pendingVerification: pendingVerif,
+        verified,
+        approved,
+        rejected,
+        revoked,
+        checkedIn,
+        certEligible,
+        revenue: totalRevenue,
+        totalRevenue
       }
     });
   } catch (err) {
@@ -223,12 +248,56 @@ router.get('/registrations', async (req, res) => {
 
     const rows = await all(sql, params);
 
-    const countSql = sql.replace(/SELECT \*/, 'SELECT COUNT(*) as c').replace(/ ORDER BY.*/, '');
-    const countRow = await get(countSql.replace(/ LIMIT.*/, ''), params.slice(0, -2));
+    // Fetch summary statistics for ALL matching database records (without pagination LIMIT & OFFSET)
+    const summarySql = `SELECT reg_status, payment_status, checked_in, final_fee, amount FROM registrations WHERE 1=1` + 
+      sql.replace(/^SELECT \* FROM registrations WHERE 1=1/, '').replace(/ ORDER BY.*/, '');
+    const filterParams = params.slice(0, -2);
+    const allMatching = await all(summarySql, filterParams);
+
+    let totalCount = allMatching.length;
+    let pendingCount = 0;
+    let approvedCount = 0;
+    let rejectedCount = 0;
+    let checkedInCount = 0;
+    let totalRevenue = 0;
+
+    for (const r of allMatching) {
+      const s = String(r.reg_status || 'PENDING_VERIFICATION').toUpperCase();
+      const p = String(r.payment_status || (s === 'APPROVED' ? 'PAID' : 'PENDING')).toUpperCase();
+      const isPaid = p === 'PAID' || s === 'APPROVED';
+      const fee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+
+      if (s === 'APPROVED') {
+        approvedCount++;
+      } else if (s === 'REJECTED') {
+        rejectedCount++;
+      } else if (s === 'PENDING_VERIFICATION' || s === 'VERIFIED') {
+        pendingCount++;
+      }
+
+      if (Number(r.checked_in || 0) === 1 && s === 'APPROVED') {
+        checkedInCount++;
+      }
+
+      if (isPaid) {
+        totalRevenue += fee;
+      }
+    }
+    totalRevenue = Math.round(totalRevenue);
 
     return res.json({
       success: true,
-      total: countRow?.c || rows.length,
+      total: totalCount,
+      stats: {
+        total: totalCount,
+        totalRegistrations: totalCount,
+        pending: pendingCount,
+        approved: approvedCount,
+        rejected: rejectedCount,
+        checkedIn: checkedInCount,
+        revenue: totalRevenue,
+        totalRevenue: totalRevenue
+      },
       registrations: rows.map(r => ({
         id: r.id,
         registrationId: r.registration_id,
@@ -1899,33 +1968,42 @@ router.get('/promo-codes', async (req, res) => {
     const codes = await all(`SELECT * FROM promo_codes ORDER BY created_at DESC`);
     const registrations = await all(`SELECT id, promo_code, promo_code_id, reg_status, payment_status, original_fee, discount_amount, final_fee, amount FROM registrations WHERE promo_code IS NOT NULL OR promo_code_id IS NOT NULL`);
 
-    const statsMap = {};
+    const codeById = new Map();
+    const codeByUpperCode = new Map();
+    const statsMap = new Map();
+
+    for (const p of codes) {
+      codeById.set(p.id, p);
+      if (p.code) codeByUpperCode.set(p.code.toUpperCase().trim(), p);
+      statsMap.set(p.id, { usage_count: 0, paid_count: 0, total_revenue: 0, total_discount: 0 });
+    }
+
     for (const r of registrations) {
-      const codeKey = (r.promo_code || '').toUpperCase().trim();
-      const codeId = r.promo_code_id;
-      const isPaid = r.payment_status === 'PAID' || r.reg_status === 'APPROVED';
+      let promo = null;
+      if (r.promo_code_id && codeById.has(r.promo_code_id)) {
+        promo = codeById.get(r.promo_code_id);
+      } else if (r.promo_code && codeByUpperCode.has(r.promo_code.toUpperCase().trim())) {
+        promo = codeByUpperCode.get(r.promo_code.toUpperCase().trim());
+      }
+      if (!promo) continue;
+
+      const st = statsMap.get(promo.id);
+      if (!st) continue;
+
+      st.usage_count += 1;
+      const isPaid = String(r.payment_status || '').toUpperCase() === 'PAID' || String(r.reg_status || '').toUpperCase() === 'APPROVED';
       const finFee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
       const discAmt = Number(r.discount_amount || 0);
 
-      const keys = [];
-      if (codeKey) keys.push(`code:${codeKey}`);
-      if (codeId) keys.push(`id:${codeId}`);
-
-      for (const k of keys) {
-        if (!statsMap[k]) {
-          statsMap[k] = { usage_count: 0, paid_count: 0, total_revenue: 0, total_discount: 0 };
-        }
-        statsMap[k].usage_count += 1;
-        if (isPaid) {
-          statsMap[k].paid_count += 1;
-          statsMap[k].total_revenue += finFee;
-          statsMap[k].total_discount += discAmt;
-        }
+      if (isPaid) {
+        st.paid_count += 1;
+        st.total_revenue += finFee;
+        st.total_discount += discAmt;
       }
     }
 
     const result = codes.map(p => {
-      const stats = statsMap[`id:${p.id}`] || statsMap[`code:${p.code.toUpperCase()}`] || {};
+      const stats = statsMap.get(p.id) || {};
       return formatPromoCode(p, stats);
     });
 
@@ -2012,12 +2090,18 @@ router.get('/promo-codes/referrers', async (req, res) => {
 
     const list = Object.values(referrersMap).map(item => ({
       referrer_name: item.referrer_name,
+      referrerName: item.referrer_name,
       codes: Array.from(item.codes),
       total_registrations: item.total_registrations,
+      totalRegistrations: item.total_registrations,
       confirmed_paid_registrations: item.confirmed_paid_registrations,
-      total_revenue: item.total_revenue,
-      total_discount_given: item.total_discount_given,
-      last_registration_at: item.last_registration_at
+      confirmedPaidRegistrations: item.confirmed_paid_registrations,
+      total_revenue: Math.round(item.total_revenue),
+      totalRevenue: Math.round(item.total_revenue),
+      total_discount_given: Math.round(item.total_discount_given),
+      totalDiscountsGiven: Math.round(item.total_discount_given),
+      last_registration_at: item.last_registration_at,
+      lastRegistrationAt: item.last_registration_at
     })).sort((a, b) => {
       if (b.confirmed_paid_registrations !== a.confirmed_paid_registrations) {
         return b.confirmed_paid_registrations - a.confirmed_paid_registrations;
@@ -2381,7 +2465,7 @@ router.get('/promo-codes/:id/registrations', async (req, res) => {
     let totalDiscount = 0;
 
     const list = rows.map(r => {
-      const isPaid = r.payment_status === 'PAID' || r.reg_status === 'APPROVED';
+      const isPaid = String(r.payment_status || '').toUpperCase() === 'PAID' || String(r.reg_status || '').toUpperCase() === 'APPROVED';
       const finFee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
       const discAmt = Number(r.discount_amount || 0);
 
@@ -2408,20 +2492,24 @@ router.get('/promo-codes/:id/registrations', async (req, res) => {
       };
     });
 
+    const summaryData = {
+      totalRegistrations: rows.length,
+      paidRegistrations: paidCount,
+      totalRevenue: Math.round(totalRevenue),
+      totalDiscounts: Math.round(totalDiscount),
+      totalDiscount: Math.round(totalDiscount)
+    };
+
     return res.json({
       success: true,
       promoCode: formatPromoCode(promo, {
         usage_count: rows.length,
         paid_count: paidCount,
-        total_revenue: totalRevenue,
-        total_discount: totalDiscount
+        total_revenue: Math.round(totalRevenue),
+        total_discount: Math.round(totalDiscount)
       }),
-      stats: {
-        totalRegistrations: rows.length,
-        paidRegistrations: paidCount,
-        totalRevenue,
-        totalDiscount
-      },
+      summary: summaryData,
+      stats: summaryData,
       registrations: list
     });
 

@@ -483,11 +483,11 @@
         </div>
 
         <div class="stats-grid" id="statsGrid">
-          <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" id="statTotal">—</div></div>
-          <div class="stat-card"><div class="stat-label">Pending Verification</div><div class="stat-value gold" id="statPendingVerif">—</div></div>
-          <div class="stat-card"><div class="stat-label">Verified</div><div class="stat-value gold" id="statVerified">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Registrations</div><div class="stat-value" id="statTotal">—</div></div>
+          <div class="stat-card"><div class="stat-label">Pending Review</div><div class="stat-value gold" id="statPendingVerif">—</div></div>
           <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value green" id="statApproved">—</div></div>
           <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-value orange" id="statRejected">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value green" id="statRevenue">—</div></div>
           <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statCheckedIn">—</div></div>
         </div>
 
@@ -560,8 +560,19 @@
             </button>
           </div>
         </div>
+
+        <!-- Summary Cards (Reflects Active Filters Across All Matching DB Records) -->
+        <div class="stats-grid" id="regStatsGrid" style="margin-bottom:20px;">
+          <div class="stat-card"><div class="stat-label">Total Registrations</div><div class="stat-value" id="regStatTotal">—</div></div>
+          <div class="stat-card"><div class="stat-label">Pending Review</div><div class="stat-value gold" id="regStatPending">—</div></div>
+          <div class="stat-card"><div class="stat-label">Approved</div><div class="stat-value green" id="regStatApproved">—</div></div>
+          <div class="stat-card"><div class="stat-label">Rejected</div><div class="stat-value orange" id="regStatRejected">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value green" id="regStatRevenue">—</div></div>
+          <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="regStatCheckedIn">—</div></div>
+        </div>
+
         <div class="controls-bar" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <select class="filter-select" id="regEventFilter" onchange="loadRegistrations()">
+          <select class="filter-select" id="regEventFilter" onchange="onRegEventFilterChange(this.value)">
             <option value="">All Events</option>
           </select>
           <input type="search" class="search-input" id="searchInput" placeholder="Search name, email, ID, phone…" oninput="loadRegistrations()">

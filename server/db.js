@@ -1421,9 +1421,9 @@ function handleLocalGet(sql, params = []) {
     return found || null;
   }
 
-  // Registrations Count
-  if (sqlLower.includes('count(*)') && sqlLower.includes('from registrations')) {
-    let list = localStore.registrations;
+  // Registrations Count or Sum (Aggregation)
+  if ((sqlLower.includes('count(*)') || sqlLower.includes('sum(') || sqlLower.includes('count(')) && sqlLower.includes('from registrations')) {
+    let list = [...localStore.registrations];
     if (sqlLower.includes('promo_code')) {
       const codeParam = String(params[0] || '').toUpperCase().trim();
       list = list.filter(r => r.promo_code && String(r.promo_code).toUpperCase() === codeParam);
@@ -1444,7 +1444,20 @@ function handleLocalGet(sql, params = []) {
       if (statusParam && statusParam !== 'ALL') {
         list = list.filter(r => (r.reg_status || 'PENDING_VERIFICATION') === statusParam);
       }
+    } else if (sqlLower.includes("reg_status = 'pending_verification'")) {
+      list = list.filter(r => (r.reg_status || 'PENDING_VERIFICATION') === 'PENDING_VERIFICATION');
+    } else if (sqlLower.includes("reg_status = 'verified'")) {
+      list = list.filter(r => r.reg_status === 'VERIFIED');
+    } else if (sqlLower.includes("reg_status = 'approved'")) {
+      list = list.filter(r => r.reg_status === 'APPROVED');
+    } else if (sqlLower.includes("reg_status = 'rejected'")) {
+      list = list.filter(r => r.reg_status === 'REJECTED');
+    } else if (sqlLower.includes("reg_status in ('revoked', 'cancelled')")) {
+      list = list.filter(r => ['REVOKED', 'CANCELLED'].includes(r.reg_status));
+    } else if (sqlLower.includes("reg_status in ('pending_verification', 'verified')")) {
+      list = list.filter(r => ['PENDING_VERIFICATION', 'VERIFIED'].includes(r.reg_status || 'PENDING_VERIFICATION'));
     }
+
     if (sqlLower.includes('category = ?') && pIdx < params.length) {
       const catParam = params[pIdx++];
       if (catParam && catParam !== 'ALL') {
@@ -1454,8 +1467,27 @@ function handleLocalGet(sql, params = []) {
     if (sqlLower.includes('checked_in = ?') && pIdx < params.length) {
       const cinParam = Number(params[pIdx++]);
       list = list.filter(r => Number(r.checked_in || 0) === cinParam);
+    } else if (sqlLower.includes('checked_in = 1')) {
+      list = list.filter(r => Number(r.checked_in || 0) === 1);
     }
-    return { count: list.length, c: list.length };
+
+    if (sqlLower.includes('certificate_eligible = 1')) {
+      list = list.filter(r => Number(r.certificate_eligible || 0) === 1);
+    }
+
+    if (sqlLower.includes('sum(') || sqlLower.includes('coalesce(sum(')) {
+      let sum = 0;
+      for (const r of list) {
+        const isPaid = String(r.payment_status || '').toUpperCase() === 'PAID' || String(r.reg_status || '').toUpperCase() === 'APPROVED';
+        if (isPaid) {
+          const fee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
+          sum += fee;
+        }
+      }
+      return { rev: sum, revenue: sum, total_revenue: sum, totalRevenue: sum, c: sum };
+    }
+
+    return { count: list.length, c: list.length, total: list.length };
   }
 
   // Registration by registration_id
@@ -1586,9 +1618,14 @@ function handleLocalAll(sql, params = []) {
   // Registrations list
   if (sqlLower.includes('from registrations')) {
     let list = [...localStore.registrations];
-    if (sqlLower.includes('upper(promo_code) = upper(?)') || sqlLower.includes('promo_code = ?')) {
-      const codeParam = String(params[0] || '').toUpperCase().trim();
-      return list.filter(r => r.promo_code && String(r.promo_code).toUpperCase() === codeParam).sort((a, b) => b.id - a.id);
+    if (sqlLower.includes('promo_code_id = ?') || sqlLower.includes('upper(promo_code) = upper(?)') || sqlLower.includes('promo_code = ?')) {
+      const numId = params.length > 0 && (typeof params[0] === 'number' || /^\d+$/.test(String(params[0]))) ? Number(params[0]) : null;
+      const codeParam = params.length > 1 ? String(params[1] || '').toUpperCase().trim() : (numId === null ? String(params[0] || '').toUpperCase().trim() : null);
+      return list.filter(r => {
+        if (numId !== null && Number(r.promo_code_id) === numId) return true;
+        if (codeParam && r.promo_code && String(r.promo_code).toUpperCase().trim() === codeParam) return true;
+        return false;
+      }).sort((a, b) => b.id - a.id);
     }
     if (sqlLower.includes('user_id = ?')) {
       const userId = Number(params[0]);
@@ -1642,7 +1679,16 @@ function handleLocalAll(sql, params = []) {
         );
       }
     }
-    return list.sort((a, b) => b.id - a.id);
+    list = list.sort((a, b) => b.id - a.id);
+    if (sqlLower.includes('limit ? offset ?') && params.length >= 2) {
+      const l = parseInt(params[params.length - 2], 10);
+      const o = parseInt(params[params.length - 1], 10);
+      if (!isNaN(l) && l >= 0) {
+        const start = !isNaN(o) && o >= 0 ? o : 0;
+        return list.slice(start, start + l);
+      }
+    }
+    return list;
   }
 
   // Gallery images list

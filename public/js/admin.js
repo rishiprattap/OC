@@ -241,6 +241,10 @@
     if (regFilter) regFilter.value = activeAdminEventId;
     const certFilter = document.getElementById('certEventFilter');
     if (certFilter) certFilter.value = activeAdminEventId;
+    const globalSel = document.getElementById('globalEventSelect');
+    if (globalSel && globalSel.value !== activeAdminEventId) {
+      globalSel.value = activeAdminEventId;
+    }
 
     // Update active event badge and preview link
     const indicator = document.getElementById('activeEventIndicator');
@@ -263,6 +267,31 @@
     const activeTabBtn = document.querySelector('.admin-nav-item.active');
     const tabName = activeTabBtn ? activeTabBtn.getAttribute('data-tab') : 'overview';
     showTab(tabName);
+  };
+
+  window.onRegEventFilterChange = function (slug) {
+    activeAdminEventId = slug || '';
+    const globalSel = document.getElementById('globalEventSelect');
+    if (globalSel && globalSel.value !== activeAdminEventId) {
+      globalSel.value = activeAdminEventId;
+    }
+    const certFilter = document.getElementById('certEventFilter');
+    if (certFilter && certFilter.value !== activeAdminEventId) {
+      certFilter.value = activeAdminEventId;
+    }
+
+    const indicator = document.getElementById('activeEventIndicator');
+    const previewLink = document.getElementById('btnPreviewEventLive');
+    const selectedEvt = adminEvents.find(e => e.slug === activeAdminEventId);
+    if (indicator) {
+      indicator.style.display = (selectedEvt && selectedEvt.isActive) ? 'inline-flex' : 'none';
+    }
+    if (previewLink) {
+      previewLink.href = activeAdminEventId ? `/event/${activeAdminEventId}` : '/';
+    }
+
+    loadRegistrations();
+    loadOverview();
   };
 
   // ── Tab Navigation ────────────────────────────────────────────────────────────
@@ -293,6 +322,12 @@
 
   // ── Overview Stats ────────────────────────────────────────────────────────────
   window.loadOverview = async function () {
+    const statIds = ['statTotal', 'statPendingVerif', 'statApproved', 'statRejected', 'statRevenue', 'statCheckedIn'];
+    statIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<span style="opacity:0.5; font-size:18px;">…</span>';
+    });
+
     try {
       let url = '/api/admin/overview';
       if (activeAdminEventId) {
@@ -301,14 +336,20 @@
       const res = await adminFetch(url);
       if (res.status === 401) { showLoginOverlay(); return; }
       const data = await res.json();
-      if (!data.success) return;
-      const s = data.stats;
-      setText('statTotal', s.total);
-      setText('statPendingVerif', s.pendingVerification);
-      setText('statVerified', s.verified);
-      setText('statApproved', s.approved);
-      setText('statRejected', s.rejected);
-      setText('statCheckedIn', s.checkedIn);
+      if (!res.ok || !data.success) {
+        statIds.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.innerHTML = '<span style="color:#e26947; font-size:15px;">Error</span>';
+        });
+        return;
+      }
+      const s = data.stats || {};
+      setText('statTotal', s.totalRegistrations ?? s.total ?? 0);
+      setText('statPendingVerif', s.pending ?? ((s.pendingVerification || 0) + (s.verified || 0)));
+      setText('statApproved', s.approved ?? 0);
+      setText('statRejected', s.rejected ?? 0);
+      setText('statRevenue', `₹${Number(s.totalRevenue ?? s.revenue ?? 0).toLocaleString('en-IN')}`);
+      setText('statCheckedIn', s.checkedIn ?? 0);
 
       const subtitleEl = document.getElementById('overviewEventSubtitle');
       const found = adminEvents.find(e => e.slug === activeAdminEventId);
@@ -339,6 +380,10 @@
       }
     } catch (err) {
       console.error('[Admin] Overview error:', err);
+      statIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<span style="color:#e26947; font-size:15px;">Error</span>';
+      });
     }
   };
 
@@ -390,6 +435,14 @@
     if (!container) return;
     container.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
 
+    const regStatIds = ['regStatTotal', 'regStatPending', 'regStatApproved', 'regStatRejected', 'regStatRevenue', 'regStatCheckedIn'];
+    if (containerId === 'regTableWrapper') {
+      regStatIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = '<span style="opacity:0.5; font-size:18px;">…</span>';
+      });
+    }
+
     try {
       let url = '/api/admin/registrations?limit=500';
       const eventFilterVal = document.getElementById('regEventFilter')?.value || activeAdminEventId;
@@ -403,13 +456,28 @@
       if (res.status === 401) { showLoginOverlay(); return; }
       const data = await res.json();
 
-      if (!data.success) {
-        container.innerHTML = `<div class="empty-state"><p>Failed to load: ${data.error}</p></div>`;
+      if (!res.ok || !data.success) {
+        if (containerId === 'regTableWrapper') {
+          regStatIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = '<span style="color:#e26947; font-size:15px;">Error</span>';
+          });
+        }
+        container.innerHTML = `<div class="empty-state"><p>Failed to load: ${data.error || 'Server error'}</p></div>`;
         return;
       }
 
       if (containerId === 'regTableWrapper') {
         populateRegistrationCategories(data.registrations);
+        if (data.stats) {
+          const st = data.stats;
+          setText('regStatTotal', st.totalRegistrations ?? st.total ?? 0);
+          setText('regStatPending', st.pending ?? 0);
+          setText('regStatApproved', st.approved ?? 0);
+          setText('regStatRejected', st.rejected ?? 0);
+          setText('regStatRevenue', `₹${Number(st.totalRevenue ?? st.revenue ?? 0).toLocaleString('en-IN')}`);
+          setText('regStatCheckedIn', st.checkedIn ?? 0);
+        }
       }
 
       if (!data.registrations.length) {
@@ -469,7 +537,7 @@
               `).join('')}
             </tbody>
           </table>
-          <div style="padding:12px 16px; font-size:12px; color:#8e8477;">${data.registrations.length} registration${data.registrations.length !== 1 ? 's' : ''}</div>
+          <div style="padding:12px 16px; font-size:12px; color:#8e8477;">Showing ${data.registrations.length} of ${data.total || data.registrations.length} matching registration${(data.total || data.registrations.length) !== 1 ? 's' : ''}</div>
         </div>
       `;
 
@@ -781,6 +849,7 @@
       alert(data.message);
       window.closeModal();
       refreshCurrentTab();
+      loadOverview();
     } catch (err) {
       alert('Network error.');
     }
@@ -4184,13 +4253,26 @@
     if (!wrapper) return;
     wrapper.innerHTML = '<div class="empty-state"><p>Loading referrer revenue totals…</p></div>';
 
+    const elTotRef = document.getElementById('refTotalReferrers');
+    const elTotReg = document.getElementById('refTotalRegistrations');
+    const elTotPaid = document.getElementById('refTotalPaid');
+    const elTotRev = document.getElementById('refTotalRevenue');
+    const elTotDisc = document.getElementById('refTotalDiscounts');
+
+    [elTotRef, elTotReg, elTotPaid, elTotRev, elTotDisc].forEach(el => {
+      if (el) el.innerHTML = '<span style="opacity:0.5; font-size:18px;">…</span>';
+    });
+
     try {
       const res = await adminFetch('/api/admin/promo-codes/referrers');
       if (res.status === 401) { showLoginOverlay(); return; }
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load referrers.'}</p></div>`;
+        [elTotRef, elTotReg, elTotPaid, elTotRev, elTotDisc].forEach(el => {
+          if (el) el.innerHTML = '<span style="color:#e26947; font-size:15px;">Error</span>';
+        });
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${escHtml(data.error || 'Failed to load referrers.')}</p></div>`;
         return;
       }
 
@@ -4205,23 +4287,17 @@
       let totalDisc = 0;
 
       referrers.forEach(r => {
-        totalRegs += r.totalRegistrations || 0;
-        totalPaid += r.confirmedPaidRegistrations || 0;
-        totalRev += r.totalRevenue || 0;
-        totalDisc += r.totalDiscountsGiven || 0;
+        totalRegs += Number(r.totalRegistrations ?? r.total_registrations ?? 0);
+        totalPaid += Number(r.confirmedPaidRegistrations ?? r.confirmed_paid_registrations ?? 0);
+        totalRev += Number(r.totalRevenue ?? r.total_revenue ?? 0);
+        totalDisc += Number(r.totalDiscountsGiven ?? r.total_discount_given ?? 0);
       });
-
-      const elTotRef = document.getElementById('refTotalReferrers');
-      const elTotReg = document.getElementById('refTotalRegistrations');
-      const elTotPaid = document.getElementById('refTotalPaid');
-      const elTotRev = document.getElementById('refTotalRevenue');
-      const elTotDisc = document.getElementById('refTotalDiscounts');
 
       if (elTotRef) elTotRef.textContent = referrers.length;
       if (elTotReg) elTotReg.textContent = totalRegs;
       if (elTotPaid) elTotPaid.textContent = totalPaid;
-      if (elTotRev) elTotRev.textContent = `₹${totalRev}`;
-      if (elTotDisc) elTotDisc.textContent = `₹${totalDisc}`;
+      if (elTotRev) elTotRev.textContent = `₹${totalRev.toLocaleString('en-IN')}`;
+      if (elTotDisc) elTotDisc.textContent = `₹${totalDisc.toLocaleString('en-IN')}`;
 
       if (!referrers.length) {
         wrapper.innerHTML = `
@@ -4521,7 +4597,26 @@
 
     if (!modal || !wrapper) return;
     if (titleEl) titleEl.textContent = `Registrations Attributed to: ${promoCode}`;
-    if (summaryEl) summaryEl.innerHTML = '';
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+          <div class="stat-label">Total Uses</div>
+          <div class="stat-value" style="font-size:22px; opacity:0.5;">…</div>
+        </div>
+        <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+          <div class="stat-label">Confirmed Paid</div>
+          <div class="stat-value green" style="font-size:22px; opacity:0.5;">…</div>
+        </div>
+        <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+          <div class="stat-label">Attributed Revenue</div>
+          <div class="stat-value green" style="font-size:22px; opacity:0.5;">…</div>
+        </div>
+        <div class="stat-card" style="padding:10px 16px; min-width:130px;">
+          <div class="stat-label">Total Discounts</div>
+          <div class="stat-value orange" style="font-size:22px; opacity:0.5;">…</div>
+        </div>
+      `;
+    }
     wrapper.innerHTML = '<div class="empty-state"><p>Loading registrations for promo code…</p></div>';
     modal.style.display = 'flex';
 
@@ -4531,30 +4626,37 @@
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${data.error || 'Failed to load registrations.'}</p></div>`;
+        if (summaryEl) {
+          summaryEl.innerHTML = `<div style="color:#e26947; font-size:13px; padding:8px 0;">Error loading summary: ${escHtml(data.error || 'Failed to load registrations.')}</div>`;
+        }
+        wrapper.innerHTML = `<div class="empty-state"><p style="color:#e26947;">${escHtml(data.error || 'Failed to load registrations.')}</p></div>`;
         return;
       }
 
-      const summary = data.summary || {};
+      const summary = data.summary || data.stats || {};
+      const totUses = Number(summary.totalRegistrations ?? summary.usage_count ?? summary.totalUses ?? 0);
+      const paidUses = Number(summary.paidRegistrations ?? summary.paid_count ?? summary.paidCount ?? 0);
+      const totRev = Number(summary.totalRevenue ?? summary.total_revenue ?? 0);
+      const totDisc = Number(summary.totalDiscounts ?? summary.totalDiscount ?? summary.total_discount ?? 0);
       const regs = data.registrations || [];
 
       if (summaryEl) {
         summaryEl.innerHTML = `
           <div class="stat-card" style="padding:10px 16px; min-width:130px;">
             <div class="stat-label">Total Uses</div>
-            <div class="stat-value" style="font-size:22px;">${summary.totalRegistrations || 0}</div>
+            <div class="stat-value" style="font-size:22px;">${totUses}</div>
           </div>
           <div class="stat-card" style="padding:10px 16px; min-width:130px;">
             <div class="stat-label">Confirmed Paid</div>
-            <div class="stat-value green" style="font-size:22px;">${summary.paidRegistrations || 0}</div>
+            <div class="stat-value green" style="font-size:22px;">${paidUses}</div>
           </div>
           <div class="stat-card" style="padding:10px 16px; min-width:130px;">
             <div class="stat-label">Attributed Revenue</div>
-            <div class="stat-value green" style="font-size:22px;">₹${summary.totalRevenue || 0}</div>
+            <div class="stat-value green" style="font-size:22px;">₹${totRev.toLocaleString('en-IN')}</div>
           </div>
           <div class="stat-card" style="padding:10px 16px; min-width:130px;">
             <div class="stat-label">Total Discounts</div>
-            <div class="stat-value orange" style="font-size:22px;">₹${summary.totalDiscounts || 0}</div>
+            <div class="stat-value orange" style="font-size:22px;">₹${totDisc.toLocaleString('en-IN')}</div>
           </div>
         `;
       }
