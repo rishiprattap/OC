@@ -263,9 +263,24 @@
       </nav>
       <div class="nav-actions">
         <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Instagram">◎</a>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle navigation menu">
+          ☰
+        </button>
       </div>
     </div>
   </header>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-drawer" id="mobileDrawer">
+    <a href="/">Home</a>
+    <a href="/register" style="color: #6edb8c; font-weight: 700;">Register Now ↗</a>
+    <a href="/events" style="color: #e4ad57; font-weight: 700;">All Events ↗</a>
+    <a href="/gallery" style="color: #e4ad57; font-weight: 700;">Event Gallery ↗</a>
+    <a href="/certificate" style="color: #e26947; font-weight: 700;">Download Certificate ↗</a>
+    <a href="/account" style="color: #e4ad57; font-weight: 700;">My Account ↗</a>
+    <a href="/#about">About Us</a>
+    <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Follow on Instagram ↗</a>
+  </div>
 
   <main class="page-wrapper">
     <a class="back-link" href="/">← Back to Offstage Creators</a>
@@ -685,5 +700,25 @@
   </footer>
 
   <script src="/js/register.js"></script>
+  <script>
+    (function () {
+      const toggleBtn = document.getElementById('mobileToggle');
+      const mobileDrawer = document.getElementById('mobileDrawer');
+      if (toggleBtn && mobileDrawer) {
+        toggleBtn.addEventListener('click', () => {
+          mobileDrawer.classList.toggle('open');
+          const isOpen = mobileDrawer.classList.contains('open');
+          toggleBtn.innerHTML = isOpen ? '✕' : '☰';
+          toggleBtn.setAttribute('aria-expanded', isOpen);
+        });
+        mobileDrawer.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mobileDrawer.classList.remove('open');
+            toggleBtn.innerHTML = '☰';
+          });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

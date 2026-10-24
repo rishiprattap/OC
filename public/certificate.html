@@ -148,6 +148,48 @@
         margin: 0;
       }
     }
+
+    @media (max-width: 640px) {
+      .cert-page {
+        width: 100%;
+        padding: 24px 16px 60px;
+        box-sizing: border-box;
+      }
+      .cert-head h1 {
+        font-size: clamp(34px, 8.5vw, 52px);
+      }
+      .verify-box {
+        padding: 20px 16px;
+        border-radius: 14px;
+      }
+      .cert-tab-bar {
+        display: flex;
+        gap: 6px;
+      }
+      .cert-tab {
+        flex: 1;
+        text-align: center;
+        padding: 8px 10px;
+        font-size: 11px;
+      }
+      .preview-box {
+        margin-top: 36px;
+      }
+      .preview-box canvas {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+      .downloads-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .downloads-bar .cta {
+        width: 100%;
+        justify-content: center;
+        min-height: 48px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -173,9 +215,24 @@
         <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Offstage Creators Instagram">
           ◎
         </a>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle navigation menu">
+          ☰
+        </button>
       </div>
     </div>
   </header>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-drawer" id="mobileDrawer">
+    <a href="/">Home</a>
+    <a href="/register" style="color: #6edb8c; font-weight: 700;">Register Now ↗</a>
+    <a href="/events" style="color: #e4ad57; font-weight: 700;">All Events ↗</a>
+    <a href="/gallery" style="color: #e4ad57; font-weight: 700;">Event Gallery ↗</a>
+    <a href="/certificate" class="active" style="color: #e26947; font-weight: 700;">Download Certificate ↗</a>
+    <a href="/account" style="color: #e4ad57; font-weight: 700;">My Account ↗</a>
+    <a href="/#about">About Us</a>
+    <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Follow on Instagram ↗</a>
+  </div>
 
   <main class="cert-page">
     <a class="back-link" href="/">
@@ -296,5 +353,25 @@
   <!-- QRCode.js client fallback -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="/js/certificate.js?v=2.0.0"></script>
+  <script>
+    (function () {
+      const toggleBtn = document.getElementById('mobileToggle');
+      const mobileDrawer = document.getElementById('mobileDrawer');
+      if (toggleBtn && mobileDrawer) {
+        toggleBtn.addEventListener('click', () => {
+          mobileDrawer.classList.toggle('open');
+          const isOpen = mobileDrawer.classList.contains('open');
+          toggleBtn.innerHTML = isOpen ? '✕' : '☰';
+          toggleBtn.setAttribute('aria-expanded', isOpen);
+        });
+        mobileDrawer.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mobileDrawer.classList.remove('open');
+            toggleBtn.innerHTML = '☰';
+          });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

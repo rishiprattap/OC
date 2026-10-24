@@ -238,6 +238,81 @@
       letter-spacing: 0.05em;
       text-transform: uppercase;
     }
+
+    @media (max-width: 640px) {
+      .auth-tabs {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .auth-tab-btn {
+        padding: 8px 16px;
+        font-size: 12px;
+      }
+      .user-profile-header {
+        padding: 20px 16px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+      }
+      .user-profile-header .cta {
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+      }
+      .dashboard-tabs {
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 4px;
+        margin-bottom: 20px;
+      }
+      .dashboard-tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .dash-tab-btn {
+        flex: 0 0 auto;
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+      .registration-card {
+        padding: 16px;
+      }
+      .reg-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .reg-card-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 12px;
+      }
+      .reg-card-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .reg-card-actions .cta,
+      .reg-card-actions a,
+      .reg-card-actions button {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+        min-height: 44px;
+      }
+      .otp-input-group {
+        gap: 5px;
+        margin: 16px 0;
+      }
+      .otp-digit {
+        width: clamp(34px, 12vw, 44px);
+        height: clamp(44px, 14vw, 54px);
+        font-size: 20px;
+        border-radius: 6px;
+        min-width: 0;
+      }
+    }
   </style>
 </head>
 <body>
@@ -260,9 +335,24 @@
       </nav>
       <div class="nav-actions">
         <a class="nav-instagram" href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener" aria-label="Instagram">◎</a>
+        <button class="mobile-toggle" id="mobileToggle" aria-label="Toggle navigation menu">
+          ☰
+        </button>
       </div>
     </div>
   </header>
+
+  <!-- MOBILE DRAWER -->
+  <div class="mobile-drawer" id="mobileDrawer">
+    <a href="/">Home</a>
+    <a href="/register" style="color: #6edb8c; font-weight: 700;">Register Now ↗</a>
+    <a href="/events" style="color: #e4ad57; font-weight: 700;">All Events ↗</a>
+    <a href="/gallery" style="color: #e4ad57; font-weight: 700;">Event Gallery ↗</a>
+    <a href="/certificate" style="color: #e26947; font-weight: 700;">Download Certificate ↗</a>
+    <a href="/account" class="active" style="color: #e4ad57; font-weight: 700;">My Account ↗</a>
+    <a href="/#about">About Us</a>
+    <a href="https://www.instagram.com/offstagecreators/" target="_blank" rel="noopener">Follow on Instagram ↗</a>
+  </div>
 
   <main class="page-wrapper">
     <a class="back-link" href="/">← Back to Home</a>
@@ -554,8 +644,48 @@
         <a href="/admin" class="footer-secondary">Admin</a>
       </div>
     </div>
+
+    <!-- Dedicated Mobile Footer -->
+    <div class="footer-mobile">
+      <div class="footer-mobile-nav">
+        <div class="footer-mobile-row">
+          <a href="/">Home</a>
+          <span class="footer-mobile-sep">|</span>
+          <a href="/events">All Events</a>
+        </div>
+        <div class="footer-mobile-row">
+          <a href="/gallery">Event Gallery</a>
+          <span class="footer-mobile-sep">|</span>
+          <a href="/certificate">Certificate</a>
+        </div>
+      </div>
+      <div class="footer-mobile-copy">
+        <p>Copyright © 2026 Offstage Creators. All rights reserved.</p>
+        <p>Built with ♡ for the creative community.</p>
+      </div>
+    </div>
   </footer>
 
   <script src="/js/account.js"></script>
+  <script>
+    (function () {
+      const toggleBtn = document.getElementById('mobileToggle');
+      const mobileDrawer = document.getElementById('mobileDrawer');
+      if (toggleBtn && mobileDrawer) {
+        toggleBtn.addEventListener('click', () => {
+          mobileDrawer.classList.toggle('open');
+          const isOpen = mobileDrawer.classList.contains('open');
+          toggleBtn.innerHTML = isOpen ? '✕' : '☰';
+          toggleBtn.setAttribute('aria-expanded', isOpen);
+        });
+        mobileDrawer.querySelectorAll('a').forEach(link => {
+          link.addEventListener('click', () => {
+            mobileDrawer.classList.remove('open');
+            toggleBtn.innerHTML = '☰';
+          });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
