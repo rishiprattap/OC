@@ -830,7 +830,7 @@
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
               <div style="display:flex; gap:8px;">
-                <button type="button" class="action-btn btn-view" onclick="selectAllCustomEmail(true)">Select All Filtered</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCustomEmail(true)">Select All</button>
                 <button type="button" class="action-btn btn-view" onclick="selectAllCustomEmail(false)">Deselect All</button>
               </div>
               <small style="color:#8e8477; font-size:11px;">Select single or multiple participants</small>
@@ -939,9 +939,9 @@
             <!-- Selection helper buttons -->
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
               <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmailReady(true)">Select All Ready</button>
-                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmailFailed(true)">Select Failed (Retry)</button>
-                <button type="button" class="action-btn btn-view" onclick="deselectAllCertEmail()">Deselect All</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmail(true)" title="Select all eligible recipients">Select All</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmail(false)" title="Deselect all recipients">Deselect All</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmailFailed(true)" title="Select only recipients whose last email failed">Select Failed (Retry)</button>
               </div>
               <small style="color:#8e8477; font-size:11px;">Recipients flagged as Not Ready are protected from premature dispatch.</small>
             </div>
@@ -1048,7 +1048,7 @@
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
               <div style="display:flex; gap:8px;">
-                <button type="button" class="action-btn btn-view" onclick="selectAllMeetEmail(true)">Select All Filtered</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllMeetEmail(true)">Select All</button>
                 <button type="button" class="action-btn btn-view" onclick="selectAllMeetEmail(false)">Deselect All</button>
               </div>
               <small style="color:#8e8477; font-size:11px;">Select recipients from existing registrations</small>

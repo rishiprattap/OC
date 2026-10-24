@@ -942,6 +942,8 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   let cachedParticipants = [];
+  let currentFilteredCustomRecipients = [];
+  let currentFilteredMeetRecipients = [];
   const selectedCustomRecipients = new Set();
   const selectedMeetRecipients = new Set();
   let currentRegistrationStatus = 'OPEN';
@@ -1021,6 +1023,7 @@
              String(p.id) === search;
     });
 
+    currentFilteredCustomRecipients = filtered;
     renderCustomRecipientTable(filtered);
   };
 
@@ -1030,6 +1033,7 @@
 
     if (!list.length) {
       container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No participants match your search.</p></div>';
+      updateCustomRecipientCount(list);
       return;
     }
 
@@ -1037,7 +1041,9 @@
       <table class="reg-table" style="font-size:12px;">
         <thead>
           <tr>
-            <th style="width:36px; text-align:center;">✓</th>
+            <th style="width:36px; text-align:center;">
+              <input type="checkbox" id="thCustomEmailMaster" onchange="selectAllCustomEmail(this.checked)" title="Select / Deselect All">
+            </th>
             <th>Serial #</th>
             <th>Reg ID</th>
             <th>Name</th>
@@ -1071,7 +1077,7 @@
 
     html += '</tbody></table>';
     container.innerHTML = html;
-    updateCustomRecipientCount();
+    updateCustomRecipientCount(list);
   }
 
   window.toggleCustomRecipient = function (regId) {
@@ -1084,37 +1090,36 @@
   };
 
   window.selectAllCustomEmail = function (select) {
-    const search = (document.getElementById('customEmailSearch')?.value || '').trim().toLowerCase();
-    const cat = document.getElementById('customEmailCategoryFilter')?.value || 'ALL';
-    const status = document.getElementById('customEmailStatusFilter')?.value || 'ALL';
+    const targetList = currentFilteredCustomRecipients.length > 0 ? currentFilteredCustomRecipients : cachedParticipants;
+    if (select) {
+      targetList.forEach(p => selectedCustomRecipients.add(p.registrationId));
+    } else {
+      selectedCustomRecipients.clear();
+    }
 
-    const filtered = cachedParticipants.filter(p => {
-      if (cat !== 'ALL' && p.category !== cat) return false;
-      if (status !== 'ALL' && p.status !== status) return false;
-      if (!search) return true;
-      const serialStr = String(p.id).padStart(6, '0');
-      return (p.fullName && p.fullName.toLowerCase().includes(search)) ||
-             (p.email && p.email.toLowerCase().includes(search)) ||
-             (p.registrationId && p.registrationId.toLowerCase().includes(search)) ||
-             (p.city && p.city.toLowerCase().includes(search)) ||
-             serialStr.includes(search) ||
-             String(p.id) === search;
-    });
-
-    filtered.forEach(p => {
-      if (select) selectedCustomRecipients.add(p.registrationId);
-      else selectedCustomRecipients.delete(p.registrationId);
-    });
-
+    updateCustomRecipientCount(targetList);
     filterCustomEmailList();
   };
 
-  function updateCustomRecipientCount() {
+  function updateCustomRecipientCount(list) {
     const countEl = document.getElementById('customEmailSelectedCount');
     if (countEl) {
       const manualCount = getManualEmails('customEmailManual').length;
       const total = selectedCustomRecipients.size + manualCount;
       countEl.textContent = `${total} recipient${total === 1 ? '' : 's'} selected (${selectedCustomRecipients.size} registered, ${manualCount} manual)`;
+    }
+
+    const masterCb = document.getElementById('thCustomEmailMaster');
+    if (masterCb) {
+      const activeList = list || currentFilteredCustomRecipients || cachedParticipants;
+      if (!activeList.length) {
+        masterCb.checked = false;
+        masterCb.indeterminate = false;
+      } else {
+        const selCount = activeList.filter(p => selectedCustomRecipients.has(p.registrationId)).length;
+        masterCb.checked = selCount > 0 && selCount === activeList.length;
+        masterCb.indeterminate = selCount > 0 && selCount < activeList.length;
+      }
     }
   }
 
@@ -1295,6 +1300,7 @@
              String(p.id) === search;
     });
 
+    currentFilteredMeetRecipients = filtered;
     renderMeetRecipientTable(filtered);
   };
 
@@ -1304,6 +1310,7 @@
 
     if (!list.length) {
       container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No participants match your filter.</p></div>';
+      updateMeetRecipientCount(list);
       return;
     }
 
@@ -1311,7 +1318,9 @@
       <table class="reg-table" style="font-size:12px;">
         <thead>
           <tr>
-            <th style="width:36px; text-align:center;">✓</th>
+            <th style="width:36px; text-align:center;">
+              <input type="checkbox" id="thMeetEmailMaster" onchange="selectAllMeetEmail(this.checked)" title="Select / Deselect All">
+            </th>
             <th>Serial #</th>
             <th>Reg ID</th>
             <th>Name</th>
@@ -1343,7 +1352,7 @@
 
     html += '</tbody></table>';
     container.innerHTML = html;
-    updateMeetRecipientCount();
+    updateMeetRecipientCount(list);
   }
 
   window.toggleMeetRecipient = function (regId) {
@@ -1356,37 +1365,36 @@
   };
 
   window.selectAllMeetEmail = function (select) {
-    const search = (document.getElementById('meetEmailSearch')?.value || '').trim().toLowerCase();
-    const cat = document.getElementById('meetEmailCategoryFilter')?.value || 'ALL';
-    const status = document.getElementById('meetEmailStatusFilter')?.value || 'ALL';
+    const targetList = currentFilteredMeetRecipients.length > 0 ? currentFilteredMeetRecipients : cachedParticipants;
+    if (select) {
+      targetList.forEach(p => selectedMeetRecipients.add(p.registrationId));
+    } else {
+      selectedMeetRecipients.clear();
+    }
 
-    const filtered = cachedParticipants.filter(p => {
-      if (cat !== 'ALL' && p.category !== cat) return false;
-      if (status !== 'ALL' && p.status !== status) return false;
-      if (!search) return true;
-      const serialStr = String(p.id).padStart(6, '0');
-      return (p.fullName && p.fullName.toLowerCase().includes(search)) ||
-             (p.email && p.email.toLowerCase().includes(search)) ||
-             (p.registrationId && p.registrationId.toLowerCase().includes(search)) ||
-             (p.city && p.city.toLowerCase().includes(search)) ||
-             serialStr.includes(search) ||
-             String(p.id) === search;
-    });
-
-    filtered.forEach(p => {
-      if (select) selectedMeetRecipients.add(p.registrationId);
-      else selectedMeetRecipients.delete(p.registrationId);
-    });
-
+    updateMeetRecipientCount(targetList);
     filterMeetEmailList();
   };
 
-  function updateMeetRecipientCount() {
+  function updateMeetRecipientCount(list) {
     const countEl = document.getElementById('meetEmailSelectedCount');
     if (countEl) {
       const manualCount = getManualEmails('meetEmailManual').length;
       const total = selectedMeetRecipients.size + manualCount;
       countEl.textContent = `${total} recipient${total === 1 ? '' : 's'} selected (${selectedMeetRecipients.size} registered, ${manualCount} manual)`;
+    }
+
+    const masterCb = document.getElementById('thMeetEmailMaster');
+    if (masterCb) {
+      const activeList = list || currentFilteredMeetRecipients || cachedParticipants;
+      if (!activeList.length) {
+        masterCb.checked = false;
+        masterCb.indeterminate = false;
+      } else {
+        const selCount = activeList.filter(p => selectedMeetRecipients.has(p.registrationId)).length;
+        masterCb.checked = selCount > 0 && selCount === activeList.length;
+        masterCb.indeterminate = selCount > 0 && selCount < activeList.length;
+      }
     }
   }
 
@@ -1512,6 +1520,7 @@
   const selectedCertRecipients = new Set();
   let cachedCertRecipients = [];
   let cachedCertEvent = null;
+  let currentFilteredCertRecipients = [];
 
   window.initCertEmailSubtab = async function () {
     const eventSelect = document.getElementById('certEmailEventFilter');
@@ -1633,6 +1642,7 @@
              serialStr.includes(search);
     });
 
+    currentFilteredCertRecipients = filtered;
     renderCertRecipientTable(filtered);
   };
 
@@ -1642,6 +1652,7 @@
 
     if (!list.length) {
       container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No participants match your filter criteria.</p></div>';
+      updateCertRecipientCount(list);
       return;
     }
 
@@ -1649,7 +1660,9 @@
       <table class="reg-table" style="font-size:12px;">
         <thead>
           <tr>
-            <th style="width:36px; text-align:center;">✓</th>
+            <th style="width:36px; text-align:center;">
+              <input type="checkbox" id="thCertEmailMaster" onchange="toggleSelectAllCertEmail(this.checked)" title="Select / Deselect All">
+            </th>
             <th>Participant</th>
             <th>Registration ID</th>
             <th>Award / Category</th>
@@ -1714,7 +1727,7 @@
 
     html += '</tbody></table>';
     container.innerHTML = html;
-    updateCertRecipientCount();
+    updateCertRecipientCount(list);
   }
 
   window.toggleCertRecipient = function (regId) {
@@ -1726,9 +1739,9 @@
     } else {
       selectedCertRecipients.add(regId);
     }
-    updateCertRecipientCount();
-    // Re-check table inputs without full re-render for speed
-    const checkboxes = document.querySelectorAll('#certEmailTableWrapper input[type="checkbox"]');
+    updateCertRecipientCount(currentFilteredCertRecipients);
+    // Re-check row inputs without full re-render for speed
+    const checkboxes = document.querySelectorAll('#certEmailTableWrapper input[type="checkbox"]:not(#thCertEmailMaster)');
     checkboxes.forEach(cb => {
       const tr = cb.closest('tr');
       const idEl = tr ? tr.querySelector('.id-cell') : null;
@@ -1738,38 +1751,63 @@
     });
   };
 
-  window.selectAllCertEmailReady = function (select) {
-    cachedCertRecipients.forEach(r => {
-      if (r.isReady) {
-        if (select) selectedCertRecipients.add(r.registrationId);
-        else selectedCertRecipients.delete(r.registrationId);
-      }
-    });
-    updateCertRecipientCount();
+  window.selectAllCertEmail = function (select) {
+    const targetList = currentFilteredCertRecipients.length > 0 ? currentFilteredCertRecipients : cachedCertRecipients;
+    if (select) {
+      targetList.forEach(r => {
+        if (r.isReady) {
+          selectedCertRecipients.add(r.registrationId);
+        }
+      });
+    } else {
+      selectedCertRecipients.clear();
+    }
+    updateCertRecipientCount(targetList);
     filterCertEmailList();
   };
 
+  window.toggleSelectAllCertEmail = function (checked) {
+    window.selectAllCertEmail(checked);
+  };
+
+  window.selectAllCertEmailReady = function (select) {
+    window.selectAllCertEmail(select);
+  };
+
   window.selectAllCertEmailFailed = function (select) {
-    cachedCertRecipients.forEach(r => {
+    const targetList = currentFilteredCertRecipients.length > 0 ? currentFilteredCertRecipients : cachedCertRecipients;
+    targetList.forEach(r => {
       if (r.isReady && r.emailStatus === 'FAILED') {
         if (select) selectedCertRecipients.add(r.registrationId);
         else selectedCertRecipients.delete(r.registrationId);
       }
     });
-    updateCertRecipientCount();
+    updateCertRecipientCount(targetList);
     filterCertEmailList();
   };
 
   window.deselectAllCertEmail = function () {
-    selectedCertRecipients.clear();
-    updateCertRecipientCount();
-    filterCertEmailList();
+    window.selectAllCertEmail(false);
   };
 
-  function updateCertRecipientCount() {
+  function updateCertRecipientCount(list) {
     const countEl = document.getElementById('certEmailSelectedCount');
     if (countEl) {
       countEl.textContent = `${selectedCertRecipients.size} recipient(s) selected`;
+    }
+
+    const masterCb = document.getElementById('thCertEmailMaster');
+    if (masterCb) {
+      const activeList = list || currentFilteredCertRecipients || cachedCertRecipients;
+      const readyList = activeList.filter(p => p.isReady);
+      if (!readyList.length) {
+        masterCb.checked = false;
+        masterCb.indeterminate = false;
+      } else {
+        const selCount = readyList.filter(p => selectedCertRecipients.has(p.registrationId)).length;
+        masterCb.checked = selCount > 0 && selCount === readyList.length;
+        masterCb.indeterminate = selCount > 0 && selCount < readyList.length;
+      }
     }
   }
 
