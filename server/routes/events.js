@@ -197,6 +197,21 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/events/all — Return all public events
+router.get('/all', async (req, res) => {
+  try {
+    const events = await listEvents({});
+    return res.json({
+      success: true,
+      count: events.length,
+      events: events.map(formatEventPublic)
+    });
+  } catch (err) {
+    console.error('[Events] Error in GET /api/events/all:', err);
+    return res.status(500).json({ success: false, error: 'Server error while listing all events.' });
+  }
+});
+
 // GET /api/events/:slug — Get single event by slug or ID
 router.get('/:slug', async (req, res) => {
   try {

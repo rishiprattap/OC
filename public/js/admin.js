@@ -241,6 +241,8 @@
     if (regFilter) regFilter.value = activeAdminEventId;
     const certFilter = document.getElementById('certEventFilter');
     if (certFilter) certFilter.value = activeAdminEventId;
+    const certEmailFilter = document.getElementById('certEmailEventFilter');
+    if (certEmailFilter && activeAdminEventId) certEmailFilter.value = activeAdminEventId;
     const globalSel = document.getElementById('globalEventSelect');
     if (globalSel && globalSel.value !== activeAdminEventId) {
       globalSel.value = activeAdminEventId;
@@ -1522,30 +1524,66 @@
   let cachedCertEvent = null;
   let currentFilteredCertRecipients = [];
 
+  function populateCertEmailEventDropdown(eventsList) {
+    const eventSelect = document.getElementById('certEmailEventFilter');
+    if (!eventSelect) return;
+    const list = (eventsList && eventsList.length > 0)
+      ? eventsList
+      : ((typeof adminEvents !== 'undefined' && Array.isArray(adminEvents) && adminEvents.length > 0)
+          ? adminEvents
+          : []);
+
+    if (list.length > 0) {
+      const currentVal = eventSelect.value;
+      eventSelect.innerHTML = list.map(evt => {
+        const name = evt.name || evt.title || evt.slug;
+        const date = evt.date || evt.event_date || evt.eventDate || 'TBA';
+        const label = `${name} (${date})${evt.isActive ? ' ★ ACTIVE' : ''}`;
+        return `<option value="${escHtml(evt.slug || evt.id)}">${escHtml(label)}</option>`;
+      }).join('');
+
+      let targetSlug = '';
+      if (currentVal && list.some(e => (e.slug || e.id) === currentVal)) {
+        targetSlug = currentVal;
+      } else if (activeAdminEventId && list.some(e => (e.slug || e.id) === activeAdminEventId)) {
+        targetSlug = activeAdminEventId;
+      } else {
+        targetSlug = list.find(e => e.isActive)?.slug || list[0]?.slug || 'online-open-mic-2026';
+      }
+      eventSelect.value = targetSlug;
+    } else {
+      if (!eventSelect.innerHTML.trim()) {
+        eventSelect.innerHTML = '<option value="online-open-mic-2026">Online Open Mic 2026 (Edition 1) ★ ACTIVE</option>';
+        eventSelect.value = 'online-open-mic-2026';
+      }
+    }
+  }
+
   window.initCertEmailSubtab = async function () {
     const eventSelect = document.getElementById('certEmailEventFilter');
     if (!eventSelect) return;
 
     try {
-      const res = await adminFetch('/api/events/all');
-      if (res.status === 401) { showLoginOverlay(); return; }
-      const data = await res.json();
-      const events = (data.events || data.data || []).filter(Boolean);
-
-      if (events.length > 0) {
-        eventSelect.innerHTML = events.map(e => 
-          `<option value="${escHtml(e.slug || e.id)}">${escHtml(e.title || e.name || e.slug)}</option>`
-        ).join('');
-      }
-
-      if (activeAdminEventId) {
-        const found = events.find(e => (e.slug || e.id) === activeAdminEventId);
-        if (found) eventSelect.value = activeAdminEventId;
+      if (typeof adminEvents !== 'undefined' && Array.isArray(adminEvents) && adminEvents.length > 0) {
+        populateCertEmailEventDropdown(adminEvents);
+      } else {
+        const res = await adminFetch('/api/admin/events');
+        if (res.status === 401) { showLoginOverlay(); return; }
+        const data = await res.json();
+        const events = (data.events || data.data || []).filter(Boolean);
+        if (Array.isArray(events) && events.length > 0) {
+          adminEvents = events;
+          populateCertEmailEventDropdown(events);
+        } else {
+          populateCertEmailEventDropdown([]);
+        }
       }
 
       await loadCertEmailRecipients();
     } catch (err) {
       console.error('[Cert Email] Failed to initialize events:', err);
+      populateCertEmailEventDropdown([]);
+      await loadCertEmailRecipients();
     }
   };
 
@@ -2701,13 +2739,13 @@
         }
 
         // Update dropdowns
-        const selects = ['globalEventSelect', 'regEventFilter', 'certEventFilter', 'customEmailEventFilter', 'adminGalleryUploadEvent'];
+        const selects = ['globalEventSelect', 'regEventFilter', 'certEventFilter', 'customEmailEventFilter', 'certEmailEventFilter', 'adminGalleryUploadEvent'];
         selects.forEach(id => {
           const el = document.getElementById(id);
           if (!el) return;
           const currentVal = el.value;
-          const isGlobalOrFilter = id !== 'adminGalleryUploadEvent';
-          let opts = isGlobalOrFilter ? '<option value="">All Events</option>' : '';
+          const isFilterWithAll = id !== 'adminGalleryUploadEvent' && id !== 'certEmailEventFilter';
+          let opts = isFilterWithAll ? '<option value="">All Events</option>' : '';
           opts += adminEvents.map(evt => {
             const label = `${evt.name || evt.title} (${evt.date || 'TBA'}) ${evt.isActive ? '★ ACTIVE' : ''}`;
             return `<option value="${evt.slug}">${escHtml(label)}</option>`;
@@ -2715,8 +2753,8 @@
           el.innerHTML = opts;
           if (currentVal && adminEvents.some(e => e.slug === currentVal)) {
             el.value = currentVal;
-          } else if (id === 'globalEventSelect') {
-            el.value = activeAdminEventId;
+          } else if (id === 'globalEventSelect' || id === 'certEmailEventFilter') {
+            el.value = activeAdminEventId || adminEvents[0]?.slug || 'online-open-mic-2026';
           }
         });
 
