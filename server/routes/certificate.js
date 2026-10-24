@@ -7,7 +7,10 @@ const config = require('../config');
 const {
   resolveCertificateData,
   isRecordWinner,
-  generateCertificateSvg
+  generateCertificateSvg,
+  generateCertificateAccessToken,
+  verifyCertificateAccessToken,
+  isCertificateReady
 } = require('../services/certificate');
 
 function normalizeName(str) {
@@ -49,35 +52,15 @@ async function handleVerify(req, res) {
     const body = req.method === 'GET' ? req.query : req.body;
     const { name, phone } = body;
     const registrationId = body.registrationId || body.regId || body.id;
+    const token = (body.token || req.query.token || '').trim();
+    const targetEventId = body.eventId || body.event;
 
     const host = req.get('host') || 'offstagecreators.in';
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
 
     // Helper to format certificate response
-    async function buildCertResponse(record) {
-      if (['REVOKED', 'CANCELLED'].includes(record.reg_status) || record.payment_status === 'REVOKED') {
-        return {
-          status: 403,
-          data: { success: false, error: 'Registration has been revoked/cancelled. Certificate cannot be issued.' }
-        };
-      }
-
-      if (record.reg_status !== 'APPROVED' && record.payment_status !== 'PAID') {
-        return {
-          status: 403,
-          data: { success: false, error: 'Registration payment is not yet verified. Only confirmed participants can receive certificates.' }
-        };
-      }
-
-      const isWinner = isRecordWinner(record);
-      if (!record.checked_in && !record.certificate_eligible && !isWinner) {
-        return {
-          status: 403,
-          data: { success: false, error: 'Participation certificate is issued after attending and checking in to the event.' }
-        };
-      }
-
+    async function buildCertResponse(record, isTokenAuthenticated = false) {
       // Dynamic Event Resolution
       let evt = null;
       if (record.event_id) {
@@ -87,17 +70,60 @@ async function handleVerify(req, res) {
         evt = await getEventBySlug(config.EVENT.id);
       }
 
+      // Check readiness and publication status
+      const readiness = isCertificateReady(record, evt);
+      if (!readiness.isReady) {
+        return {
+          status: 403,
+          data: {
+            success: false,
+            error: readiness.reason || 'This certificate has not yet been finalized or published by the organizers.'
+          }
+        };
+      }
+
       const certData = await resolveCertificateData(record, evt, baseUrl);
       return {
         status: 200,
         data: {
           success: true,
+          authenticated: isTokenAuthenticated,
           ...certData
         }
       };
     }
 
-    // 1. Check if looking up directly by registrationId
+    // 1. Secure token-based access (from Collect Your Certificate email)
+    if (token) {
+      if (!registrationId || typeof registrationId !== 'string' || !registrationId.trim()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Registration ID is required with access token.'
+        });
+      }
+      const cleanRegId = registrationId.trim().toUpperCase();
+      const record = await get(
+        `SELECT * FROM registrations WHERE registration_id = ?`,
+        [cleanRegId]
+      );
+      if (!record) {
+        return res.status(404).json({ success: false, error: 'Registration not found.' });
+      }
+
+      // Verify HMAC token against registrationId and event
+      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id);
+      if (!tokenValid) {
+        return res.status(403).json({
+          success: false,
+          error: 'Invalid or tampered certificate access link. You cannot access this certificate by modifying the ID.'
+        });
+      }
+
+      const resp = await buildCertResponse(record, true);
+      return res.status(resp.status).json(resp.data);
+    }
+
+    // 2. Direct lookup by registrationId
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
@@ -106,12 +132,23 @@ async function handleVerify(req, res) {
       );
 
       if (record) {
-        const resp = await buildCertResponse(record);
+        // If phone is provided, verify match
+        if (phone && normalizePhone(phone).length >= 8) {
+          const cleanInputPhone = normalizePhone(phone);
+          const cleanRecordPhone = normalizePhone(record.phone);
+          if (!cleanRecordPhone.endsWith(cleanInputPhone) && !cleanInputPhone.endsWith(cleanRecordPhone)) {
+            return res.status(403).json({
+              success: false,
+              error: 'The phone number does not match this Registration ID.'
+            });
+          }
+        }
+        const resp = await buildCertResponse(record, false);
         return res.status(resp.status).json(resp.data);
       }
     }
 
-    // 2. Name + Phone verification
+    // 3. Name + Phone verification
     const cleanName = normalizeName(name);
     const cleanPhone = normalizePhone(phone);
 
@@ -129,7 +166,6 @@ async function handleVerify(req, res) {
     );
 
     // Optional event filter if passed in query/body (strictly scopes verification to selected event)
-    const targetEventId = body.eventId || body.event;
     if (targetEventId && matchingRecords) {
       const filteredByEvent = matchingRecords.filter(r => r.event_id === targetEventId);
       if (filteredByEvent.length > 0) matchingRecords = filteredByEvent;
@@ -141,11 +177,11 @@ async function handleVerify(req, res) {
         return rName === cleanName || rName.includes(cleanName) || cleanName.includes(rName);
       }) || matchingRecords[0];
 
-      const resp = await buildCertResponse(match);
+      const resp = await buildCertResponse(match, false);
       return res.status(resp.status).json(resp.data);
     }
 
-    // 3. Check legacy certificates hash (preserves previous participants from certificate.html)
+    // 4. Check legacy certificates hash (preserves previous participants from certificate.html)
     const combinedHash = sha256(cleanName + '|' + cleanPhone);
     const legacy = await get(
       `SELECT * FROM legacy_certificates WHERE hash = ?`,
@@ -194,10 +230,6 @@ async function handleDownload(req, res) {
     const record = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
     if (!record) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
-    const host = req.get('host') || 'offstagecreators.in';
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-    const baseUrl = `${protocol}://${host}`;
-
     let evt = null;
     if (record.event_id) {
       evt = await getEventBySlug(record.event_id);
@@ -205,6 +237,31 @@ async function handleDownload(req, res) {
     if (!evt) {
       evt = await getEventBySlug(config.EVENT.id);
     }
+
+    // Verify token if supplied
+    const token = (req.query.token || '').trim();
+    if (token) {
+      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id);
+      if (!tokenValid) {
+        return res.status(403).json({
+          success: false,
+          error: 'Invalid or tampered certificate download link.'
+        });
+      }
+    }
+
+    // Verify readiness
+    const readiness = isCertificateReady(record, evt);
+    if (!readiness.isReady) {
+      return res.status(403).json({
+        success: false,
+        error: readiness.reason || 'Certificate is not published or ready for download.'
+      });
+    }
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
 
     const certData = await resolveCertificateData(record, evt, baseUrl);
     const svg = generateCertificateSvg(certData);

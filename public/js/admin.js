@@ -947,7 +947,7 @@
   let currentRegistrationStatus = 'OPEN';
 
   window.switchEmailSubtab = function (subtab) {
-    ['Custom', 'Meet', 'History'].forEach(t => {
+    ['Custom', 'Cert', 'Meet', 'History'].forEach(t => {
       const el = document.getElementById('emailSubtab' + t);
       const btn = document.getElementById('subnavBtn' + t);
       if (el) el.style.display = 'none';
@@ -961,12 +961,15 @@
 
     if (subtab === 'history') {
       loadEmailHistory();
+    } else if (subtab === 'cert') {
+      initCertEmailSubtab();
     }
   };
 
   async function initEmailCenter() {
     updateMeetPreviewTemplate();
     await loadParticipantsForEmail();
+    initCertEmailSubtab();
   }
 
   async function loadParticipantsForEmail() {
@@ -1502,6 +1505,415 @@
         }
       }
     });
+  };
+
+  // ── Certificate Collection Email Methods ─────────────────────────────────────
+
+  const selectedCertRecipients = new Set();
+  let cachedCertRecipients = [];
+  let cachedCertEvent = null;
+
+  window.initCertEmailSubtab = async function () {
+    const eventSelect = document.getElementById('certEmailEventFilter');
+    if (!eventSelect) return;
+
+    try {
+      const res = await adminFetch('/api/events/all');
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+      const events = (data.events || data.data || []).filter(Boolean);
+
+      if (events.length > 0) {
+        eventSelect.innerHTML = events.map(e => 
+          `<option value="${escHtml(e.slug || e.id)}">${escHtml(e.title || e.name || e.slug)}</option>`
+        ).join('');
+      }
+
+      if (activeAdminEventId) {
+        const found = events.find(e => (e.slug || e.id) === activeAdminEventId);
+        if (found) eventSelect.value = activeAdminEventId;
+      }
+
+      await loadCertEmailRecipients();
+    } catch (err) {
+      console.error('[Cert Email] Failed to initialize events:', err);
+    }
+  };
+
+  window.loadCertEmailRecipients = async function () {
+    const eventSelect = document.getElementById('certEmailEventFilter');
+    const eventId = eventSelect?.value || activeAdminEventId || 'online-open-mic-2026';
+    const container = document.getElementById('certEmailTableWrapper');
+    const statusBox = document.getElementById('certEmailEventStatusBox');
+    const warningBox = document.getElementById('certEmailPublishWarning');
+    const badgeEl = document.getElementById('certEmailEventBadge');
+
+    if (container) {
+      container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>Loading certificate recipients…</p></div>';
+    }
+
+    try {
+      const res = await adminFetch(`/api/admin/emails/certificate/recipients?eventId=${encodeURIComponent(eventId)}`);
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+
+      if (!data.success) {
+        if (container) container.innerHTML = `<div class="empty-state" style="padding:24px;"><p>Error: ${escHtml(data.error)}</p></div>`;
+        return;
+      }
+
+      cachedCertEvent = data.event || null;
+      cachedCertRecipients = data.recipients || [];
+
+      // Update Event Certificate Publication Status
+      const isPublished = Boolean(cachedCertEvent && cachedCertEvent.certificateEnabled);
+      if (statusBox) {
+        statusBox.innerHTML = isPublished
+          ? '<span style="color:#6edb8c; font-weight:700;">🟢 Finalized &amp; Published</span>'
+          : '<span style="color:#e26947; font-weight:700;">⚠️ Not Published (Disabled)</span>';
+      }
+      if (warningBox) {
+        warningBox.style.display = isPublished ? 'none' : 'block';
+      }
+      if (badgeEl) {
+        badgeEl.innerHTML = isPublished
+          ? '<span class="status-pill status-approved" style="font-size:11px;">Published</span>'
+          : '<span class="status-pill status-rejected" style="font-size:11px;">Unpublished</span>';
+      }
+
+      // Update stats
+      const stats = data.stats || {};
+      const sTot = document.getElementById('certStatTotal');
+      const sRdy = document.getElementById('certStatReady');
+      const sNot = document.getElementById('certStatNotReady');
+      const sSnt = document.getElementById('certStatSent');
+      const sFld = document.getElementById('certStatFailed');
+      if (sTot) sTot.textContent = `Total: ${stats.total || 0}`;
+      if (sRdy) sRdy.textContent = `Ready: ${stats.ready || 0}`;
+      if (sNot) sNot.textContent = `Not Ready: ${stats.notReady || 0}`;
+      if (sSnt) sSnt.textContent = `Sent: ${stats.sent || 0}`;
+      if (sFld) sFld.textContent = `Failed: ${stats.failed || 0}`;
+
+      // Clear previous selection
+      selectedCertRecipients.clear();
+      updateCertRecipientCount();
+
+      // Filter and render list
+      filterCertEmailList();
+
+    } catch (err) {
+      console.error('[Cert Email] Failed to load recipients:', err);
+      if (container) container.innerHTML = `<div class="empty-state" style="padding:24px;"><p>Failed to load recipients: ${escHtml(err.message)}</p></div>`;
+    }
+  };
+
+  window.filterCertEmailList = function () {
+    const search = (document.getElementById('certEmailSearch')?.value || '').trim().toLowerCase();
+    const readyFilter = document.getElementById('certEmailReadinessFilter')?.value || 'ALL';
+    const deliveryFilter = document.getElementById('certEmailDeliveryFilter')?.value || 'ALL';
+
+    const filtered = cachedCertRecipients.filter(p => {
+      // Readiness filter
+      if (readyFilter === 'READY' && !p.isReady) return false;
+      if (readyFilter === 'NOT_READY' && p.isReady) return false;
+
+      // Delivery filter
+      if (deliveryFilter === 'NOT_SENT' && p.emailStatus !== 'NOT_SENT') return false;
+      if (deliveryFilter === 'SENT' && p.emailStatus !== 'SENT') return false;
+      if (deliveryFilter === 'FAILED' && p.emailStatus !== 'FAILED') return false;
+
+      // Text search
+      if (!search) return true;
+      const serialStr = String(p.serialNumber || p.id).padStart(6, '0');
+      return (p.fullName && p.fullName.toLowerCase().includes(search)) ||
+             (p.email && p.email.toLowerCase().includes(search)) ||
+             (p.registrationId && p.registrationId.toLowerCase().includes(search)) ||
+             (p.category && p.category.toLowerCase().includes(search)) ||
+             (p.position && p.position.toLowerCase().includes(search)) ||
+             serialStr.includes(search);
+    });
+
+    renderCertRecipientTable(filtered);
+  };
+
+  function renderCertRecipientTable(list) {
+    const container = document.getElementById('certEmailTableWrapper');
+    if (!container) return;
+
+    if (!list.length) {
+      container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>No participants match your filter criteria.</p></div>';
+      return;
+    }
+
+    let html = `
+      <table class="reg-table" style="font-size:12px;">
+        <thead>
+          <tr>
+            <th style="width:36px; text-align:center;">✓</th>
+            <th>Participant</th>
+            <th>Registration ID</th>
+            <th>Award / Category</th>
+            <th>Readiness Status</th>
+            <th>Email Delivery</th>
+            <th style="text-align:right;">Collection Link</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    list.forEach(p => {
+      const isSelected = selectedCertRecipients.has(p.registrationId);
+      const isReady = Boolean(p.isReady);
+      const isWinner = Boolean(p.isWinner);
+
+      // Readiness badge
+      let readinessBadge = '';
+      if (isReady) {
+        readinessBadge = '<span class="status-pill status-approved" title="Ready to collect">🟢 Ready</span>';
+      } else {
+        readinessBadge = `<span class="status-pill status-rejected" title="${escHtml(p.reason || 'Not eligible')}">⚠️ ${escHtml(p.reason || 'Not Ready')}</span>`;
+      }
+
+      // Delivery status badge
+      let deliveryBadge = '';
+      if (p.emailStatus === 'SENT') {
+        const dateStr = p.sentAt ? new Date(p.sentAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Delivered';
+        deliveryBadge = `<span class="status-pill status-approved" title="Sent: ${escHtml(p.sentAt || '')}">✅ Sent (${dateStr})</span>`;
+      } else if (p.emailStatus === 'FAILED') {
+        deliveryBadge = `<span class="status-pill status-rejected" title="${escHtml(p.error || 'Delivery failed')}">❌ Failed (Retry)</span>`;
+      } else {
+        deliveryBadge = '<span class="status-pill status-pending">⚪ Not Sent</span>';
+      }
+
+      const rowDisabled = !isReady ? 'style="opacity:0.75;"' : 'style="cursor:pointer;"';
+      const checkboxAttr = !isReady ? 'disabled title="Participant certificate is not ready"' : (isSelected ? 'checked' : '');
+
+      html += `
+        <tr ${rowDisabled} onclick="${isReady ? `toggleCertRecipient('${p.registrationId}')` : ''}">
+          <td style="text-align:center;" onclick="event.stopPropagation()">
+            <input type="checkbox" ${checkboxAttr} onchange="toggleCertRecipient('${p.registrationId}')">
+          </td>
+          <td>
+            <div class="name-cell">${escHtml(p.fullName)}</div>
+            <div style="font-size:11px; color:#8e8477;">${escHtml(p.email || 'No email')}</div>
+          </td>
+          <td class="id-cell" style="font-family:monospace;">${escHtml(p.registrationId)}</td>
+          <td>
+            ${isWinner ? `<strong style="color:#e4ad57;">🏆 ${escHtml(p.position)}</strong>` : escHtml(p.category || 'Performer')}
+          </td>
+          <td>${readinessBadge}</td>
+          <td>${deliveryBadge}</td>
+          <td style="text-align:right;" onclick="event.stopPropagation()">
+            <a href="${p.collectionUrl}" target="_blank" rel="noopener" class="action-btn btn-view" style="font-size:11px; text-decoration:none; padding:3px 8px;">
+              👁️ Open Link ↗
+            </a>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+    updateCertRecipientCount();
+  }
+
+  window.toggleCertRecipient = function (regId) {
+    const reg = cachedCertRecipients.find(r => r.registrationId === regId);
+    if (reg && !reg.isReady) return; // Cannot select unready recipients
+
+    if (selectedCertRecipients.has(regId)) {
+      selectedCertRecipients.delete(regId);
+    } else {
+      selectedCertRecipients.add(regId);
+    }
+    updateCertRecipientCount();
+    // Re-check table inputs without full re-render for speed
+    const checkboxes = document.querySelectorAll('#certEmailTableWrapper input[type="checkbox"]');
+    checkboxes.forEach(cb => {
+      const tr = cb.closest('tr');
+      const idEl = tr ? tr.querySelector('.id-cell') : null;
+      if (idEl && idEl.textContent.trim() === regId) {
+        cb.checked = selectedCertRecipients.has(regId);
+      }
+    });
+  };
+
+  window.selectAllCertEmailReady = function (select) {
+    cachedCertRecipients.forEach(r => {
+      if (r.isReady) {
+        if (select) selectedCertRecipients.add(r.registrationId);
+        else selectedCertRecipients.delete(r.registrationId);
+      }
+    });
+    updateCertRecipientCount();
+    filterCertEmailList();
+  };
+
+  window.selectAllCertEmailFailed = function (select) {
+    cachedCertRecipients.forEach(r => {
+      if (r.isReady && r.emailStatus === 'FAILED') {
+        if (select) selectedCertRecipients.add(r.registrationId);
+        else selectedCertRecipients.delete(r.registrationId);
+      }
+    });
+    updateCertRecipientCount();
+    filterCertEmailList();
+  };
+
+  window.deselectAllCertEmail = function () {
+    selectedCertRecipients.clear();
+    updateCertRecipientCount();
+    filterCertEmailList();
+  };
+
+  function updateCertRecipientCount() {
+    const countEl = document.getElementById('certEmailSelectedCount');
+    if (countEl) {
+      countEl.textContent = `${selectedCertRecipients.size} recipient(s) selected`;
+    }
+  }
+
+  window.openPreviewCertEmail = async function () {
+    const eventSelect = document.getElementById('certEmailEventFilter');
+    const eventId = eventSelect?.value || activeAdminEventId || 'online-open-mic-2026';
+    const subject = document.getElementById('certEmailSubject')?.value?.trim();
+    const customMessage = document.getElementById('certEmailCustomMessage')?.value?.trim();
+    const firstRegId = Array.from(selectedCertRecipients)[0] || (cachedCertRecipients.find(r => r.isReady)?.registrationId) || null;
+
+    try {
+      const res = await adminFetch('/api/admin/emails/certificate/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId,
+          registrationId: firstRegId,
+          subject,
+          customMessage
+        })
+      });
+
+      if (res.status === 401) { showLoginOverlay(); return; }
+      const data = await res.json();
+      if (!data.success) {
+        alert('Preview error: ' + (data.error || 'Failed to generate preview'));
+        return;
+      }
+
+      const modal = document.getElementById('emailPreviewModal');
+      const iframe = document.getElementById('previewIframe');
+      const subjEl = document.getElementById('previewSubject');
+      const noteEl = document.getElementById('previewNote');
+
+      if (subjEl) subjEl.textContent = data.subject || '🏆 Collect Your Certificate';
+      if (noteEl) noteEl.textContent = firstRegId ? `Previewing certificate collection email for ${data.recipientName || firstRegId}` : 'Previewing with sample participant data';
+
+      if (iframe) {
+        iframe.srcdoc = sanitizeForEmailPreview(data.html);
+      }
+      if (typeof setEmailPreviewDevice === 'function') {
+        setEmailPreviewDevice('desktop');
+      }
+      if (modal) modal.style.display = 'flex';
+
+    } catch (err) {
+      alert('Error generating preview: ' + err.message);
+    }
+  };
+
+  window.sendCertEmail = function () {
+    const eventSelect = document.getElementById('certEmailEventFilter');
+    const eventId = eventSelect?.value || activeAdminEventId || 'online-open-mic-2026';
+    const regIds = Array.from(selectedCertRecipients);
+    const subject = document.getElementById('certEmailSubject')?.value?.trim();
+    const customMessage = document.getElementById('certEmailCustomMessage')?.value?.trim();
+    const retryFailedOnly = Boolean(document.getElementById('certEmailRetryOnly')?.checked);
+    const forceResend = Boolean(document.getElementById('certEmailForceResend')?.checked);
+
+    if (!regIds.length) {
+      return alert('Please select at least one ready recipient to email.');
+    }
+
+    if (cachedCertEvent && !cachedCertEvent.certificateEnabled) {
+      return alert('Cannot dispatch emails: Certificates for this event are currently unpublished/disabled. Please enable them in Event Settings first.');
+    }
+
+    openConfirmModal({
+      title: 'Confirm Certificate Email Dispatch',
+      message: `You are about to dispatch "Collect Your Certificate" emails to <strong>${regIds.length} recipient(s)</strong>.<br><br>Each email includes a secure, recipient-specific link leading directly to their certificate.<br><br>Already sent recipients are automatically protected against duplicate sends.`,
+      confirmText: `Send to ${regIds.length} Recipient(s)`,
+      onConfirm: async () => {
+        const btn = document.getElementById('btnSendCertEmail');
+        const progressBox = document.getElementById('certEmailProgressBox');
+        if (btn) { btn.disabled = true; btn.textContent = 'DISPATCHING…'; }
+        if (progressBox) {
+          progressBox.style.display = 'block';
+          progressBox.innerHTML = '<span style="color:#e4ad57;">⏳ Dispatching certificate collection emails... Please wait.</span>';
+        }
+
+        try {
+          const res = await adminFetch('/api/admin/emails/certificate/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventId,
+              registrationIds: regIds,
+              subject,
+              customMessage,
+              retryFailedOnly,
+              forceResend
+            })
+          });
+
+          const data = await res.json();
+          if (btn) { btn.disabled = false; btn.textContent = '🚀 Send Certificate Emails'; }
+
+          if (!data.success) {
+            if (progressBox) {
+              progressBox.innerHTML = `<span style="color:#e26947;">❌ Error: ${escHtml(data.error || 'Failed to dispatch')}</span>`;
+            }
+            alert('Dispatch error: ' + (data.error || 'Failed'));
+            return;
+          }
+
+          if (progressBox) {
+            progressBox.innerHTML = `
+              <div style="color:#6edb8c; font-weight:700; margin-bottom:4px;">
+                ✓ Certificate Email Dispatch Completed!
+              </div>
+              <div style="font-size:12px; color:#d6ccbf;">
+                Sent: <strong>${data.sentCount}</strong> &nbsp;•&nbsp; 
+                Failed: <strong>${data.failedCount}</strong> &nbsp;•&nbsp; 
+                Skipped (duplicates/unready): <strong>${data.skippedCount}</strong>
+              </div>
+            `;
+          }
+
+          alert(`Success! Processed: ${data.sentCount} sent, ${data.failedCount} failed, ${data.skippedCount} skipped.`);
+          await loadCertEmailRecipients();
+
+        } catch (err) {
+          if (btn) { btn.disabled = false; btn.textContent = '🚀 Send Certificate Emails'; }
+          if (progressBox) {
+            progressBox.innerHTML = `<span style="color:#e26947;">❌ Network error: ${escHtml(err.message)}</span>`;
+          }
+          alert('Network request error: ' + err.message);
+        }
+      }
+    });
+  };
+
+  window.retryFailedCertEmails = function () {
+    const failedList = cachedCertRecipients.filter(r => r.isReady && r.emailStatus === 'FAILED');
+    if (!failedList.length) {
+      return alert('No failed recipients found for this event.');
+    }
+    selectedCertRecipients.clear();
+    failedList.forEach(r => selectedCertRecipients.add(r.registrationId));
+    const retryCheck = document.getElementById('certEmailRetryOnly');
+    if (retryCheck) retryCheck.checked = true;
+    updateCertRecipientCount();
+    filterCertEmailList();
+    sendCertEmail();
   };
 
   // ── Email History ─────────────────────────────────────────────────────────────

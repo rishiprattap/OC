@@ -639,6 +639,15 @@ function handleLocalRun(sql, params = []) {
         } else if (sqlLower.includes('rejection_email_sent_at = ?')) {
           reg.rejection_email_sent_at = params[0];
           reg.updated_at = params[0];
+        } else if (sqlLower.includes('certificate_email_sent_at = ?')) {
+          reg.certificate_email_sent_at = params[0];
+          if (sqlLower.includes('certificate_email_error = null')) {
+            reg.certificate_email_error = null;
+          }
+          reg.updated_at = params[params.length - 2] || new Date().toISOString();
+        } else if (sqlLower.includes('certificate_email_error = ?')) {
+          reg.certificate_email_error = params[0];
+          reg.updated_at = params[params.length - 2] || new Date().toISOString();
         } else if (sqlLower.includes('last_email_error = ?')) {
           reg.last_email_error = params[0];
           reg.updated_at = new Date().toISOString();
@@ -661,72 +670,122 @@ function handleLocalRun(sql, params = []) {
   // 5. Events Insert/Update/Delete
   if (sqlLower.includes('insert into events')) {
     const id = localStore.events.length > 0 ? Math.max(...localStore.events.map(e => e.id)) + 1 : 1;
-    // Build event object from params
-    const slug = params[0];
-    const existingIdx = localStore.events.findIndex(e => e.slug === slug);
-    const eventObj = {
-      id: existingIdx !== -1 ? localStore.events[existingIdx].id : id,
-      slug: params[0],
-      name: params[1],
-      title: params[2],
-      subtitle: params[3],
-      description: params[4],
-      short_description: params[5],
-      event_type: params[6] || 'ONLINE',
-      status: params[7] || 'draft',
-      is_active: Number(params[8] !== undefined ? params[8] : 0),
-      is_published: Number(params[9] !== undefined ? params[9] : 1),
-      event_date: params[10],
-      start_time: params[11],
-      end_time: params[12],
-      timezone: params[13] || 'IST (GMT+5:30)',
-      reg_open_date: params[14],
-      reg_close_date: params[15],
-      venue_name: params[16],
-      venue_address: params[17],
-      city: params[18],
-      state: params[19],
-      maps_url: params[20],
-      venue_image_url: params[21],
-      is_paid: Number(params[22] !== undefined ? params[22] : 1),
-      fee: Number(params[23] || 79),
-      currency: params[24] || 'INR',
-      pricing_tiers: params[25] || '[]',
-      early_bird_fee: params[26] ? Number(params[26]) : null,
-      upi_id: params[27],
-      payee_name: params[28],
-      qr_asset_path: params[29],
-      payment_instructions: params[30],
-      poster_url: params[31],
-      banner_url: params[32],
-      logo_url: params[33],
-      promo_video_url: params[34],
-      reg_enabled: Number(params[35] !== undefined ? params[35] : 1),
-      reg_button_text: params[36] || 'REGISTER AS PERFORMER',
-      max_registrations: Number(params[37] || 0),
-      confirmation_message: params[38],
-      allowed_categories: params[39] || '[]',
-      contact_email: params[40],
-      contact_phone: params[41],
-      instagram_url: params[42],
-      youtube_url: params[43],
-      whatsapp_url: params[44],
-      meet_link: params[45],
-      other_links: params[46] || '{}',
-      certificate_enabled: Number(params[47] !== undefined ? params[47] : 1),
-      certificate_title: params[48] || 'CERTIFICATE OF PARTICIPATION',
-      certificate_bg_url: params[49],
-      registration_provider: params[50] || 'internal',
-      external_registration_url: params[51] || '',
-      external_platform_name: params[52] || '',
-      external_platform_notes: params[53] || '',
-      external_open_new_tab: Number(params[54] !== undefined ? params[54] : 1),
-      receipt_template_url: sqlLower.includes('receipt_template_url') ? (params[55] || '') : '',
-      created_at: sqlLower.includes('receipt_template_url') ? (params[56] || new Date().toISOString()) : (params[55] || new Date().toISOString()),
-      updated_at: sqlLower.includes('receipt_template_url') ? (params[57] || new Date().toISOString()) : (params[56] || new Date().toISOString())
+    const colMatch = sql.match(/insert\s+into\s+events\s*\(([^)]+)\)\s*values\s*\((.*)\)/is);
+    let eventObj = {
+      id,
+      event_type: 'ONLINE',
+      status: 'draft',
+      is_active: 0,
+      is_published: 1,
+      timezone: 'IST (GMT+5:30)',
+      is_paid: 1,
+      fee: 79,
+      currency: 'INR',
+      pricing_tiers: '[]',
+      reg_enabled: 1,
+      reg_button_text: 'REGISTER AS PERFORMER',
+      allowed_categories: '[]',
+      contact_email: 'support@offstagecreators.in',
+      certificate_enabled: 1,
+      certificate_title: 'CERTIFICATE OF PARTICIPATION',
+      registration_provider: 'internal',
+      external_open_new_tab: 1,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
 
+    if (colMatch) {
+      const cols = colMatch[1].split(',').map(c => c.trim().toLowerCase());
+      const valExprs = colMatch[2].split(',').map(v => v.trim());
+      let pIdx = 0;
+      cols.forEach((col, idx) => {
+        const expr = valExprs[idx] !== undefined ? valExprs[idx] : '?';
+        if (expr === '?') {
+          if (pIdx < params.length) {
+            eventObj[col] = params[pIdx++];
+          }
+        } else if (expr.toUpperCase() === 'NULL') {
+          eventObj[col] = null;
+        } else {
+          let lit = expr.replace(/^['"]|['"]$/g, '');
+          if (lit === '1' || lit === '0') lit = Number(lit);
+          else if (!isNaN(Number(lit)) && lit !== '') lit = Number(lit);
+          eventObj[col] = lit;
+        }
+      });
+      if (eventObj.certificate_enabled !== undefined) eventObj.certificate_enabled = Number(eventObj.certificate_enabled);
+      if (eventObj.is_published !== undefined) eventObj.is_published = Number(eventObj.is_published);
+      if (eventObj.is_active !== undefined) eventObj.is_active = Number(eventObj.is_active);
+      if (eventObj.is_paid !== undefined) eventObj.is_paid = Number(eventObj.is_paid);
+      if (eventObj.fee !== undefined) eventObj.fee = Number(eventObj.fee);
+    } else {
+      eventObj = {
+        id,
+        slug: params[0],
+        name: params[1],
+        title: params[2],
+        subtitle: params[3],
+        description: params[4],
+        short_description: params[5],
+        event_type: params[6] || 'ONLINE',
+        status: params[7] || 'draft',
+        is_active: Number(params[8] !== undefined ? params[8] : 0),
+        is_published: Number(params[9] !== undefined ? params[9] : 1),
+        event_date: params[10],
+        start_time: params[11],
+        end_time: params[12],
+        timezone: params[13] || 'IST (GMT+5:30)',
+        reg_open_date: params[14],
+        reg_close_date: params[15],
+        venue_name: params[16],
+        venue_address: params[17],
+        city: params[18],
+        state: params[19],
+        maps_url: params[20],
+        venue_image_url: params[21],
+        is_paid: Number(params[22] !== undefined ? params[22] : 1),
+        fee: Number(params[23] || 79),
+        currency: params[24] || 'INR',
+        pricing_tiers: params[25] || '[]',
+        early_bird_fee: params[26] ? Number(params[26]) : null,
+        upi_id: params[27],
+        payee_name: params[28],
+        qr_asset_path: params[29],
+        payment_instructions: params[30],
+        poster_url: params[31],
+        banner_url: params[32],
+        logo_url: params[33],
+        promo_video_url: params[34],
+        reg_enabled: Number(params[35] !== undefined ? params[35] : 1),
+        reg_button_text: params[36] || 'REGISTER AS PERFORMER',
+        max_registrations: Number(params[37] || 0),
+        confirmation_message: params[38],
+        allowed_categories: params[39] || '[]',
+        contact_email: params[40],
+        contact_phone: params[41],
+        instagram_url: params[42],
+        youtube_url: params[43],
+        whatsapp_url: params[44],
+        meet_link: params[45],
+        other_links: params[46] || '{}',
+        certificate_enabled: Number(params[47] !== undefined ? params[47] : 1),
+        certificate_title: params[48] || 'CERTIFICATE OF PARTICIPATION',
+        certificate_bg_url: params[49],
+        registration_provider: params[50] || 'internal',
+        external_registration_url: params[51] || '',
+        external_platform_name: params[52] || '',
+        external_platform_notes: params[53] || '',
+        external_open_new_tab: Number(params[54] !== undefined ? params[54] : 1),
+        receipt_template_url: sqlLower.includes('receipt_template_url') ? (params[55] || '') : '',
+        created_at: sqlLower.includes('receipt_template_url') ? (params[56] || new Date().toISOString()) : (params[55] || new Date().toISOString()),
+        updated_at: sqlLower.includes('receipt_template_url') ? (params[57] || new Date().toISOString()) : (params[56] || new Date().toISOString())
+      };
+    }
+
+    const slug = eventObj.slug;
+    const existingIdx = slug ? localStore.events.findIndex(e => e.slug === slug) : -1;
     if (existingIdx !== -1) {
+      eventObj.id = localStore.events[existingIdx].id;
       localStore.events[existingIdx] = eventObj;
     } else {
       localStore.events.push(eventObj);
@@ -860,13 +919,25 @@ function handleLocalRun(sql, params = []) {
   }
 
   if (sqlLower.includes('delete from events')) {
-    const target = params[0];
-    const idx = localStore.events.findIndex(e => e.id === target || String(e.id) === String(target) || e.slug === target);
-    if (idx !== -1) {
-      localStore.events.splice(idx, 1);
-      saveLocalStore();
-    }
-    return { lastID: null, changes: 1 };
+    const targets = params.map(p => String(p).toLowerCase());
+    const initialLen = localStore.events.length;
+    localStore.events = localStore.events.filter(e => 
+      !targets.includes(String(e.id).toLowerCase()) && 
+      !targets.includes(String(e.slug || '').toLowerCase())
+    );
+    saveLocalStore();
+    return { lastID: null, changes: initialLen - localStore.events.length };
+  }
+
+  if (sqlLower.includes('delete from registrations')) {
+    const targets = params.map(p => String(p).toLowerCase());
+    const initialLen = localStore.registrations.length;
+    localStore.registrations = localStore.registrations.filter(r => 
+      !targets.includes(String(r.id).toLowerCase()) && 
+      !targets.includes(String(r.registration_id || '').toLowerCase())
+    );
+    saveLocalStore();
+    return { lastID: null, changes: initialLen - localStore.registrations.length };
   }
 
   // 6. Email Audit Log
@@ -1462,10 +1533,10 @@ function handleLocalGet(sql, params = []) {
       return { count: list.length, c: list.length };
     }
     let pIdx = 0;
-    if (sqlLower.includes('event_id = ?') && pIdx < params.length) {
-      const eventId = params[pIdx++];
-      if (eventId && eventId !== 'ALL') {
-        list = list.filter(r => (r.event_id || 'online-open-mic-2026') === eventId);
+    if ((sqlLower.includes('event_id = ?') || sqlLower.includes('lower(event_id) = ?')) && pIdx < params.length) {
+      const eventId = String(params[pIdx++] || '').toLowerCase();
+      if (eventId && eventId !== 'all') {
+        list = list.filter(r => String(r.event_id || 'online-open-mic-2026').toLowerCase() === eventId);
       }
     }
     if (sqlLower.includes('reg_status = ?') && pIdx < params.length) {
@@ -1669,10 +1740,10 @@ function handleLocalAll(sql, params = []) {
       return list.filter(r => r.phone === cleanPhone);
     }
     let pIdx = 0;
-    if (sqlLower.includes('event_id = ?') && pIdx < params.length) {
-      const eventId = params[pIdx++];
-      if (eventId && eventId !== 'ALL') {
-        list = list.filter(r => (r.event_id || 'online-open-mic-2026') === eventId);
+    if ((sqlLower.includes('event_id = ?') || sqlLower.includes('lower(event_id) = ?')) && pIdx < params.length) {
+      const eventId = String(params[pIdx++] || '').toLowerCase();
+      if (eventId && eventId !== 'all') {
+        list = list.filter(r => String(r.event_id || 'online-open-mic-2026').toLowerCase() === eventId);
       }
     }
     if (sqlLower.includes('reg_status = ?') && pIdx < params.length) {
@@ -1922,6 +1993,8 @@ const initSchema = async () => {
         registration_email_sent_at TEXT,
         approval_email_sent_at TEXT,
         rejection_email_sent_at TEXT,
+        certificate_email_sent_at TEXT,
+        certificate_email_error TEXT,
         last_email_error TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -1938,6 +2011,8 @@ const initSchema = async () => {
     await addColumnIfNotExists('registrations', 'citation TEXT');
     await addColumnIfNotExists('registrations', 'certificate_title TEXT');
     await addColumnIfNotExists('registrations', 'serial_number INTEGER');
+    await addColumnIfNotExists('registrations', 'certificate_email_sent_at TEXT');
+    await addColumnIfNotExists('registrations', 'certificate_email_error TEXT');
     await addColumnIfNotExists('registrations', 'user_id INTEGER');
     await addColumnIfNotExists('registrations', 'age INTEGER');
     await addColumnIfNotExists('registrations', 'promo_code TEXT');

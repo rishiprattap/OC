@@ -844,7 +844,13 @@
           (data.registrationId === 'OC-OM-2440F923' && (data.eventId === 'online-open-mic-2026' || !data.eventId))
         );
 
-        if (isWinner) {
+        if (data.authenticated) {
+          if (isWinner) {
+            showSuccess(`🔒 Authenticated Access: 🏆 Event Winner Verified — ${data.verifiedName} (${data.achievement || 'Winner — First Place'}). Your official certificate is ready to preview & download!`);
+          } else {
+            showSuccess(`🔒 Authenticated Access: ✓ Participant Verified — ${data.verifiedName}. Your official certificate is ready to preview & download!`);
+          }
+        } else if (isWinner) {
           showSuccess(`🏆 Event Winner Verified: ${data.verifiedName} (${data.achievement || 'Winner — First Place'}). Your official certificate is ready!`);
         } else {
           showSuccess(`✓ Participant verified: ${data.verifiedName}. Your official certificate is ready!`);
@@ -916,7 +922,7 @@
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Action Handlers: PNG Export, PDF Export, Print
+  // Action Handlers: PNG Export, PDF Export, SVG Export, Print
   // ─────────────────────────────────────────────────────────────────────────────
 
   // PNG Download
@@ -951,6 +957,22 @@
     pdf.save(`Offstage-Creators-Certificate-${cleanFileName}.pdf`);
   });
 
+  // Vector SVG Download
+  const svgBtn = document.getElementById('svgBtn');
+  if (svgBtn) {
+    svgBtn.addEventListener('click', () => {
+      const regId = currentCertData.registrationId || currentCertData.certificateId;
+      if (!regId) return;
+      if (typeof window.trackEvent === 'function') {
+        window.trackEvent('certificate_downloaded', { format: 'svg' });
+      }
+      const token = urlParams.get('token');
+      let url = `/api/certificate/download/${encodeURIComponent(regId)}`;
+      if (token) url += `?token=${encodeURIComponent(token)}`;
+      window.location.href = url;
+    });
+  }
+
   // Browser Print Action
   if (printBtn) {
     printBtn.addEventListener('click', () => {
@@ -963,14 +985,23 @@
   // ─────────────────────────────────────────────────────────────────────────────
   const urlParams = new URLSearchParams(window.location.search);
   const regIdParam = urlParams.get('regId') || urlParams.get('id');
+  const tokenParam = urlParams.get('token');
+  const eventQueryParam = urlParams.get('event');
 
   if (regIdParam && regIdParam.trim()) {
     tabRegId.click();
     const regInput = document.getElementById('certRegId');
     if (regInput) {
       regInput.value = regIdParam.trim();
-      performVerification({ registrationId: regIdParam.trim() });
     }
+    const payload = { registrationId: regIdParam.trim() };
+    if (tokenParam && tokenParam.trim()) {
+      payload.token = tokenParam.trim();
+    }
+    if (eventQueryParam && eventQueryParam.trim()) {
+      payload.eventId = eventQueryParam.trim();
+    }
+    performVerification(payload);
   }
 
   const eventSlugMatch = window.location.pathname.match(/\/event\/([^\/]+)/);

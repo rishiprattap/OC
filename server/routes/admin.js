@@ -21,9 +21,14 @@ const { normalizePromoCode } = require('../services/promo');
 const { generateCsv, generateXlsxBuffer } = require('../services/export');
 const {
   parseEventCertSettings,
+  isRecordWinner,
   resolveCertificateData,
   generateCertificateSvg,
-  createBulkCertificatesArchive
+  createBulkCertificatesArchive,
+  generateCertificateAccessToken,
+  verifyCertificateAccessToken,
+  isCertificateReady,
+  generateCertificateCollectBodyHtml
 } = require('../services/certificate');
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
@@ -1780,6 +1785,350 @@ router.post('/email/meet-send', async (req, res) => {
   } catch (err) {
     console.error('[Admin] Meet send error:', err);
     return res.status(500).json({ success: false, error: 'Server error while sending Meet invitations.' });
+  }
+});
+
+// ─── Certificate Email Dispatch & Collection Routes ───────────────────────────
+
+/**
+ * GET /api/admin/emails/certificate/recipients
+ * Fetches event participants with readiness indicators, delivery status, and collection URLs.
+ */
+router.get('/emails/certificate/recipients', async (req, res) => {
+  try {
+    const { eventId } = req.query;
+    const event = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found.' });
+    }
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    let sql = `SELECT * FROM registrations WHERE lower(event_id) = ? ORDER BY id ASC`;
+    let params = [event.slug.toLowerCase()];
+
+    if (event.slug === 'online-open-mic-2026') {
+      sql = `SELECT * FROM registrations WHERE lower(event_id) = ? OR event_id IS NULL OR event_id = '' ORDER BY id ASC`;
+    }
+
+    const rows = await all(sql, params);
+
+    const recipients = rows.map(reg => {
+      const readiness = isCertificateReady(reg, event);
+      const isWinner = isRecordWinner(reg);
+      const token = generateCertificateAccessToken(reg, event.slug);
+      const collectionUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(reg.registration_id)}&event=${encodeURIComponent(event.slug)}&token=${token}`;
+
+      let emailStatus = 'NOT_SENT';
+      if (reg.certificate_email_sent_at) {
+        emailStatus = 'SENT';
+      } else if (reg.certificate_email_error) {
+        emailStatus = 'FAILED';
+      }
+
+      return {
+        id: reg.id,
+        registrationId: reg.registration_id,
+        serialNumber: reg.serial_number || reg.id,
+        fullName: reg.full_name,
+        email: reg.email,
+        phone: reg.phone,
+        category: reg.category || 'Performer',
+        position: reg.position || (isWinner ? 'WINNER' : 'Participant'),
+        isWinner,
+        checkedIn: Boolean(reg.checked_in),
+        certificateEligible: Boolean(reg.certificate_eligible),
+        regStatus: reg.reg_status,
+        paymentStatus: reg.payment_status,
+        isReady: readiness.isReady,
+        reason: readiness.reason,
+        token,
+        collectionUrl,
+        emailStatus,
+        sentAt: reg.certificate_email_sent_at || null,
+        error: reg.certificate_email_error || null
+      };
+    });
+
+    return res.json({
+      success: true,
+      event: {
+        id: event.slug,
+        title: event.title || event.name,
+        date: event.event_date || event.date,
+        certificateEnabled: Boolean(event.certificate_enabled !== 0 && event.certificate_enabled !== false),
+        certificateTitle: event.certificate_title || 'CERTIFICATE OF PARTICIPATION'
+      },
+      stats: {
+        total: recipients.length,
+        ready: recipients.filter(r => r.isReady).length,
+        notReady: recipients.filter(r => !r.isReady).length,
+        sent: recipients.filter(r => r.emailStatus === 'SENT').length,
+        failed: recipients.filter(r => r.emailStatus === 'FAILED').length
+      },
+      recipients
+    });
+  } catch (err) {
+    console.error('[Admin] Error loading certificate recipients:', err);
+    return res.status(500).json({ success: false, error: 'Failed to load certificate recipients.' });
+  }
+});
+
+/**
+ * POST /api/admin/emails/certificate/preview
+ * Renders live preview of the "Collect Your Certificate" email with CTA button.
+ */
+router.post('/emails/certificate/preview', async (req, res) => {
+  try {
+    const { eventId, registrationId, subject, customMessage } = req.body;
+    const event = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found.' });
+    }
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    let reg = null;
+    if (registrationId) {
+      reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
+    }
+    if (!reg) {
+      reg = await get(`SELECT * FROM registrations WHERE lower(event_id) = ? LIMIT 1`, [event.slug.toLowerCase()]);
+    }
+    if (!reg) {
+      reg = {
+        full_name: 'Creator Participant',
+        registration_id: 'OC-SAMPLE-2026',
+        id: 1,
+        serial_number: 1,
+        category: 'Performer',
+        position: 'Participant',
+        email: 'creator@example.com',
+        event_id: event.slug
+      };
+    }
+
+    const token = generateCertificateAccessToken(reg, event.slug);
+    const collectionUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(reg.registration_id)}&event=${encodeURIComponent(event.slug)}&token=${token}`;
+
+    const defaultSubject = `🏆 Collect Your Certificate — {event_name}`;
+    const rawSubject = subject && subject.trim() ? subject.trim() : defaultSubject;
+    const finalSubject = replacePlaceholders(rawSubject, reg, event);
+
+    const substitutedMsg = customMessage ? replacePlaceholders(customMessage, reg, event) : '';
+    const bodyContent = generateCertificateCollectBodyHtml({
+      recipient: reg,
+      event,
+      collectionUrl,
+      customMessage: substitutedMsg
+    });
+
+    const fullHtml = emailService.emailWrapper({
+      title: finalSubject,
+      preheader: `Your official credential for ${event.title || event.name} is ready for collection`,
+      bodyContent
+    });
+
+    return res.json({
+      success: true,
+      subject: finalSubject,
+      html: fullHtml,
+      collectionUrl,
+      recipientName: reg.full_name,
+      registrationId: reg.registration_id
+    });
+  } catch (err) {
+    console.error('[Admin] Certificate email preview error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to generate preview.' });
+  }
+});
+
+/**
+ * POST /api/admin/emails/certificate/send
+ * Dispatches certificate collection emails with duplicate prevention and retry support.
+ */
+router.post('/emails/certificate/send', async (req, res) => {
+  try {
+    const {
+      eventId,
+      registrationIds = [],
+      subject,
+      customMessage,
+      retryFailedOnly = false,
+      forceResend = false,
+      testOnly = false
+    } = req.body;
+
+    const event = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
+    if (!event) {
+      return res.status(404).json({ success: false, error: 'Event not found.' });
+    }
+
+    // Gating check: Certificate must be finalized and published in event settings
+    if (event.certificate_enabled === 0 || event.certificate_enabled === false) {
+      return res.status(403).json({
+        success: false,
+        error: 'Certificates have not been published or enabled for this event. Please finalize certificate settings and publish them before dispatching collection emails.'
+      });
+    }
+
+    if (!Array.isArray(registrationIds) || registrationIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'Please select at least one recipient.' });
+    }
+
+    const host = req.get('host') || 'offstagecreators.in';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const baseUrl = `${protocol}://${host}`;
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let skippedCount = 0;
+    const results = [];
+
+    for (const regId of registrationIds) {
+      try {
+        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        if (!reg) {
+          results.push({ recipient: regId, registrationId: regId, status: 'FAILED', error: 'Registration not found' });
+          failedCount++;
+          continue;
+        }
+
+        // Verify participant readiness
+        const readiness = isCertificateReady(reg, event);
+        if (!readiness.isReady) {
+          results.push({
+            recipient: reg.email,
+            registrationId: reg.registration_id,
+            status: 'SKIPPED',
+            reason: readiness.reason,
+            error: readiness.reason
+          });
+          skippedCount++;
+          continue;
+        }
+
+        // Duplicate prevention: skip already sent unless forceResend is explicitly true
+        if (reg.certificate_email_sent_at && !forceResend) {
+          results.push({
+            recipient: reg.email,
+            registrationId: reg.registration_id,
+            status: 'SKIPPED',
+            reason: `Already sent on ${reg.certificate_email_sent_at}`
+          });
+          skippedCount++;
+          continue;
+        }
+
+        // If retryFailedOnly is true, skip records that didn't fail and aren't pending
+        if (retryFailedOnly && !reg.certificate_email_error && reg.certificate_email_sent_at) {
+          results.push({
+            recipient: reg.email,
+            registrationId: reg.registration_id,
+            status: 'SKIPPED',
+            reason: 'Already successfully delivered'
+          });
+          skippedCount++;
+          continue;
+        }
+
+        const token = generateCertificateAccessToken(reg, event.slug);
+        const collectionUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(reg.registration_id)}&event=${encodeURIComponent(event.slug)}&token=${token}`;
+
+        const rawSubject = subject && subject.trim() ? subject.trim() : `🏆 Collect Your Certificate — {event_name}`;
+        const substitutedSubject = replacePlaceholders(rawSubject, reg, event);
+
+        const substitutedMsg = customMessage ? replacePlaceholders(customMessage, reg, event) : '';
+        const bodyContent = generateCertificateCollectBodyHtml({
+          recipient: reg,
+          event,
+          collectionUrl,
+          customMessage: substitutedMsg
+        });
+
+        const html = emailService.emailWrapper({
+          title: substitutedSubject,
+          preheader: `Your official credential for ${event.title || event.name} is ready for collection`,
+          bodyContent
+        });
+
+        const now = new Date().toISOString();
+
+        if (testOnly) {
+          // Simulation / dry run mode (does not email real external users)
+          await run(
+            `UPDATE registrations SET certificate_email_sent_at = ?, certificate_email_error = NULL, updated_at = ? WHERE registration_id = ?`,
+            [now, now, reg.registration_id]
+          );
+
+          await run(
+            `INSERT INTO email_logs (registration_id, recipient, email_type, subject, status, provider_message_id, error_message, created_at)
+             VALUES (?, ?, 'CERTIFICATE_COLLECT', ?, 'SENT', 'test_simulated_id', NULL, ?)`,
+            [reg.registration_id, reg.email, substitutedSubject, now]
+          );
+
+          results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT', testMode: true });
+          sentCount++;
+        } else {
+          try {
+            await emailService.sendEmail({
+              registrationId: reg.registration_id,
+              to: reg.email,
+              subject: substitutedSubject,
+              html,
+              emailCategory: 'EVENTS',
+              emailType: 'CERTIFICATE_COLLECT',
+              isOptionalAnnouncement: false
+            });
+
+            await run(
+              `UPDATE registrations SET certificate_email_sent_at = ?, certificate_email_error = NULL, updated_at = ? WHERE registration_id = ?`,
+              [now, now, reg.registration_id]
+            );
+
+            results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'SENT' });
+            sentCount++;
+          } catch (sendErr) {
+            console.error(`[Admin] Certificate email delivery error to ${reg.registration_id}:`, sendErr.message);
+            await run(
+              `UPDATE registrations SET certificate_email_error = ?, updated_at = ? WHERE registration_id = ?`,
+              [sendErr.message, now, reg.registration_id]
+            );
+
+            await run(
+              `INSERT INTO email_logs (registration_id, recipient, email_type, subject, status, provider_message_id, error_message, created_at)
+               VALUES (?, ?, 'CERTIFICATE_COLLECT', ?, 'FAILED', NULL, ?, ?)`,
+              [reg.registration_id, reg.email, substitutedSubject, sendErr.message, now]
+            );
+
+            results.push({ recipient: reg.email, registrationId: reg.registration_id, status: 'FAILED', error: sendErr.message });
+            failedCount++;
+          }
+        }
+
+      } catch (itemErr) {
+        console.error(`[Admin] Certificate email processing error for ${regId}:`, itemErr.message);
+        results.push({ recipient: regId, registrationId: regId, status: 'FAILED', error: itemErr.message });
+        failedCount++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Certificate collection emails processed: ${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped.`,
+      sentCount,
+      failedCount,
+      skippedCount,
+      results
+    });
+
+  } catch (err) {
+    console.error('[Admin] Certificate email dispatch error:', err);
+    return res.status(500).json({ success: false, error: 'Server error while sending certificate collection emails.' });
   }
 });
 

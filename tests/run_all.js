@@ -12,6 +12,7 @@ const runAdminUserManagementTests = require('./test_admin_user_management');
 const runPromoAndInstagramTests = require('./test_promo_and_instagram');
 const runExportTests = require('./test_export_csv');
 const runCertificateSystemTests = require('./test_certificate_system');
+const runCertEmailFlowTests = require('./test_certificate_email_flow');
 
 let serverInstance = null;
 
@@ -52,33 +53,34 @@ async function runMasterSuite() {
   let promoInstagramOk = false;
   let exportOk = false;
   let certSystemOk = false;
+  let certEmailFlowOk = false;
 
   try {
-    console.log('>>> [1/8] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
+    console.log('>>> [1/11] EXECUTING EMAIL, OTP & NOTIFICATION TESTS...');
     emailOtpOk = await runEmailOtpSystemTests();
     if (!emailOtpOk) allPassed = false;
 
-    console.log('>>> [2/8] EXECUTING PLATFORM & REGISTRATION JOURNEY TESTS...');
+    console.log('>>> [2/11] EXECUTING PLATFORM & REGISTRATION JOURNEY TESTS...');
     platformOk = await runPlatformTests();
     if (!platformOk) allPassed = false;
 
-    console.log('>>> [3/8] EXECUTING USER ACCOUNTS, AUTH & RETURNING FLOW TESTS...');
+    console.log('>>> [3/11] EXECUTING USER ACCOUNTS, AUTH & RETURNING FLOW TESTS...');
     userAuthOk = await runUserAuthTests();
     if (!userAuthOk) allPassed = false;
 
-    console.log('>>> [4/8] EXECUTING ADMIN USER MANAGEMENT & BLOCK/UNBLOCK TESTS...');
+    console.log('>>> [4/11] EXECUTING ADMIN USER MANAGEMENT & BLOCK/UNBLOCK TESTS...');
     adminUsersOk = await runAdminUserManagementTests();
     if (!adminUsersOk) allPassed = false;
 
-    console.log('>>> [5/8] EXECUTING EVENT ASSET UPLOADS & MEDIA TESTS...');
+    console.log('>>> [5/11] EXECUTING EVENT ASSET UPLOADS & MEDIA TESTS...');
     uploadsOk = await runUploadTests();
     if (!uploadsOk) allPassed = false;
 
-    console.log('>>> [6/8] EXECUTING BRAND LOGO & EMAIL TEMPLATE TESTS...');
+    console.log('>>> [6/11] EXECUTING BRAND LOGO & EMAIL TEMPLATE TESTS...');
     logoOk = await runLogoTests();
     if (!logoOk) allPassed = false;
 
-    console.log('>>> [7/8] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
+    console.log('>>> [7/11] EXECUTING VERCEL ANALYTICS & SPEED INSIGHTS TESTS...');
     try {
       require('./test_analytics');
       analyticsOk = true;
@@ -87,17 +89,21 @@ async function runMasterSuite() {
     }
     if (!analyticsOk) allPassed = false;
 
-    console.log('>>> [8/9] EXECUTING PROMO CODES, REFERRALS & INSTAGRAM TESTS...');
+    console.log('>>> [8/11] EXECUTING PROMO CODES, REFERRALS & INSTAGRAM TESTS...');
     promoInstagramOk = await runPromoAndInstagramTests();
     if (!promoInstagramOk) allPassed = false;
 
-    console.log('>>> [9/10] EXECUTING CSV & EXCEL (.XLSX) EXPORT TESTS...');
+    console.log('>>> [9/11] EXECUTING CSV & EXCEL (.XLSX) EXPORT TESTS...');
     exportOk = await runExportTests();
     if (!exportOk) allPassed = false;
 
-    console.log('>>> [10/10] EXECUTING EVENT-SCOPED CERTIFICATE SYSTEM TESTS...');
+    console.log('>>> [10/11] EXECUTING EVENT-SCOPED CERTIFICATE SYSTEM TESTS...');
     certSystemOk = await runCertificateSystemTests();
     if (!certSystemOk) allPassed = false;
+
+    console.log('>>> [11/11] EXECUTING CERTIFICATE COLLECTION EMAIL FLOW TESTS...');
+    certEmailFlowOk = await runCertEmailFlowTests();
+    if (!certEmailFlowOk) allPassed = false;
 
   } finally {
     if (serverInstance) {
@@ -121,6 +127,7 @@ async function runMasterSuite() {
   console.log(`Promo Codes & Instagram: ${promoInstagramOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`CSV & Excel Export     : ${exportOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Certificate System     : ${certSystemOk ? 'PASSED ✓' : 'FAILED ✗'}`);
+  console.log(`Certificate Email Flow : ${certEmailFlowOk ? 'PASSED ✓' : 'FAILED ✗'}`);
   console.log(`Total Execution Time   : ${duration}s`);
   console.log('======================================================\n');
 

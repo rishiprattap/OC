@@ -8,6 +8,7 @@
  * 4. Email attachment buffers for automated & admin dispatches
  */
 
+const crypto = require('crypto');
 const QRCode = require('qrcode');
 const archiver = require('archiver');
 const config = require('../config');
@@ -477,11 +478,201 @@ function createBulkCertificatesArchive(certDataList, eventTitle) {
   return archive;
 }
 
+function getCertificateSecret() {
+  return config.JWT_SECRET || config.SESSION_SECRET || 'offstage-creators-certificate-secret-2026';
+}
+
+/**
+ * Creates an HMAC-SHA256 signature token scoped to the participant registration and event.
+ * Prevents URL parameter tampering so users cannot access another's certificate.
+ */
+function generateCertificateAccessToken(record, eventId) {
+  if (!record) return null;
+  const regId = normalizeText(record.registration_id || record.id).toUpperCase();
+  const evId = normalizeText(eventId || record.event_id || config.EVENT.id).toLowerCase();
+  const secret = getCertificateSecret();
+  return crypto.createHmac('sha256', secret).update(`cert:${regId}:${evId}`).digest('hex').slice(0, 32);
+}
+
+/**
+ * Verifies an HMAC-SHA256 access token against the participant registration and event.
+ */
+function verifyCertificateAccessToken(token, record, eventId) {
+  if (!token || typeof token !== 'string') return false;
+  const cleanToken = token.trim().toLowerCase();
+  const expected = generateCertificateAccessToken(record, eventId);
+  if (!expected) return false;
+  if (cleanToken.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(cleanToken, 'utf8'), Buffer.from(expected, 'utf8'));
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Determines whether a participant's certificate is ready and published.
+ * 
+ * Rules:
+ * 1. Event must have finalized certificates published: event.certificate_enabled !== 0
+ * 2. Participant must not be REVOKED or CANCELLED
+ * 3. Participant must be approved/paid
+ * 4. Participant must have checked-in (checked_in = 1), be marked eligible (certificate_eligible = 1), or be an event winner
+ * 5. Participant must have a valid email address
+ */
+function isCertificateReady(record, event) {
+  if (!record) {
+    return { isReady: false, reason: 'Registration record not found' };
+  }
+
+  // 1. Event publication check: Must be finalized and published
+  if (event) {
+    if (event.certificate_enabled === 0 || event.certificate_enabled === false) {
+      return {
+        isReady: false,
+        reason: 'Certificates have not yet been published or enabled for this event by the organizers.'
+      };
+    }
+  }
+
+  // 2. Cancellation / Revocation check
+  const regStatus = normalizeText(record.reg_status).toUpperCase();
+  const paymentStatus = normalizeText(record.payment_status).toUpperCase();
+
+  if (['REVOKED', 'CANCELLED'].includes(regStatus) || paymentStatus === 'REVOKED') {
+    return {
+      isReady: false,
+      reason: 'Registration is cancelled or revoked.'
+    };
+  }
+
+  if (regStatus !== 'APPROVED' && paymentStatus !== 'PAID') {
+    return {
+      isReady: false,
+      reason: 'Registration is pending verification. Only approved participants can collect certificates.'
+    };
+  }
+
+  // 3. Attendance or Declared Winner check
+  const isWinner = isRecordWinner(record);
+  const checkedIn = Number(record.checked_in || 0) === 1;
+  const certEligible = Number(record.certificate_eligible || 0) === 1;
+
+  if (!checkedIn && !certEligible && !isWinner) {
+    return {
+      isReady: false,
+      reason: 'Attendance check-in is required before the certificate can be collected.'
+    };
+  }
+
+  // 4. Contact check (email present)
+  if (!record.email || !normalizeText(record.email)) {
+    return {
+      isReady: false,
+      reason: 'Missing recipient email address.'
+    };
+  }
+
+  return { isReady: true, reason: null };
+}
+
+/**
+ * Generates the responsive HTML email body with the prominent "Collect Your Certificate" CTA button.
+ */
+function generateCertificateCollectBodyHtml({ recipient, event, collectionUrl, customMessage }) {
+  const isWinner = isRecordWinner(recipient);
+  const name = recipient.full_name || 'Creator';
+  const regId = recipient.registration_id || recipient.id || '';
+  const eventTitle = event ? (event.title || event.name) : config.EVENT.title;
+  const eventDate = event ? (event.event_date || event.date) : config.EVENT.date;
+  const category = recipient.category || 'Performer';
+  const position = recipient.position || (isWinner ? 'WINNER' : 'Participant');
+  const safeUrl = collectionUrl || 'https://offstagecreators.in/certificate';
+
+  const defaultMsg = isWinner
+    ? `Congratulations on your extraordinary winning performance at <strong>${escapeXml(eventTitle)}</strong>! Offstage Creators is thrilled to honor your artistry. Your official credential of excellence has been finalized, verified, and published.`
+    : `Congratulations on your performance at <strong>${escapeXml(eventTitle)}</strong>! Your official certificate of achievement has been finalized, published, and verified by Offstage Creators.`;
+
+  const msgContent = customMessage && customMessage.trim() ? customMessage.trim() : defaultMsg;
+
+  return `
+    <div style="text-align:center; margin-bottom:24px;">
+      <span style="display:inline-block; padding:5px 14px; background:rgba(228,173,87,0.12); border:1px solid #e4ad57; border-radius:20px; color:#e4ad57; font-size:11px; font-weight:800; letter-spacing:0.12em; text-transform:uppercase;">
+        ✦ OFFICIAL CREDENTIAL READY FOR COLLECTION ✦
+      </span>
+      <h1 style="font-family:Georgia,serif; font-size:25px; color:#f7eee1; margin:16px 0 6px; line-height:1.25; font-weight:700;">
+        ${isWinner ? 'Certificate of Excellence' : 'Certificate of Participation'}
+      </h1>
+      <p style="color:#a8a096; font-size:13.5px; margin:0;">
+        Issued for <strong>${escapeXml(eventTitle)}</strong> (${escapeXml(eventDate || '2026')})
+      </p>
+    </div>
+
+    <p style="font-size:15px; color:#eee4d5; margin:0 0 16px; line-height:1.6;">
+      Dear <strong>${escapeXml(name)}</strong>,
+    </p>
+
+    <div style="font-size:14px; color:#d6ccbf; line-height:1.75; margin:0 0 24px;">
+      ${msgContent}
+    </div>
+
+    <!-- CREDENTIAL DETAILS TABLE -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0e0c0a; border:1px solid #2a231c; border-radius:10px; margin:0 0 26px; font-size:13px;">
+      <tr>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:#8e8477; font-weight:600; text-transform:uppercase; font-size:11px;">Participant</td>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:#f7eee1; font-weight:700; text-align:right;">${escapeXml(name)}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:#8e8477; font-weight:600; text-transform:uppercase; font-size:11px;">Event</td>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:#e4ad57; font-weight:700; text-align:right;">${escapeXml(eventTitle)}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:#8e8477; font-weight:600; text-transform:uppercase; font-size:11px;">Achievement</td>
+        <td style="padding:12px 16px; border-bottom:1px solid #1e1a16; color:${isWinner ? '#f2ca6b' : '#f7eee1'}; font-weight:700; text-align:right;">${isWinner ? `🏆 ${escapeXml(position)}` : escapeXml(category)}</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px; color:#8e8477; font-weight:600; text-transform:uppercase; font-size:11px;">Credential ID</td>
+        <td style="padding:12px 16px; color:#e4ad57; font-family:monospace; font-weight:800; font-size:13px; text-align:right;">${escapeXml(regId)}</td>
+      </tr>
+    </table>
+
+    <!-- BIG PROMINENT GOLD CTA BUTTON -->
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 22px;">
+      <tr>
+        <td align="center">
+          <a href="${safeUrl}" target="_blank" style="background:linear-gradient(135deg, #d4a23f 0%, #e4ad57 50%, #c49339 100%); color:#0e0c0a !important; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase; text-decoration:none; padding:16px 36px; border-radius:8px; display:inline-block; box-shadow:0 6px 20px rgba(228, 173, 87, 0.35);">
+            🏆 COLLECT YOUR CERTIFICATE →
+          </a>
+          <div style="margin-top:14px; font-size:11.5px; color:#8e8477; line-height:1.5;">
+            Direct collection URL: <a href="${safeUrl}" target="_blank" style="color:#e4ad57; text-decoration:underline; word-break:break-all;">${safeUrl}</a>
+          </div>
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#181410; border-left:3px solid #e4ad57; padding:14px 18px; border-radius:6px; font-size:12px; color:#a8a096; line-height:1.6; margin:22px 0 10px;">
+      🔒 <strong>Secure Recipient Link:</strong> This authenticated collection link is uniquely assigned to your credential. When you open the page, you can preview your high-resolution certificate, download print-ready PDF and PNG versions, or verify its authenticity anytime using the embedded QR code.
+    </div>
+
+    <div style="margin-top:24px; padding-top:16px; border-top:1px solid #1e1a16; font-size:12px; color:#8e8477; line-height:1.6;">
+      <p style="margin:0; color:#eee4d5;">
+        Warm regards,<br>
+        <strong style="color:#e4ad57;">Offstage Creators Leadership Team</strong><br>
+        <span style="font-size:11px; color:#8e8477;">Words • People • Platforms</span>
+      </p>
+    </div>
+  `;
+}
+
 module.exports = {
   DEFAULT_CERTIFICATE_SETTINGS,
   parseEventCertSettings,
   isRecordWinner,
   resolveCertificateData,
   generateCertificateSvg,
-  createBulkCertificatesArchive
+  createBulkCertificatesArchive,
+  generateCertificateAccessToken,
+  verifyCertificateAccessToken,
+  isCertificateReady,
+  generateCertificateCollectBodyHtml
 };

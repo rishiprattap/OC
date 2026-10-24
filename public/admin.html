@@ -797,6 +797,7 @@
 
         <div class="subnav-bar">
           <button class="subnav-btn active" id="subnavBtnCustom" onclick="switchEmailSubtab('custom')">✉️ Custom Email</button>
+          <button class="subnav-btn" id="subnavBtnCert" onclick="switchEmailSubtab('cert')">🏆 Collect Certificate</button>
           <button class="subnav-btn" id="subnavBtnMeet" onclick="switchEmailSubtab('meet')">📹 Google Meet Invitation</button>
           <button class="subnav-btn" id="subnavBtnHistory" onclick="switchEmailSubtab('history')">📜 Email History</button>
         </div>
@@ -873,6 +874,112 @@
               <button type="button" class="cta cta-secondary" onclick="openPreviewCustomEmail()">👁️ Preview Email</button>
               <button type="button" class="cta" id="btnSendCustomEmail" onclick="sendCustomEmail()">🚀 Send Email</button>
             </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: COLLECT CERTIFICATE EMAIL -->
+        <div id="emailSubtabCert" style="display:none;">
+          <div class="panel-card">
+            <div class="panel-title">
+              <span>1. Select Event &amp; Check Publication Readiness</span>
+              <span id="certEmailEventBadge" style="font-size:12px; font-weight:700;"></span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:12px;">
+              <div>
+                <label class="admin-label">Event</label>
+                <select class="admin-select" id="certEmailEventFilter" style="margin-bottom:0;" onchange="loadCertEmailRecipients()">
+                  <!-- Populated dynamically with all events -->
+                </select>
+              </div>
+              <div>
+                <label class="admin-label">Event Certificate Status</label>
+                <div id="certEmailEventStatusBox" style="padding:10px 14px; background:#181410; border:1px solid #2a231c; border-radius:6px; font-size:12px; color:#8e8477;">
+                  Loading event status…
+                </div>
+              </div>
+            </div>
+
+            <div id="certEmailPublishWarning" style="display:none; background:rgba(226,105,71,0.12); border:1px solid rgba(226,105,71,0.4); border-radius:8px; padding:12px 16px; margin-top:10px; color:#ff9e85; font-size:13px; line-height:1.5;">
+              ⚠️ <strong>Certificates are not finalized or published for this event.</strong> Participants cannot collect certificates until you enable and finalize certificate settings in the <strong>Events</strong> tab. Email sending is locked until published.
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-title">
+              <span>2. Select Eligible Recipients</span>
+              <span style="color:#e4ad57; font-size:12px; font-weight:700;" id="certEmailSelectedCount">0 recipients selected</span>
+            </div>
+
+            <!-- Stats Bar -->
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; font-size:12px;">
+              <span class="badge" style="background:#181410; border:1px solid #2a231c; color:#eee4d5; padding:6px 12px;" id="certStatTotal">Total: 0</span>
+              <span class="badge" style="background:rgba(110,219,140,0.12); border:1px solid rgba(110,219,140,0.3); color:#88f0a4; padding:6px 12px;" id="certStatReady">Ready: 0</span>
+              <span class="badge" style="background:rgba(226,105,71,0.12); border:1px solid rgba(226,105,71,0.3); color:#ff9e85; padding:6px 12px;" id="certStatNotReady">Not Ready: 0</span>
+              <span class="badge" style="background:rgba(228,173,87,0.12); border:1px solid rgba(228,173,87,0.3); color:#e4ad57; padding:6px 12px;" id="certStatSent">Sent: 0</span>
+              <span class="badge" style="background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); color:#fca5a5; padding:6px 12px;" id="certStatFailed">Failed: 0</span>
+            </div>
+
+            <!-- Filter Controls -->
+            <div style="display:grid; grid-template-columns: 2fr 1.2fr 1.2fr; gap:10px; margin-bottom:12px;">
+              <input type="search" class="admin-input" id="certEmailSearch" placeholder="Search name, ID, category..." style="margin-bottom:0;" oninput="filterCertEmailList()">
+              <select class="admin-select" id="certEmailReadinessFilter" style="margin-bottom:0;" onchange="filterCertEmailList()">
+                <option value="ALL">All Readiness Statuses</option>
+                <option value="READY" selected>Ready to Collect (Eligible)</option>
+                <option value="NOT_READY">⚠️ Not Ready (Ineligible/Not Checked In)</option>
+              </select>
+              <select class="admin-select" id="certEmailDeliveryFilter" style="margin-bottom:0;" onchange="filterCertEmailList()">
+                <option value="ALL">All Delivery Statuses</option>
+                <option value="NOT_SENT">⚪ Not Sent (Pending)</option>
+                <option value="FAILED">❌ Failed (Retry Needed)</option>
+                <option value="SENT">✅ Already Sent</option>
+              </select>
+            </div>
+
+            <!-- Selection helper buttons -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmailReady(true)">Select All Ready</button>
+                <button type="button" class="action-btn btn-view" onclick="selectAllCertEmailFailed(true)">Select Failed (Retry)</button>
+                <button type="button" class="action-btn btn-view" onclick="deselectAllCertEmail()">Deselect All</button>
+              </div>
+              <small style="color:#8e8477; font-size:11px;">Recipients flagged as Not Ready are protected from premature dispatch.</small>
+            </div>
+
+            <div class="recipient-table-wrap" id="certEmailTableWrapper">
+              <div class="empty-state"><p>Loading recipients…</p></div>
+            </div>
+          </div>
+
+          <div class="panel-card">
+            <div class="panel-title">3. Compose &amp; Dispatch Certificate Emails</div>
+
+            <label class="admin-label">Subject</label>
+            <input type="text" class="admin-input" id="certEmailSubject" value="🏆 Collect Your Certificate — {event_name}">
+
+            <label class="admin-label">Custom Message (Optional — added to email body)</label>
+            <textarea class="admin-textarea" id="certEmailCustomMessage" rows="4" placeholder="e.g. Thank you for your inspiring performance. We are thrilled to celebrate your creativity!"></textarea>
+
+            <div style="background:#181410; border:1px solid #2a231c; border-left:3px solid #e4ad57; border-radius:6px; padding:12px 16px; margin:14px 0; font-size:12px; color:#8e8477; line-height:1.6;">
+              🔒 <strong>Duplicate Protection Active:</strong> Recipients who already received their certificate email are automatically skipped. Failed emails can be safely retried without re-sending duplicates. Each recipient receives their personal, tamper-proof authenticated collection link.
+            </div>
+
+            <div style="display:flex; gap:16px; align-items:center; margin-bottom:16px; flex-wrap:wrap;">
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#eee4d5; cursor:pointer;">
+                <input type="checkbox" id="certEmailRetryOnly"> Retry failed / unsent recipients only
+              </label>
+              <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#8e8477; cursor:pointer;">
+                <input type="checkbox" id="certEmailForceResend"> Allow force re-send to already sent recipients
+              </label>
+            </div>
+
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              <button type="button" class="cta cta-secondary" onclick="openPreviewCertEmail()">👁️ Preview Email</button>
+              <button type="button" class="cta" id="btnSendCertEmail" onclick="sendCertEmail()">🚀 Send Certificate Emails</button>
+              <button type="button" class="cta cta-gold" id="btnRetryFailedCertEmail" onclick="retryFailedCertEmails()">🔄 Retry Failed Only</button>
+            </div>
+
+            <div id="certEmailProgressBox" style="display:none; margin-top:16px; padding:14px; background:#181410; border:1px solid #2a231c; border-radius:8px;"></div>
           </div>
         </div>
 
