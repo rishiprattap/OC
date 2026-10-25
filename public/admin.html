@@ -129,6 +129,7 @@
     }
     .admin-sidebar .logo-lockup img { width: 36px; height: 36px; object-fit: contain; }
     .admin-sidebar .logo-lockup span { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #e4ad57; }
+    .mobile-nav-bar { display: none !important; }
     .admin-nav {
       flex: 1 1 auto;
       padding: 16px 12px;
@@ -455,7 +456,7 @@
         border-right: none;
         display: grid;
         grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto;
+        grid-template-rows: auto auto auto;
         align-items: center;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
         overflow: visible;
@@ -482,21 +483,125 @@
         padding: 6px 12px;
         font-size: 11px;
       }
-      .admin-sidebar .admin-nav {
+
+      /* Compact Mobile Section Bar */
+      .mobile-nav-bar {
         grid-column: 1 / -1;
         grid-row: 2;
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        padding: 7px 12px;
+        background: #14120f;
         border-top: 1px solid #1e1a16;
-        display: grid;
+        box-sizing: border-box;
+        gap: 10px;
+        min-height: 38px;
+      }
+      .mobile-nav-current {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        flex: 1;
+      }
+      .mobile-nav-current-tag {
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        color: #8e8477;
+        text-transform: uppercase;
+        flex-shrink: 0;
+      }
+      .mobile-nav-current-icon {
+        font-size: 14px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .mobile-nav-current-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: #e4ad57;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mobile-nav-toggle-btn {
+        background: #1d1813;
+        border: 1px solid #382e22;
+        border-radius: 6px;
+        color: #f7eee1;
+        font-size: 11.5px;
+        font-weight: 700;
+        padding: 6px 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all 0.15s ease;
+        touch-action: manipulation;
+        user-select: none;
+      }
+      .mobile-nav-toggle-btn:hover,
+      .mobile-nav-toggle-btn:focus-visible {
+        border-color: #e4ad57;
+        background: #262018;
+        color: #e4ad57;
+      }
+      .mobile-nav-toggle-btn.active {
+        background: rgba(228, 173, 87, 0.16);
+        border-color: #e4ad57;
+        color: #e4ad57;
+      }
+      .mobile-nav-toggle-arrow {
+        font-size: 11px;
+        transition: transform 0.2s ease;
+        display: inline-block;
+      }
+      .mobile-nav-toggle-btn.active .mobile-nav-toggle-arrow {
+        transform: rotate(180deg);
+      }
+
+      /* Navigation Grid - Collapsed by default on mobile */
+      .admin-sidebar .admin-nav {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        border-top: 1px solid #221c16;
+        display: none; /* COLLAPSED BY DEFAULT */
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 4px;
-        padding: 6px 6px;
+        padding: 8px 6px;
         width: 100%;
         box-sizing: border-box;
-        overflow: visible;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(85dvh - 90px);
+        background: #100e0c;
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.7);
         flex: none;
       }
+      /* Revealed when open */
+      .admin-sidebar.nav-open .admin-nav {
+        display: grid;
+        animation: mobileNavReveal 0.18s ease-out;
+      }
+      @keyframes mobileNavReveal {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
       .admin-sidebar .admin-nav::-webkit-scrollbar {
-        display: none;
+        width: 4px;
+      }
+      .admin-sidebar .admin-nav::-webkit-scrollbar-thumb {
+        background: #2a231c;
+        border-radius: 4px;
       }
       .admin-nav-item {
         display: flex;
@@ -570,6 +675,17 @@
     }
 
     @media (max-width: 380px) {
+      .mobile-nav-bar {
+        padding: 6px 8px;
+        min-height: 34px;
+      }
+      .mobile-nav-current-title {
+        font-size: 12px;
+      }
+      .mobile-nav-toggle-btn {
+        padding: 5px 9px;
+        font-size: 11px;
+      }
       .admin-sidebar .admin-nav {
         gap: 3px;
         padding: 4px 3px;
@@ -601,6 +717,17 @@
       }
       .admin-sidebar .logout-btn {
         padding: 4px 10px;
+        font-size: 10px;
+      }
+      .mobile-nav-bar {
+        padding: 3px 8px;
+        min-height: 30px;
+      }
+      .mobile-nav-current-title {
+        font-size: 11.5px;
+      }
+      .mobile-nav-toggle-btn {
+        padding: 3px 8px;
         font-size: 10px;
       }
       .admin-sidebar .admin-nav {
@@ -877,12 +1004,26 @@
   <div class="admin-layout" id="adminLayout" style="display:none;">
 
     <!-- Sidebar -->
-    <aside class="admin-sidebar">
+    <aside class="admin-sidebar" id="adminSidebar">
       <a class="logo-lockup" href="/">
         <img src="/assets/logo.png" alt="Logo">
         <span>OFFSTAGE<br>CREATORS</span>
       </a>
-      <nav class="admin-nav">
+
+      <!-- Mobile Compact Section Bar (Collapsed by default on mobile, hidden on desktop) -->
+      <div class="mobile-nav-bar" id="mobileNavBar">
+        <div class="mobile-nav-current" id="mobileNavCurrent">
+          <span class="mobile-nav-current-tag">SECTION:</span>
+          <span class="mobile-nav-current-icon" id="mobileNavCurrentIcon">📊</span>
+          <span class="mobile-nav-current-title" id="mobileNavCurrentTitle">Overview</span>
+        </div>
+        <button type="button" class="mobile-nav-toggle-btn" id="mobileNavToggleBtn" aria-expanded="false" onclick="toggleMobileNav()">
+          <span id="mobileNavToggleText">Sections</span>
+          <span class="mobile-nav-toggle-arrow" id="mobileNavToggleArrow">▾</span>
+        </button>
+      </div>
+
+      <nav class="admin-nav" id="adminNav">
         <button class="admin-nav-item active" data-tab="overview" onclick="showTab('overview')">
           <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
         </button>

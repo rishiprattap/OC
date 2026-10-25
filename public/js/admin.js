@@ -296,6 +296,72 @@
     loadOverview();
   };
 
+  // ── Mobile Navigation Collapsible Menu ────────────────────────────────────────
+  const TAB_META = {
+    overview: { icon: '📊', name: 'Overview' },
+    events: { icon: '🎪', name: 'Events Management' },
+    registrations: { icon: '📋', name: 'Registrations' },
+    pending: { icon: '⏳', name: 'Pending' },
+    approved: { icon: '✓', name: 'Approved' },
+    users: { icon: '👥', name: 'Users' },
+    promoCodes: { icon: '🏷️', name: 'Promo & Referrals' },
+    certificates: { icon: '🏆', name: 'Certificates & Winners' },
+    emailCenter: { icon: '✉️', name: 'Email Center' },
+    gallery: { icon: '🖼️', name: 'Event Gallery' }
+  };
+
+  window.toggleMobileNav = function () {
+    const sidebar = document.getElementById('adminSidebar') || document.querySelector('.admin-sidebar');
+    if (!sidebar) return;
+    if (sidebar.classList.contains('nav-open')) {
+      closeMobileNav();
+    } else {
+      openMobileNav();
+    }
+  };
+
+  window.openMobileNav = function () {
+    const sidebar = document.getElementById('adminSidebar') || document.querySelector('.admin-sidebar');
+    const toggleBtn = document.getElementById('mobileNavToggleBtn');
+    const toggleText = document.getElementById('mobileNavToggleText');
+    const toggleArrow = document.getElementById('mobileNavToggleArrow');
+    if (sidebar) sidebar.classList.add('nav-open');
+    if (toggleBtn) {
+      toggleBtn.classList.add('active');
+      toggleBtn.setAttribute('aria-expanded', 'true');
+    }
+    if (toggleText) toggleText.textContent = 'Close';
+    if (toggleArrow) toggleArrow.textContent = '▴';
+  };
+
+  window.closeMobileNav = function () {
+    const sidebar = document.getElementById('adminSidebar') || document.querySelector('.admin-sidebar');
+    const toggleBtn = document.getElementById('mobileNavToggleBtn');
+    const toggleText = document.getElementById('mobileNavToggleText');
+    const toggleArrow = document.getElementById('mobileNavToggleArrow');
+    if (sidebar) sidebar.classList.remove('nav-open');
+    if (toggleBtn) {
+      toggleBtn.classList.remove('active');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    }
+    if (toggleText) toggleText.textContent = 'Sections';
+    if (toggleArrow) toggleArrow.textContent = '▾';
+  };
+
+  window.selectAdminSection = function (tabName) {
+    showTab(tabName);
+    closeMobileNav();
+  };
+
+  // Close mobile nav when clicking outside on the main content area
+  document.addEventListener('click', function (e) {
+    const sidebar = document.getElementById('adminSidebar') || document.querySelector('.admin-sidebar');
+    if (!sidebar || !sidebar.classList.contains('nav-open')) return;
+    if (!sidebar.contains(e.target)) {
+      closeMobileNav();
+    }
+  });
+
   // ── Tab Navigation ────────────────────────────────────────────────────────────
   window.showTab = function (tabName) {
     if (tabName === 'settings') tabName = 'events';
@@ -312,6 +378,16 @@
 
     const mainEl = document.querySelector('.admin-main');
     if (mainEl) mainEl.scrollTop = 0;
+
+    // Update compact mobile bar section indicator
+    const meta = TAB_META[tabName] || { icon: '📋', name: tabName };
+    const curIcon = document.getElementById('mobileNavCurrentIcon');
+    const curTitle = document.getElementById('mobileNavCurrentTitle');
+    if (curIcon) curIcon.textContent = meta.icon;
+    if (curTitle) curTitle.textContent = meta.name;
+
+    // Automatically collapse mobile nav after selection
+    closeMobileNav();
 
     if (tabName === 'overview') loadOverview();
     else if (tabName === 'events') loadEventsTab();
