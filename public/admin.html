@@ -52,6 +52,8 @@
       z-index: 2000;
       display: flex; align-items: center; justify-content: center;
       padding: 20px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .auth-card {
       background: #181410;
@@ -85,40 +87,106 @@
     .auth-btn:hover { background: #f5c96b; }
     .auth-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      background: #0d0c0a;
+    }
+
     /* Admin Layout */
-    .admin-layout { display: flex; min-height: 100vh; }
+    .admin-layout {
+      display: flex;
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      overflow: hidden;
+      position: relative;
+    }
     .admin-sidebar {
-      width: 220px; flex-shrink: 0;
-      background: #110f0d; border-right: 1px solid #1e1a16;
-      padding: 0; display: flex; flex-direction: column;
-      position: sticky; top: 0; height: 100vh;
+      width: 220px;
+      height: 100%;
+      flex-shrink: 0;
+      background: #110f0d;
+      border-right: 1px solid #1e1a16;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .admin-sidebar .logo-lockup {
-      padding: 24px 20px; border-bottom: 1px solid #1e1a16;
-      display: flex; align-items: center; gap: 10px; text-decoration: none;
+      padding: 24px 20px;
+      border-bottom: 1px solid #1e1a16;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      flex-shrink: 0;
     }
     .admin-sidebar .logo-lockup img { width: 36px; height: 36px; object-fit: contain; }
     .admin-sidebar .logo-lockup span { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; color: #e4ad57; }
-    .admin-nav { flex: 1; padding: 16px 12px; }
+    .admin-nav {
+      flex: 1 1 auto;
+      padding: 16px 12px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
     .admin-nav-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 12px; border-radius: 8px; cursor: pointer;
-      font-size: 13px; font-weight: 600; color: #8e8477;
-      transition: all 0.2s ease; border: none; background: none;
-      width: 100%; text-align: left; margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      color: #8e8477;
+      transition: all 0.2s ease;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      margin-bottom: 4px;
+      box-sizing: border-box;
+      touch-action: manipulation;
+      user-select: none;
     }
     .admin-nav-item:hover { background: #1a1612; color: #d5cbbd; }
     .admin-nav-item.active { background: rgba(228,173,87,0.1); color: #e4ad57; }
-    .admin-nav-item .nav-icon { font-size: 15px; }
+    .admin-nav-item .nav-icon { font-size: 15px; flex-shrink: 0; }
+    .admin-nav-item .nav-label { font-size: 13px; white-space: nowrap; }
     .logout-btn {
-      margin: 12px; padding: 10px 14px;
-      background: #1a1612; border: 1px solid #2a231c; border-radius: 8px;
-      color: #8e8477; font-size: 12px; font-weight: 700; cursor: pointer;
-      transition: all 0.2s ease; width: calc(100% - 24px);
+      margin: 12px;
+      padding: 10px 14px;
+      background: #1a1612;
+      border: 1px solid #2a231c;
+      border-radius: 8px;
+      color: #8e8477;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: calc(100% - 24px);
+      flex-shrink: 0;
+      touch-action: manipulation;
     }
     .logout-btn:hover { border-color: #e26947; color: #e26947; }
 
-    .admin-main { flex: 1; padding: 32px; overflow-y: auto; min-width: 0; }
+    .admin-main {
+      flex: 1 1 auto;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      padding: 32px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+      box-sizing: border-box;
+    }
 
     /* Stats Grid */
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; margin-bottom: 32px; }
@@ -365,77 +433,194 @@
        ========================================================================== */
     @media (max-width: 900px) {
       .admin-layout {
+        display: flex;
         flex-direction: column;
-        min-height: 100vh;
+        height: 100%;
+        height: 100dvh;
+        width: 100%;
+        overflow: hidden;
+        position: relative;
       }
       .admin-sidebar {
         width: 100%;
         height: auto;
-        position: sticky;
+        flex-shrink: 0;
+        position: relative;
         top: 0;
         z-index: 100;
         background: rgba(17, 15, 13, 0.98);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
         border-bottom: 1px solid #2a231c;
+        border-right: none;
         display: grid;
         grid-template-columns: 1fr auto;
         grid-template-rows: auto auto;
         align-items: center;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+        overflow: visible;
       }
       .admin-sidebar .logo-lockup {
         grid-column: 1;
         grid-row: 1;
-        padding: 10px 14px;
+        padding: 8px 12px;
         border-bottom: none;
+      }
+      .admin-sidebar .logo-lockup img {
+        width: 28px;
+        height: 28px;
+      }
+      .admin-sidebar .logo-lockup span {
+        font-size: 10px;
+        line-height: 1.2;
       }
       .admin-sidebar .logout-btn {
         grid-column: 2;
         grid-row: 1;
-        margin: 0 14px 0 0;
+        margin: 0 12px 0 0;
         width: auto;
-        padding: 7px 14px;
+        padding: 6px 12px;
         font-size: 11px;
       }
       .admin-sidebar .admin-nav {
         grid-column: 1 / -1;
         grid-row: 2;
         border-top: 1px solid #1e1a16;
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        gap: 6px;
-        padding: 8px 12px;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 4px;
+        padding: 6px 6px;
         width: 100%;
         box-sizing: border-box;
-        scrollbar-width: none;
+        overflow: visible;
+        flex: none;
       }
       .admin-sidebar .admin-nav::-webkit-scrollbar {
         display: none;
       }
       .admin-nav-item {
-        flex: 0 0 auto;
-        white-space: nowrap;
-        padding: 8px 14px;
-        font-size: 12.5px;
-        border-radius: 20px;
-        border: 1px solid #2a231c;
-        background: #161310;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        min-height: 48px;
+        padding: 5px 2px;
+        border-radius: 8px;
+        border: 1px solid #241e18;
+        background: #14120f;
         color: #8e8477;
         margin-bottom: 0;
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .admin-nav-item:hover,
+      .admin-nav-item:focus-visible {
+        background: #1c1813;
+        color: #d5cbbd;
+        border-color: #382e22;
       }
       .admin-nav-item.active {
-        background: rgba(228, 173, 87, 0.16);
-        border-color: #e4ad57;
+        background: rgba(228, 173, 87, 0.15);
+        border: 1px solid #e4ad57;
+        color: #f7eee1;
+        box-shadow: inset 0 0 10px rgba(228, 173, 87, 0.12);
+      }
+      .admin-nav-item .nav-icon {
+        font-size: 15px;
+        line-height: 1;
+        margin-bottom: 3px;
+        display: block;
+      }
+      .admin-nav-item.active .nav-icon {
+        transform: scale(1.08);
+        filter: drop-shadow(0 0 4px rgba(228, 173, 87, 0.5));
+      }
+      .admin-nav-item .nav-label {
+        font-size: 9.5px;
+        font-weight: 700;
+        line-height: 1.15;
+        text-align: center;
+        white-space: normal;
+        word-break: normal;
+        overflow-wrap: break-word;
+        hyphens: auto;
+        display: block;
+        color: #8e8477;
+      }
+      .admin-nav-item.active .nav-label {
         color: #e4ad57;
+        font-weight: 800;
       }
       .admin-main {
-        padding: 16px 12px 60px;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
         width: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: contain;
+        padding: 16px 12px 60px;
         box-sizing: border-box;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .admin-sidebar .admin-nav {
+        gap: 3px;
+        padding: 4px 3px;
+      }
+      .admin-nav-item {
+        min-height: 44px;
+        padding: 4px 1px;
+      }
+      .admin-nav-item .nav-icon {
+        font-size: 13px;
+        margin-bottom: 2px;
+      }
+      .admin-nav-item .nav-label {
+        font-size: 8.5px;
+        line-height: 1.1;
+      }
+    }
+
+    @media (max-width: 900px) and (max-height: 520px) {
+      .admin-sidebar .logo-lockup {
+        padding: 4px 10px;
+      }
+      .admin-sidebar .logo-lockup img {
+        width: 22px;
+        height: 22px;
+      }
+      .admin-sidebar .logo-lockup span {
+        font-size: 9px;
+      }
+      .admin-sidebar .logout-btn {
+        padding: 4px 10px;
+        font-size: 10px;
+      }
+      .admin-sidebar .admin-nav {
+        padding: 3px 4px;
+        gap: 2px;
+      }
+      .admin-nav-item {
+        min-height: 36px;
+        padding: 2px 1px;
+      }
+      .admin-nav-item .nav-icon {
+        font-size: 12px;
+        margin-bottom: 1px;
+      }
+      .admin-nav-item .nav-label {
+        font-size: 8px;
+        line-height: 1.05;
+      }
+      .admin-main {
+        padding: 8px 8px 30px;
       }
     }
 
@@ -699,34 +884,34 @@
       </a>
       <nav class="admin-nav">
         <button class="admin-nav-item active" data-tab="overview" onclick="showTab('overview')">
-          <span class="nav-icon">📊</span> Overview
+          <span class="nav-icon">📊</span><span class="nav-label">Overview</span>
         </button>
         <button class="admin-nav-item" data-tab="events" onclick="showTab('events')">
-          <span class="nav-icon">🎪</span> Events Management
+          <span class="nav-icon">🎪</span><span class="nav-label">Events Management</span>
         </button>
         <button class="admin-nav-item" data-tab="registrations" onclick="showTab('registrations')">
-          <span class="nav-icon">📋</span> Registrations
+          <span class="nav-icon">📋</span><span class="nav-label">Registrations</span>
         </button>
         <button class="admin-nav-item" data-tab="pending" onclick="showTab('pending')">
-          <span class="nav-icon">⏳</span> Pending
+          <span class="nav-icon">⏳</span><span class="nav-label">Pending</span>
         </button>
         <button class="admin-nav-item" data-tab="approved" onclick="showTab('approved')">
-          <span class="nav-icon">✓</span> Approved
+          <span class="nav-icon">✓</span><span class="nav-label">Approved</span>
         </button>
         <button class="admin-nav-item" data-tab="users" onclick="showTab('users')">
-          <span class="nav-icon">👥</span> Users
+          <span class="nav-icon">👥</span><span class="nav-label">Users</span>
         </button>
         <button class="admin-nav-item" data-tab="promoCodes" onclick="showTab('promoCodes')">
-          <span class="nav-icon">🏷️</span> Promo &amp; Referrals
+          <span class="nav-icon">🏷️</span><span class="nav-label">Promo &amp; Referrals</span>
         </button>
         <button class="admin-nav-item" data-tab="certificates" onclick="showTab('certificates')">
-          <span class="nav-icon">🏆</span> Certificates &amp; Winners
+          <span class="nav-icon">🏆</span><span class="nav-label">Certificates &amp; Winners</span>
         </button>
         <button class="admin-nav-item" data-tab="emailCenter" onclick="showTab('emailCenter')">
-          <span class="nav-icon">✉️</span> Email Center
+          <span class="nav-icon">✉️</span><span class="nav-label">Email Center</span>
         </button>
         <button class="admin-nav-item" data-tab="gallery" onclick="showTab('gallery')">
-          <span class="nav-icon">🖼️</span> Event Gallery
+          <span class="nav-icon">🖼️</span><span class="nav-label">Event Gallery</span>
         </button>
       </nav>
       <button class="logout-btn" id="logoutBtn">⟵ Logout</button>

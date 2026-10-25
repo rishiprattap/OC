@@ -310,6 +310,9 @@
     const tabEl = document.getElementById('tab' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
     if (tabEl) tabEl.style.display = 'block';
 
+    const mainEl = document.querySelector('.admin-main');
+    if (mainEl) mainEl.scrollTop = 0;
+
     if (tabName === 'overview') loadOverview();
     else if (tabName === 'events') loadEventsTab();
     else if (tabName === 'registrations') loadRegistrations();
