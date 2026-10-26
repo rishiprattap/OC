@@ -406,6 +406,120 @@ async function runCertificateEmailFlowTests() {
     test('After retry, A1 has new certificate_email_sent_at timestamp', Boolean(a1Retried?.certificate_email_sent_at));
     test('After retry, A1 certificate_email_error is cleared (null)', a1Retried?.certificate_email_error === null);
 
+    // -------------------------------------------------------------
+    // SECTION 7: Complete End-to-End Flow Verification:
+    // Admin Panel → Email Center → Email → Link → Verify → Download
+    // -------------------------------------------------------------
+    console.log('\n>>> [7/7] Complete End-to-End Flow Verification (Admin → Email → Link → Verify → Download)...');
+
+    // 1. Admin Email Preview & CTA Button Link Extraction
+    const e2ePreview = await adminPost('/api/admin/emails/certificate/preview', {
+      eventId: testEventA,
+      registrationId: regA1
+    });
+    test('E2E: Preview generated successfully (HTTP 200)', e2ePreview.status === 200);
+    const emailHtml = e2ePreview.json?.html || '';
+    
+    // Extract link from CTA button: <a href="(...)" ...>COLLECT YOUR CERTIFICATE
+    const ctaMatch = emailHtml.match(/<a\s+href="([^"]+)"[^>]*>\s*🏆\s*COLLECT YOUR CERTIFICATE/i);
+    test('E2E: Email contains prominent "COLLECT YOUR CERTIFICATE" CTA button with valid href', Boolean(ctaMatch && ctaMatch[1]));
+    const extractedCtaUrl = ctaMatch ? ctaMatch[1] : '';
+
+    // Parse URL parameters from the email CTA link
+    const parsedUrl = new URL(extractedCtaUrl, 'http://localhost:3000');
+    const linkRegId = parsedUrl.searchParams.get('regId');
+    const linkToken = parsedUrl.searchParams.get('token');
+    const linkEvent = parsedUrl.searchParams.get('event');
+
+    test('E2E: Link points to /certificate path', parsedUrl.pathname === '/certificate');
+    test('E2E: Link contains regId parameter matching participant', linkRegId === regA1);
+    test('E2E: Link contains secure HMAC token parameter', Boolean(linkToken && linkToken.length >= 16));
+    test('E2E: Link contains event slug parameter', linkEvent === testEventA);
+
+    // 2. Client Opens /certificate Page (PC & Mobile view check)
+    const certPageRes = await request('/certificate');
+    test('E2E: /certificate responds with HTTP 200', certPageRes.status === 200);
+    test('E2E: Page contains high-res certificate canvas', certPageRes.body.includes('id="certCanvas"'));
+    test('E2E: Page contains PNG download button', certPageRes.body.includes('id="pngBtn"'));
+    test('E2E: Page contains PDF download button', certPageRes.body.includes('id="pdfBtn"'));
+    test('E2E: Page contains SVG vector download button', certPageRes.body.includes('id="svgBtn"'));
+    test('E2E: Page contains print button', certPageRes.body.includes('id="printBtn"'));
+
+    // Check certificate.js client script capabilities
+    const certJsRes = await request('/js/certificate.js');
+    test('E2E: Client script includes triggerDownload helper for mobile & PC', certJsRes.body.includes('triggerDownload'));
+    test('E2E: Client script includes canvas.toBlob optimization', certJsRes.body.includes('canvas.toBlob'));
+    test('E2E: Client script includes document.fonts.ready lifecycle handler', certJsRes.body.includes('document.fonts.ready'));
+
+    // 3. Automated Verification via parameters from Email CTA Link
+    const verifyFromLinkRes = await request('/api/certificate/verify', {
+      method: 'POST',
+      body: {
+        registrationId: linkRegId,
+        token: linkToken,
+        eventId: linkEvent
+      }
+    });
+
+    test('E2E: Verification via email CTA parameters responds with HTTP 200', verifyFromLinkRes.status === 200);
+    test('E2E: Verification confirms authenticated: true', verifyFromLinkRes.json?.authenticated === true);
+    test('E2E: Verified name matches participant (Aarav Mehta)', verifyFromLinkRes.json?.verifiedName === 'Aarav Mehta');
+    test('E2E: Verified event title matches (Event A Showcase)', verifyFromLinkRes.json?.event === 'Event A Showcase');
+    test('E2E: Verified category matches (Storytelling)', verifyFromLinkRes.json?.category === 'Storytelling');
+    test('E2E: Returns valid base64 QR code', Boolean(verifyFromLinkRes.json?.qrCode?.startsWith('data:image/png;base64,')));
+    test('E2E: Returns public verification URL', Boolean(verifyFromLinkRes.json?.verificationUrl?.includes(regA1)));
+
+    // 4. Vector SVG Download via direct API endpoint
+    const svgDownloadRes = await request(`/api/certificate/download/${encodeURIComponent(linkRegId)}?token=${encodeURIComponent(linkToken)}&event=${encodeURIComponent(linkEvent)}`);
+    test('E2E: Vector SVG download responds with HTTP 200', svgDownloadRes.status === 200);
+    test('E2E: Content-Type is image/svg+xml', svgDownloadRes.headers['content-type']?.includes('image/svg+xml'));
+    test('E2E: Content-Disposition specifies attachment with participant name', svgDownloadRes.headers['content-disposition']?.includes('Aarav_Mehta'));
+    test('E2E: SVG body contains participant name Aarav Mehta', svgDownloadRes.body?.includes('Aarav Mehta'));
+    test('E2E: SVG body contains event name Event A Showcase', svgDownloadRes.body?.includes('EVENT A SHOWCASE'));
+
+    // 5. Winner Flow Verification (Participant A3)
+    const winnerVerifyRes = await request('/api/certificate/verify', {
+      method: 'POST',
+      body: {
+        registrationId: regA3,
+        token: tokenA3,
+        eventId: testEventA
+      }
+    });
+    test('E2E Winner: Verification responds with HTTP 200', winnerVerifyRes.status === 200);
+    test('E2E Winner: Confirms isWinner === true', winnerVerifyRes.json?.isWinner === true);
+    test('E2E Winner: Position is WINNER', winnerVerifyRes.json?.position === 'WINNER');
+    test('E2E Winner: Title is CERTIFICATE OF EXCELLENCE', winnerVerifyRes.json?.certificateTitle === 'CERTIFICATE OF EXCELLENCE');
+    test('E2E Winner: Badge contains ★ EVENT WINNER ★', winnerVerifyRes.json?.badgeText?.includes('EVENT WINNER'));
+
+    const winnerSvgRes = await request(`/api/certificate/download/${encodeURIComponent(regA3)}?token=${encodeURIComponent(tokenA3)}&event=${encodeURIComponent(testEventA)}`);
+    test('E2E Winner: SVG download responds with HTTP 200', winnerSvgRes.status === 200);
+    test('E2E Winner: SVG body contains Vikram Malhotra', winnerSvgRes.body?.includes('Vikram Malhotra'));
+    test('E2E Winner: SVG body contains WINNER credential', winnerSvgRes.body?.includes('WINNER') || winnerSvgRes.body?.includes('EXCELLENCE'));
+
+    // 6. Security & Negative Paths in the Email Flow
+    // Case A: Event mismatch when clicking link for Event B
+    const mismatchRes = await request('/api/certificate/verify', {
+      method: 'POST',
+      body: {
+        registrationId: regA1,
+        token: linkToken,
+        eventId: 'wrong-event-slug'
+      }
+    });
+    test('E2E Negative: Event mismatch is rejected with HTTP 400', mismatchRes.status === 400);
+
+    // Case B: Tampered token is rejected
+    const tamperedRes = await request('/api/certificate/verify', {
+      method: 'POST',
+      body: {
+        registrationId: regA1,
+        token: 'tampered_invalid_token',
+        eventId: testEventA
+      }
+    });
+    test('E2E Negative: Tampered token is rejected with HTTP 403', tamperedRes.status === 403);
+
     // Clean up test data
     await db.run('DELETE FROM events WHERE slug IN (?, ?)', [testEventA, testEventB]);
     await db.run('DELETE FROM registrations WHERE registration_id IN (?, ?, ?, ?)', [regA1, regA2, regA3, regB1]);

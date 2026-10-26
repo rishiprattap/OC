@@ -1816,7 +1816,7 @@ router.get('/emails/certificate/recipients', async (req, res) => {
     const rows = await all(sql, params);
 
     const recipients = rows.map(reg => {
-      const readiness = isCertificateReady(reg, event);
+      const readiness = isCertificateReady(reg, event, { requireEmail: true });
       const isWinner = isRecordWinner(reg);
       const token = generateCertificateAccessToken(reg, event.slug);
       const collectionUrl = `${baseUrl}/certificate?regId=${encodeURIComponent(reg.registration_id)}&event=${encodeURIComponent(event.slug)}&token=${token}`;
@@ -1999,7 +1999,7 @@ router.post('/emails/certificate/send', async (req, res) => {
         }
 
         // Verify participant readiness
-        const readiness = isCertificateReady(reg, event);
+        const readiness = isCertificateReady(reg, event, { requireEmail: true });
         if (!readiness.isReady) {
           results.push({
             recipient: reg.email,

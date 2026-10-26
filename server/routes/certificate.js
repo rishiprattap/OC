@@ -66,6 +66,9 @@ async function handleVerify(req, res) {
       if (record.event_id) {
         evt = await getEventBySlug(record.event_id);
       }
+      if (!evt && targetEventId) {
+        evt = await getEventBySlug(targetEventId);
+      }
       if (!evt) {
         evt = await getEventBySlug(config.EVENT.id);
       }
@@ -103,15 +106,27 @@ async function handleVerify(req, res) {
       }
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
-        `SELECT * FROM registrations WHERE registration_id = ?`,
+        `SELECT * FROM registrations WHERE upper(registration_id) = ?`,
         [cleanRegId]
       );
       if (!record) {
         return res.status(404).json({ success: false, error: 'Registration not found.' });
       }
 
+      // Event scoping check if eventId is specified
+      if (targetEventId && record.event_id && record.event_id.toLowerCase() !== targetEventId.toLowerCase()) {
+        const registeredEvt = await getEventBySlug(record.event_id);
+        const evName = registeredEvt ? (registeredEvt.title || registeredEvt.name) : record.event_id;
+        return res.status(400).json({
+          success: false,
+          error: `Registration ID "${cleanRegId}" is registered for "${evName}", not this event. Please verify on the main certificate page or the correct event page.`
+        });
+      }
+
       // Verify HMAC token against registrationId and event
-      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id);
+      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id) ||
+                         verifyCertificateAccessToken(token, record, targetEventId) ||
+                         verifyCertificateAccessToken(token, record, config.EVENT.id);
       if (!tokenValid) {
         return res.status(403).json({
           success: false,
@@ -246,9 +261,13 @@ async function handleDownload(req, res) {
     const record = await get(`SELECT * FROM registrations WHERE upper(registration_id) = ?`, [regId]);
     if (!record) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
+    const targetEventId = req.query.eventId || req.query.event;
     let evt = null;
     if (record.event_id) {
       evt = await getEventBySlug(record.event_id);
+    }
+    if (!evt && targetEventId) {
+      evt = await getEventBySlug(targetEventId);
     }
     if (!evt) {
       evt = await getEventBySlug(config.EVENT.id);
@@ -257,7 +276,9 @@ async function handleDownload(req, res) {
     // Verify token if supplied
     const token = (req.query.token || '').trim();
     if (token) {
-      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id);
+      const tokenValid = verifyCertificateAccessToken(token, record, record.event_id) ||
+                         verifyCertificateAccessToken(token, record, targetEventId) ||
+                         verifyCertificateAccessToken(token, record, evt ? evt.slug : config.EVENT.id);
       if (!tokenValid) {
         return res.status(403).json({
           success: false,

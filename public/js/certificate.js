@@ -937,36 +937,69 @@
   // Action Handlers: PNG Export, PDF Export, SVG Export, Print
   // ─────────────────────────────────────────────────────────────────────────────
 
-  // PNG Download
+  // Helper: Trigger file download via temporary anchor element (reliable on PC & Mobile)
+  function triggerDownload(url, filename, isBlob = false) {
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.download = filename;
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      if (document.body.contains(a)) {
+        document.body.removeChild(a);
+      }
+      if (isBlob) {
+        URL.revokeObjectURL(url);
+      }
+    }, 1500);
+  }
+
+  // PNG Download (High-Res 1600x1131, Blob-optimized for Mobile & Desktop)
   pngBtn.addEventListener('click', () => {
     if (typeof window.trackEvent === 'function') {
       window.trackEvent('certificate_downloaded', { format: 'png' });
     }
-    const a = document.createElement('a');
     const cleanFileName = (currentCertData.verifiedName || 'Participant').replace(/[^a-z0-9]+/gi, '-');
-    a.download = `Offstage-Creators-Certificate-${cleanFileName}.png`;
-    a.href = canvas.toDataURL('image/png');
-    a.click();
+    const filename = `Offstage-Creators-Certificate-${cleanFileName}.png`;
+
+    if (typeof canvas.toBlob === 'function') {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          triggerDownload(canvas.toDataURL('image/png'), filename, false);
+          return;
+        }
+        const blobUrl = URL.createObjectURL(blob);
+        triggerDownload(blobUrl, filename, true);
+      }, 'image/png');
+    } else {
+      triggerDownload(canvas.toDataURL('image/png'), filename, false);
+    }
   });
 
   // PDF Download (jsPDF)
   pdfBtn.addEventListener('click', () => {
-    if (!window.jspdf) {
-      alert('PDF generation requires internet connectivity. You can download the PNG version directly.');
+    const jsPDFClass = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (!jsPDFClass) {
+      alert('PDF generation library is loading. You can download the high-resolution PNG version directly in the meantime.');
       return;
     }
     if (typeof window.trackEvent === 'function') {
       window.trackEvent('certificate_downloaded', { format: 'pdf' });
     }
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-      orientation: 'landscape',
-      unit: 'px',
-      format: [1600, 1131]
-    });
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 1600, 1131, undefined, 'FAST');
-    const cleanFileName = (currentCertData.verifiedName || 'Participant').replace(/[^a-z0-9]+/gi, '-');
-    pdf.save(`Offstage-Creators-Certificate-${cleanFileName}.pdf`);
+    try {
+      const pdf = new jsPDFClass({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [1600, 1131]
+      });
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 1600, 1131, undefined, 'FAST');
+      const cleanFileName = (currentCertData.verifiedName || 'Participant').replace(/[^a-z0-9]+/gi, '-');
+      pdf.save(`Offstage-Creators-Certificate-${cleanFileName}.pdf`);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      alert('Unable to generate PDF directly. Please use the high-resolution PNG download or Print option.');
+    }
   });
 
   // Vector SVG Download
@@ -978,10 +1011,17 @@
       if (typeof window.trackEvent === 'function') {
         window.trackEvent('certificate_downloaded', { format: 'svg' });
       }
-      const token = urlParams.get('token');
+      const token = urlParams.get('token') || tokenParam;
       let url = `/api/certificate/download/${encodeURIComponent(regId)}`;
-      if (token) url += `?token=${encodeURIComponent(token)}`;
-      window.location.href = url;
+      const qParams = new URLSearchParams();
+      if (token) qParams.set('token', token);
+      if (targetCertSlug) qParams.set('event', targetCertSlug);
+      const queryStr = qParams.toString();
+      if (queryStr) url += `?${queryStr}`;
+
+      const cleanFileName = (currentCertData.verifiedName || 'Participant').replace(/[^a-z0-9]+/gi, '-');
+      const filename = `Offstage-Creators-Certificate-${encodeURIComponent(regId)}-${cleanFileName}.svg`;
+      triggerDownload(url, filename, false);
     });
   }
 
@@ -989,6 +1029,15 @@
   if (printBtn) {
     printBtn.addEventListener('click', () => {
       window.print();
+    });
+  }
+
+  // Re-render once web fonts are fully ready (ensures Cinzel, Pinyon Script & Cormorant Garamond are applied on mobile)
+  if (document.fonts && typeof document.fonts.ready?.then === 'function') {
+    document.fonts.ready.then(() => {
+      if (previewBox.classList.contains('show') && currentCertData.verifiedName) {
+        drawCertificate(currentCertData);
+      }
     });
   }
 
