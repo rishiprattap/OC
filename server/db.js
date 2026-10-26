@@ -271,7 +271,15 @@ function loadLocalStore() {
           receipt_template_url: '',
           ...e
         })),
-        registrations: (parsed.registrations && parsed.registrations.length > 0 ? parsed.registrations : defaultStore.registrations).map(r => ({
+        registrations: (() => {
+          const list = Array.isArray(parsed.registrations) ? [...parsed.registrations] : [];
+          for (const defReg of defaultStore.registrations) {
+            if (!list.some(r => String(r.registration_id).toUpperCase() === String(defReg.registration_id).toUpperCase())) {
+              list.push(defReg);
+            }
+          }
+          return list;
+        })().map(r => ({
           promo_code: null,
           referrer_name: null,
           original_fee: r.amount || 79,
@@ -1601,7 +1609,7 @@ function handleLocalGet(sql, params = []) {
         String(r.registration_id).trim().toUpperCase() !== cleanRegId
       ) || null;
     }
-    if (sqlLower.includes('registration_id = ?') || sqlLower.includes('registration_id =')) {
+    if (sqlLower.includes('registration_id') && sqlLower.includes('=')) {
       const targetId = String(params[0] || '').trim().toUpperCase();
       return localStore.registrations.find(r => String(r.registration_id).toUpperCase() === targetId) || null;
     }
@@ -1636,7 +1644,7 @@ function handleLocalGet(sql, params = []) {
 
       return matches.sort((a, b) => b.id - a.id)[0] || null;
     }
-    return localStore.registrations[0] || null;
+    return null;
   }
 
   // Legacy Certificates

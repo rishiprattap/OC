@@ -127,11 +127,21 @@ async function handleVerify(req, res) {
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
-        `SELECT * FROM registrations WHERE registration_id = ?`,
+        `SELECT * FROM registrations WHERE upper(registration_id) = ?`,
         [cleanRegId]
       );
 
       if (record) {
+        // Event scoping check: If user requested verification for a specific event
+        if (targetEventId && record.event_id && record.event_id.toLowerCase() !== targetEventId.toLowerCase()) {
+          const registeredEvt = await getEventBySlug(record.event_id);
+          const evName = registeredEvt ? (registeredEvt.title || registeredEvt.name) : record.event_id;
+          return res.status(400).json({
+            success: false,
+            error: `Registration ID "${cleanRegId}" is registered for "${evName}", not this event. Please verify on the main certificate page or the correct event page.`
+          });
+        }
+
         // If phone is provided, verify match
         if (phone && normalizePhone(phone).length >= 8) {
           const cleanInputPhone = normalizePhone(phone);
@@ -145,6 +155,12 @@ async function handleVerify(req, res) {
         }
         const resp = await buildCertResponse(record, false);
         return res.status(resp.status).json(resp.data);
+      } else {
+        // Registration ID was supplied but no record exists
+        return res.status(404).json({
+          success: false,
+          error: `No certificate found for Registration ID "${cleanRegId}". Please verify your Registration ID from your confirmation email or ticket and try again.`
+        });
       }
     }
 
@@ -224,10 +240,10 @@ async function handleVerify(req, res) {
 // Direct Certificate SVG / Download Endpoint
 async function handleDownload(req, res) {
   try {
-    const regId = (req.params.id || req.query.id || '').trim().toUpperCase();
+    const regId = (req.params.id || req.query.id || req.query.regId || '').trim().toUpperCase();
     if (!regId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
 
-    const record = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const record = await get(`SELECT * FROM registrations WHERE upper(registration_id) = ?`, [regId]);
     if (!record) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     let evt = null;

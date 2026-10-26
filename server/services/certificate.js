@@ -520,7 +520,7 @@ function verifyCertificateAccessToken(token, record, eventId) {
  * 4. Participant must have checked-in (checked_in = 1), be marked eligible (certificate_eligible = 1), or be an event winner
  * 5. Participant must have a valid email address
  */
-function isCertificateReady(record, event) {
+function isCertificateReady(record, event, { requireEmail = false } = {}) {
   if (!record) {
     return { isReady: false, reason: 'Registration record not found' };
   }
@@ -565,8 +565,8 @@ function isCertificateReady(record, event) {
     };
   }
 
-  // 4. Contact check (email present)
-  if (!record.email || !normalizeText(record.email)) {
+  // 4. Contact check (email present when email dispatch is required)
+  if (requireEmail && (!record.email || !normalizeText(record.email))) {
     return {
       isReady: false,
       reason: 'Missing recipient email address.'

@@ -243,43 +243,37 @@
       <span class="kicker orange" id="certKicker">OFFICIAL CREDENTIAL</span>
       <h1>Participation<br><em>Certificate</em></h1>
       <p id="certSubtitle">
-        Certificates are available for verified participants. Enter your registered name and WhatsApp number or Registration ID.
+        Certificates are available for verified participants. Enter your Registration ID to find and download your official credential.
       </p>
     </div>
 
     <section class="verify-box">
       <div class="verify-note">
         🔒 <b>Live Participant Verification</b><br>
-        Your credentials are securely verified against the database. Phone numbers and sensitive information are never displayed publicly.
-      </div>
-
-      <div class="cert-tab-bar">
-        <button type="button" class="cert-tab active" id="tabNamePhone">Name &amp; Phone</button>
-        <button type="button" class="cert-tab" id="tabRegId">Registration ID</button>
+        Your credentials are securely verified against our database. Enter your Registration ID (found in your confirmation email or ticket) to view and download your official certificate.
       </div>
 
       <form id="certForm">
-        <div id="groupNamePhone">
-          <div class="form-group" style="margin-bottom: 16px;">
-            <label for="certName">FULL NAME (AS REGISTERED)</label>
-            <input type="text" id="certName" class="form-control" placeholder="Enter your registered full name">
-          </div>
-
-          <div class="form-group" style="margin-bottom: 20px;">
-            <label for="certPhone">WHATSAPP / PHONE NUMBER</label>
-            <input type="tel" id="certPhone" class="form-control" placeholder="Enter your registered 10-digit number">
-          </div>
-        </div>
-
-        <div id="groupRegId" style="display: none; margin-bottom: 20px;">
-          <div class="form-group">
-            <label for="certRegId">REGISTRATION ID</label>
-            <input type="text" id="certRegId" class="form-control" placeholder="e.g. OC-OM-4892">
-          </div>
+        <div class="form-group" style="margin-bottom: 22px;">
+          <label for="certRegId">REGISTRATION ID</label>
+          <input
+            type="text"
+            id="certRegId"
+            name="registrationId"
+            class="form-control"
+            placeholder="e.g. OC-OM-4892"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            required
+          >
+          <small style="display: block; margin-top: 8px; color: #8e8477; font-size: 12px; line-height: 1.5;">
+            Enter the unique Registration ID from your ticket confirmation email or WhatsApp message.
+          </small>
         </div>
 
         <button type="submit" class="cta" id="verifyBtn" style="width: 100%;">
-          ✓ &nbsp; VERIFY &amp; GENERATE CERTIFICATE
+          ✓ &nbsp; FIND &amp; GENERATE CERTIFICATE
         </button>
 
         <div class="alert-box alert-error" id="certError" style="margin-top: 18px;"></div>
@@ -352,7 +346,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <!-- QRCode.js client fallback -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="/js/certificate.js?v=2.0.0"></script>
+  <script src="/js/certificate.js?v=2.1.0"></script>
   <script>
     (function () {
       const toggleBtn = document.getElementById('mobileToggle');

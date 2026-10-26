@@ -2,12 +2,8 @@
 (function () {
   'use strict';
 
-  const tabNamePhone = document.getElementById('tabNamePhone');
-  const tabRegId = document.getElementById('tabRegId');
-  const groupNamePhone = document.getElementById('groupNamePhone');
-  const groupRegId = document.getElementById('groupRegId');
-
   const form = document.getElementById('certForm');
+  const certRegInput = document.getElementById('certRegId');
   const verifyBtn = document.getElementById('verifyBtn');
   const certError = document.getElementById('certError');
   const certSuccess = document.getElementById('certSuccess');
@@ -21,6 +17,15 @@
   const pngBtn = document.getElementById('pngBtn');
   const pdfBtn = document.getElementById('pdfBtn');
 
+  // URL Context & Event Detection
+  const urlParams = new URLSearchParams(window.location.search);
+  const regIdParam = urlParams.get('regId') || urlParams.get('id');
+  const tokenParam = urlParams.get('token');
+  const eventParam = urlParams.get('event');
+
+  const eventSlugMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
+  const targetCertSlug = eventSlugMatch ? eventSlugMatch[1] : (eventParam || null);
+
   // Active verified certificate state
   let currentCertData = {
     verifiedName: '',
@@ -31,28 +36,23 @@
     performanceTitle: null,
     date: '23 September 2026',
     verificationUrl: '',
-    qrCode: null
+    qrCode: null,
+    isWinner: false,
+    position: 'Participant',
+    achievement: null,
+    badgeText: null,
+    citation: null,
+    certificateTitle: null,
+    signatory1Name: null,
+    signatory1Title: null,
+    signatory2Name: null,
+    signatory2Title: null
   };
 
   // Track page view
   if (typeof window.trackEvent === 'function') {
     window.trackEvent('certificate_page_viewed');
   }
-
-  // Tab switching
-  tabNamePhone.addEventListener('click', () => {
-    tabNamePhone.classList.add('active');
-    tabRegId.classList.remove('active');
-    groupNamePhone.style.display = 'block';
-    groupRegId.style.display = 'none';
-  });
-
-  tabRegId.addEventListener('click', () => {
-    tabRegId.classList.add('active');
-    tabNamePhone.classList.remove('active');
-    groupNamePhone.style.display = 'none';
-    groupRegId.style.display = 'block';
-  });
 
   function showError(msg) {
     certError.textContent = msg;
@@ -61,7 +61,7 @@
     previewBox.classList.remove('show');
     downloadsBar.classList.remove('show');
     verifyBtn.disabled = false;
-    verifyBtn.textContent = '✓  VERIFY & GENERATE CERTIFICATE';
+    verifyBtn.textContent = '✓  FIND & GENERATE CERTIFICATE';
   }
 
   function showSuccess(msg) {
@@ -69,7 +69,7 @@
     certSuccess.classList.add('show');
     certError.classList.remove('show');
     verifyBtn.disabled = false;
-    verifyBtn.textContent = '✓  VERIFY & GENERATE CERTIFICATE';
+    verifyBtn.textContent = '✓  FIND & GENERATE CERTIFICATE';
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -243,9 +243,30 @@
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Main Rendering Engine: Draw High-Resolution Professional Certificate
-  // ─────────────────────────────────────────────────────────────────────────────
   function drawCertificate(certData) {
-    currentCertData = Object.assign({}, currentCertData, certData);
+    currentCertData = Object.assign({
+      verifiedName: '',
+      fullName: '',
+      certificateId: '',
+      registrationId: '',
+      eventId: '',
+      event: 'ONLINE OPEN MIC 2026',
+      category: 'Performer',
+      performanceTitle: null,
+      date: '23 September 2026',
+      verificationUrl: '',
+      qrCode: null,
+      isWinner: false,
+      position: 'Participant',
+      achievement: null,
+      badgeText: null,
+      citation: null,
+      certificateTitle: null,
+      signatory1Name: null,
+      signatory1Title: null,
+      signatory2Name: null,
+      signatory2Title: null
+    }, certData);
 
     const name = currentCertData.verifiedName || 'Participant';
     const eventTitle = currentCertData.event || 'ONLINE OPEN MIC 2026';
@@ -467,11 +488,7 @@
         ctx.restore();
       }
 
-      const isWinner = Boolean(
-        currentCertData.isWinner ||
-        (currentCertData.position && currentCertData.position.toUpperCase() === 'WINNER') ||
-        (currentCertData.registrationId === 'OC-OM-2440F923' && (currentCertData.eventId === 'online-open-mic-2026' || !currentCertData.eventId))
-      );
+      const isWinner = Boolean(currentCertData.isWinner);
 
       // Brand Title
       ctx.fillStyle = '#1c1712';
@@ -838,11 +855,7 @@
           window.trackEvent('certificate_verification_success');
         }
 
-        const isWinner = Boolean(
-          data.isWinner ||
-          (data.position && data.position.toUpperCase() === 'WINNER') ||
-          (data.registrationId === 'OC-OM-2440F923' && (data.eventId === 'online-open-mic-2026' || !data.eventId))
-        );
+        const isWinner = Boolean(data.isWinner);
 
         if (data.authenticated) {
           if (isWinner) {
@@ -859,6 +872,7 @@
         // Render the new premium certificate design with all dynamic metadata
         drawCertificate({
           verifiedName: data.verifiedName,
+          fullName: data.fullName || data.verifiedName,
           event: data.event,
           certificateId: data.certificateId || data.registrationId,
           registrationId: data.registrationId,
@@ -870,10 +884,10 @@
           qrCode: data.qrCode,
           isWinner: isWinner,
           position: data.position || (isWinner ? 'WINNER' : 'Participant'),
-          achievement: data.achievement,
-          badgeText: data.badgeText,
-          citation: data.citation,
-          certificateTitle: data.certificateTitle,
+          achievement: data.achievement || null,
+          badgeText: data.badgeText || null,
+          citation: data.citation || null,
+          certificateTitle: data.certificateTitle || null,
           signatory1Name: data.signatory1Name,
           signatory1Title: data.signatory1Title,
           signatory2Name: data.signatory2Name,
@@ -884,7 +898,7 @@
         downloadsBar.classList.add('show');
         previewBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
       } else {
-        showError(data.error || 'We could not verify a confirmed participant registration with those details.');
+        showError(data.error || 'We could not verify a confirmed participant registration with that Registration ID.');
       }
 
     } catch (err) {
@@ -893,29 +907,27 @@
     }
   }
 
-  // Form submission: call backend API
+  // Form submission: call backend API with Registration ID
   form.addEventListener('submit', (e) => {
     e.preventDefault();
 
-    const isRegTab = tabRegId.classList.contains('active');
-    const nameVal = document.getElementById('certName').value.trim();
-    const phoneVal = document.getElementById('certPhone').value.trim();
-    const regIdVal = document.getElementById('certRegId').value.trim();
+    const regInput = document.getElementById('certRegId');
+    const regIdVal = (regInput ? regInput.value : '').trim().toUpperCase();
 
-    const payload = {};
-    if (isRegTab) {
-      if (!regIdVal) {
-        showError('Please enter your Registration ID.');
-        return;
-      }
-      payload.registrationId = regIdVal;
-    } else {
-      if (nameVal.length < 2 || phoneVal.length < 8) {
-        showError('Please enter the full registered name and phone number.');
-        return;
-      }
-      payload.name = nameVal;
-      payload.phone = phoneVal;
+    if (!regIdVal) {
+      showError('Please enter your Registration ID.');
+      return;
+    }
+
+    const payload = {
+      registrationId: regIdVal
+    };
+
+    if (tokenParam && tokenParam.trim()) {
+      payload.token = tokenParam.trim();
+    }
+    if (targetCertSlug && targetCertSlug.trim()) {
+      payload.eventId = targetCertSlug.trim();
     }
 
     performVerification(payload);
@@ -983,30 +995,20 @@
   // ─────────────────────────────────────────────────────────────────────────────
   // Auto-Verification via URL Parameters & Event Context Detection
   // ─────────────────────────────────────────────────────────────────────────────
-  const urlParams = new URLSearchParams(window.location.search);
-  const regIdParam = urlParams.get('regId') || urlParams.get('id');
-  const tokenParam = urlParams.get('token');
-  const eventQueryParam = urlParams.get('event');
-
   if (regIdParam && regIdParam.trim()) {
-    tabRegId.click();
     const regInput = document.getElementById('certRegId');
     if (regInput) {
-      regInput.value = regIdParam.trim();
+      regInput.value = regIdParam.trim().toUpperCase();
     }
-    const payload = { registrationId: regIdParam.trim() };
+    const payload = { registrationId: regIdParam.trim().toUpperCase() };
     if (tokenParam && tokenParam.trim()) {
       payload.token = tokenParam.trim();
     }
-    if (eventQueryParam && eventQueryParam.trim()) {
-      payload.eventId = eventQueryParam.trim();
+    if (targetCertSlug && targetCertSlug.trim()) {
+      payload.eventId = targetCertSlug.trim();
     }
     performVerification(payload);
   }
-
-  const eventSlugMatch = window.location.pathname.match(/\/event\/([^\/]+)/);
-  const eventQueryParam = urlParams.get('event');
-  const targetCertSlug = eventSlugMatch ? eventSlugMatch[1] : (eventQueryParam || null);
 
   if (targetCertSlug) {
     fetch('/api/events/' + encodeURIComponent(targetCertSlug))
