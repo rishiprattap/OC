@@ -1792,7 +1792,19 @@
                 + Add by Image URL
               </button>
             </div>
-            <div class="auth-error" id="galleryUploadError" style="margin-top:10px; text-align:left;"></div>
+
+            <!-- Upload Progress Bar -->
+            <div class="upload-progress-wrap" id="galleryUploadProgressWrap" style="display:none; margin-top:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:4px;">
+                <span id="galleryUploadProgressLabel" style="color:#e4ad57; font-weight:700;">Uploading photos…</span>
+                <span id="galleryUploadProgressPct" style="color:#f7eee1; font-weight:700;">0%</span>
+              </div>
+              <div class="upload-progress-bar-bg">
+                <div class="upload-progress-bar-fill" id="galleryUploadProgressBar"></div>
+              </div>
+            </div>
+
+            <div class="auth-error" id="galleryUploadError" style="margin-top:10px; text-align:left; display:none;"></div>
             <div style="color:#6edb8c; font-size:13px; margin-top:10px; display:none;" id="galleryUploadSuccess"></div>
           </form>
         </div>
@@ -2744,6 +2756,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
-  <script src="/js/admin.js"></script>
+  <script src="/js/admin.js?v=2.0.2"></script>
 </body>
 </html>

@@ -278,9 +278,21 @@ router.get('/', (req, res, next) => {
   return handlePublicList(req, res);
 });
 
+function uploadGalleryMiddleware(req, res, next) {
+  upload.any()(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, error: 'File size exceeds 10MB limit.' });
+      }
+      return res.status(400).json({ success: false, error: err.message || 'Image upload failed.' });
+    }
+    next();
+  });
+}
+
 router.get(['/admin', '/admin/list', '/list'], requireAdmin, handleAdminList);
 router.get(['/event/:eventId'], handlePublicList);
-router.post(['/upload', '/admin/upload'], requireAdmin, upload.array('images', 20), handleUpload);
+router.post(['/upload', '/admin/upload'], requireAdmin, uploadGalleryMiddleware, handleUpload);
 router.put(['/:id', '/admin/:id'], requireAdmin, handleUpdate);
 router.delete(['/:id', '/admin/:id'], requireAdmin, handleDelete);
 router.post(['/reorder', '/admin/reorder'], requireAdmin, handleReorder);

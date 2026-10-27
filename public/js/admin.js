@@ -2389,53 +2389,134 @@
   if (galleryUploadForm) {
     galleryUploadForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (galleryUploadError) galleryUploadError.textContent = '';
-      if (galleryUploadSuccess) { galleryUploadSuccess.style.display = 'none'; galleryUploadSuccess.textContent = ''; }
+      if (galleryUploadError) {
+        galleryUploadError.textContent = '';
+        galleryUploadError.style.display = 'none';
+      }
+      if (galleryUploadSuccess) {
+        galleryUploadSuccess.style.display = 'none';
+        galleryUploadSuccess.textContent = '';
+      }
 
       if (stagedGalleryFiles.length === 0) {
-        if (galleryUploadError) galleryUploadError.textContent = 'Please select at least one photo to upload.';
+        if (galleryUploadError) {
+          galleryUploadError.textContent = 'Please select at least one photo to upload.';
+          galleryUploadError.style.display = 'block';
+        }
         return;
       }
 
+      const totalFiles = stagedGalleryFiles.length;
+      const progressWrap = document.getElementById('galleryUploadProgressWrap');
+      const progressBar = document.getElementById('galleryUploadProgressBar');
+      const progressLabel = document.getElementById('galleryUploadProgressLabel');
+      const progressPct = document.getElementById('galleryUploadProgressPct');
+
       if (btnUploadGallery) {
         btnUploadGallery.disabled = true;
-        btnUploadGallery.textContent = `Uploading ${stagedGalleryFiles.length} photo(s)…`;
+        btnUploadGallery.textContent = `Uploading 1 of ${totalFiles}…`;
       }
+      if (progressWrap) progressWrap.style.display = 'block';
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressPct) progressPct.textContent = '0%';
+      if (progressLabel) progressLabel.textContent = `Preparing ${totalFiles} photo(s)…`;
+
+      const caption = document.getElementById('adminGalleryCaptionInput')?.value.trim() || '';
+      const galleryEvtId = document.getElementById('adminGalleryUploadEvent')?.value || activeAdminEventId;
+
+      let successCount = 0;
+      const failed = [];
+      const successfullyUploaded = [];
 
       try {
-        const formData = new FormData();
-        stagedGalleryFiles.forEach(file => {
-          formData.append('images', file);
-        });
-        const caption = document.getElementById('adminGalleryCaptionInput')?.value.trim() || '';
-        if (caption) formData.append('caption', caption);
-        const galleryEvtId = document.getElementById('adminGalleryUploadEvent')?.value || activeAdminEventId;
-        if (galleryEvtId) formData.append('eventId', galleryEvtId);
+        // Upload photos individually to prevent HTTP 413 (Vercel payload limits) & show real-time progress
+        for (let i = 0; i < totalFiles; i++) {
+          const file = stagedGalleryFiles[i];
+          const fileNum = i + 1;
+          const currentPct = Math.round((i / totalFiles) * 100);
 
-        const res = await adminFetch('/api/admin/gallery/upload', {
-          method: 'POST',
-          body: formData
-        });
+          if (btnUploadGallery) {
+            btnUploadGallery.textContent = `Uploading ${fileNum} of ${totalFiles}… (${currentPct}%)`;
+          }
+          if (progressLabel) {
+            progressLabel.textContent = `Optimizing & uploading photo ${fileNum} of ${totalFiles} (${file.name})…`;
+          }
+          if (progressBar) progressBar.style.width = `${currentPct}%`;
+          if (progressPct) progressPct.textContent = `${currentPct}%`;
 
-        const data = await res.json();
+          try {
+            // Compress image client-side to prevent HTTP 413 & accelerate uploads
+            let processedFile = file;
+            if (typeof compressImageFile === 'function') {
+              processedFile = await compressImageFile(file, { maxWidth: 1920, maxHeight: 1920, quality: 0.82 });
+            }
 
-        if (res.ok && data.success) {
+            const formData = new FormData();
+            formData.append('images', processedFile);
+            if (caption) formData.append('caption', caption);
+            if (galleryEvtId) formData.append('eventId', galleryEvtId);
+
+            const res = await adminFetch('/api/admin/gallery/upload', {
+              method: 'POST',
+              body: formData
+            });
+
+            const { ok, status, data, raw } = await safeJson(res);
+
+            if (ok && data && data.success) {
+              successCount++;
+              successfullyUploaded.push(file);
+            } else {
+              let errMsg = data?.error;
+              if (!errMsg) {
+                if (status === 413) errMsg = 'File exceeded server payload limit';
+                else if (status === 401) errMsg = 'Unauthorized (session expired)';
+                else errMsg = raw || `HTTP ${status}`;
+              }
+              failed.push({ name: file.name, error: errMsg });
+            }
+          } catch (itemErr) {
+            failed.push({ name: file.name, error: itemErr.message || 'Network error' });
+          }
+
+          const finishStepPct = Math.round((fileNum / totalFiles) * 100);
+          if (progressBar) progressBar.style.width = `${finishStepPct}%`;
+          if (progressPct) progressPct.textContent = `${finishStepPct}%`;
+        }
+
+        // Remove successfully uploaded files from staged list
+        stagedGalleryFiles = stagedGalleryFiles.filter(f => !successfullyUploaded.includes(f));
+        renderStagedThumbnails();
+
+        if (successCount > 0) {
           if (galleryUploadSuccess) {
-            galleryUploadSuccess.textContent = `✓ ${data.message || 'Photos uploaded successfully and published to Event Gallery!'}`;
+            galleryUploadSuccess.textContent = `✓ Successfully uploaded ${successCount} photo${successCount > 1 ? 's' : ''} to Event Gallery!`;
             galleryUploadSuccess.style.display = 'block';
           }
-          clearSelectedGalleryFiles();
-          if (document.getElementById('adminGalleryCaptionInput')) {
+          if (stagedGalleryFiles.length === 0 && document.getElementById('adminGalleryCaptionInput')) {
             document.getElementById('adminGalleryCaptionInput').value = '';
           }
           await loadAdminGallery();
-        } else {
-          if (galleryUploadError) galleryUploadError.textContent = data.error || 'Failed to upload photos.';
+        }
+
+        if (failed.length > 0) {
+          const detail = failed.slice(0, 3).map(f => `${f.name}: ${f.error}`).join('; ');
+          const more = failed.length > 3 ? ` (+${failed.length - 3} more)` : '';
+          if (galleryUploadError) {
+            galleryUploadError.textContent = `⚠️ ${failed.length} photo(s) failed: ${detail}${more}. Remaining photos stay selected so you can retry.`;
+            galleryUploadError.style.display = 'block';
+          }
         }
       } catch (err) {
         console.error('[Admin Gallery Upload Error]:', err);
-        if (galleryUploadError) galleryUploadError.textContent = 'Upload failed: ' + err.message;
+        if (galleryUploadError) {
+          galleryUploadError.textContent = 'Upload failed: ' + err.message;
+          galleryUploadError.style.display = 'block';
+        }
       } finally {
+        if (progressWrap) {
+          setTimeout(() => { progressWrap.style.display = 'none'; }, 2500);
+        }
         if (btnUploadGallery) {
           btnUploadGallery.disabled = false;
           btnUploadGallery.textContent = '✓ Upload Selected Photos';
@@ -2458,12 +2539,12 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url.trim(), caption: caption.trim(), eventId: galleryEvtId || undefined })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const { ok, data } = await safeJson(res);
+      if (ok && data && data.success) {
         alert('✓ Image added to gallery successfully!');
         await loadAdminGallery();
       } else {
-        alert('Failed to add image: ' + (data.error || 'Unknown error'));
+        alert('Failed to add image: ' + (data?.error || 'Unknown error'));
       }
     } catch (err) {
       alert('Network error: ' + err.message);
@@ -2483,8 +2564,8 @@
       const res = await adminFetch(url);
       if (res.status === 401) { showLoginOverlay(); return; }
 
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.images)) {
+      const { ok, data } = await safeJson(res);
+      if (ok && data && data.success && Array.isArray(data.images)) {
         adminGalleryList = data.images;
 
         // Update counts
