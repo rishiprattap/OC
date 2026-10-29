@@ -1,0 +1,52 @@
+name: Build testing Android APK
+
+# Manual only: no push, pull-request, deployment or store publication trigger.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install mobile dependencies
+        run: npm ci
+      - name: Check types
+        run: npm run typecheck
+      - name: Run mobile policy and build tests
+        run: npm test
+      - name: Install existing backend test dependencies
+        working-directory: .
+        run: npm ci --ignore-scripts
+      - name: Test isolated public backend workflows
+        run: npm run test:backend
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+      - name: Build standalone testing APK (debug signing key)
+        working-directory: mobile/android
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_API_URL: https://offstagecreators.in
+        run: bash gradlew :app:assembleRelease -PreactNativeArchitectures=arm64-v8a,x86_64 --no-daemon --max-workers=2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offstage-creators-testing-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
