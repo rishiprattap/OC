@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "git": { "deploymentEnabled": { "feat/offstage-android": false } },
   "cleanUrls": true,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },

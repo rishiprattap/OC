@@ -4,3 +4,4 @@ uploads/
 tests/
 .env*
 node_modules/
+mobile/
