@@ -281,7 +281,7 @@
     if (!container) return;
 
     try {
-      const url = eventId ? `/api/gallery?eventId=${encodeURIComponent(eventId)}` : '/api/gallery';
+      const url = eventId ? `/api/gallery?eventId=${encodeURIComponent(eventId)}&limit=4` : '/api/gallery?limit=4';
       const res = await fetch(url);
       const data = await res.json();
 

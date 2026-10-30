@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Admin Events Management Routes
  * Handles creating, updating, duplicating, activating, and deleting events.
@@ -172,9 +173,15 @@ router.get('/', async (req, res) => {
   try {
     const events = await all(`SELECT * FROM events ORDER BY is_active DESC, id DESC`);
     
+    const countRows = require('../db').pool ? await all(`SELECT event_id, COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE reg_status = 'PENDING_VERIFICATION') AS pending,
+      COUNT(*) FILTER (WHERE reg_status = 'APPROVED') AS approved FROM registrations GROUP BY event_id`) : null;
+    const counts = new Map((countRows || []).map(r => [r.event_id, r]));
     // Attach registration counts for each event
     const results = await Promise.all(events.map(async (evt) => {
-      const [totalReg, pendingReg, approvedReg] = await Promise.all([
+      const [totalReg, pendingReg, approvedReg] = countRows ? [
+        { c: Number(counts.get(evt.slug)?.total || 0) }, { c: Number(counts.get(evt.slug)?.pending || 0) }, { c: Number(counts.get(evt.slug)?.approved || 0) }
+      ] : await Promise.all([
         get(`SELECT COUNT(*) as c FROM registrations WHERE event_id = ?`, [evt.slug]),
         get(`SELECT COUNT(*) as c FROM registrations WHERE event_id = ? AND reg_status = 'PENDING_VERIFICATION'`, [evt.slug]),
         get(`SELECT COUNT(*) as c FROM registrations WHERE event_id = ? AND reg_status = 'APPROVED'`, [evt.slug])
@@ -336,7 +343,7 @@ router.get('/:slug/gallery', async (req, res) => {
   try {
     const slug = req.params.slug;
     const rows = await all(
-      `SELECT * FROM gallery_images WHERE event_id = ? ORDER BY display_order ASC, id DESC`,
+      `SELECT ${queryColumns.gallery} FROM gallery_images WHERE event_id = ? ORDER BY display_order ASC, id DESC`,
       [slug]
     );
     const images = (rows || []).map(r => ({

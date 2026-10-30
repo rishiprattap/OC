@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Payments Routes
  * POST /api/payments/submit-proof — Submit UPI payment proof (UTR + screenshot)
@@ -72,7 +73,7 @@ router.post('/confirm-free', async (req, res) => {
     }
 
     const cleanRegId = registrationId.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [cleanRegId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [cleanRegId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     if (reg.otp_verified !== 1 || reg.reg_status === 'PENDING_VERIFICATION') {
@@ -161,7 +162,7 @@ router.post('/submit-proof', upload.single('screenshot'), async (req, res) => {
 
     const cleanRegId = registrationId.trim().toUpperCase();
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [cleanRegId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [cleanRegId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     // Enforce email verification — direct API calls cannot bypass OTP verification

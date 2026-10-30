@@ -534,18 +534,28 @@
       }
 
       // Fetch published gallery images
-      async function loadGallery() {
+      let nextGalleryOffset = 0;
+      async function loadGallery(append = false) {
         try {
           let url = '/api/gallery';
           if (currentEventSlug) {
             url += `?eventId=${encodeURIComponent(currentEventSlug)}`;
           }
+          url += (url.includes('?') ? '&' : '?') + 'limit=24&offset=' + (append ? nextGalleryOffset : 0);
           const res = await fetch(url);
           const data = await res.json();
 
           if (res.ok && data.success && Array.isArray(data.images) && data.images.length > 0) {
-            galleryImages = data.images;
+            galleryImages = append ? galleryImages.concat(data.images) : data.images;
+            nextGalleryOffset = data.nextOffset;
             renderGrid(galleryImages);
+            document.getElementById('galleryLoadMore')?.remove();
+            if (data.hasMore) {
+              const more = document.createElement('button');
+              more.id = 'galleryLoadMore'; more.className = 'btn'; more.textContent = 'Load more photos';
+              more.onclick = () => { more.disabled = true; loadGallery(true); };
+              document.querySelector('.gallery-grid').after(more);
+            }
           } else {
             renderEmptyState();
           }

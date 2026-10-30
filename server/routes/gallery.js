@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Event Gallery Routes
  * Public and Admin endpoints for managing event-specific gallery photos.
@@ -51,12 +52,14 @@ async function handlePublicList(req, res) {
       eventId = active ? active.slug : 'online-open-mic-2026';
     }
 
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 24));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const rows = await all(
-      `SELECT * FROM gallery_images WHERE is_published = 1 AND (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
-      [eventId, eventId]
+      `SELECT ${queryColumns.gallery} FROM gallery_images WHERE is_published = 1 AND (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC LIMIT ? OFFSET ?`,
+      [eventId, eventId, limit + 1, offset]
     );
 
-    const images = (rows || []).map(r => ({
+    const images = (rows || []).slice(0, limit).map(r => ({
       id: r.id,
       imageUrl: r.image_url,
       caption: r.caption || '',
@@ -70,6 +73,8 @@ async function handlePublicList(req, res) {
       success: true,
       eventId,
       count: images.length,
+      hasMore: rows.length > limit,
+      nextOffset: offset + images.length,
       images
     });
   } catch (err) {
@@ -85,12 +90,12 @@ async function handleAdminList(req, res) {
     let rows;
     if (eventId && eventId !== 'ALL') {
       rows = await all(
-        `SELECT * FROM gallery_images WHERE (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
+        `SELECT ${queryColumns.gallery} FROM gallery_images WHERE (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
         [eventId, eventId]
       );
     } else {
       rows = await all(
-        `SELECT * FROM gallery_images ORDER BY display_order ASC, id DESC`
+        `SELECT ${queryColumns.gallery} FROM gallery_images ORDER BY display_order ASC, id DESC`
       );
     }
 
@@ -201,7 +206,7 @@ async function handleUpdate(req, res) {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid image ID.' });
 
-    const existing = await get(`SELECT * FROM gallery_images WHERE id = ?`, [id]);
+    const existing = await get(`SELECT ${queryColumns.gallery} FROM gallery_images WHERE id = ?`, [id]);
     if (!existing) return res.status(404).json({ success: false, error: 'Gallery image not found.' });
 
     const caption = req.body.caption !== undefined ? req.body.caption.trim() : existing.caption;
@@ -232,7 +237,7 @@ async function handleDelete(req, res) {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid image ID.' });
 
-    const existing = await get(`SELECT * FROM gallery_images WHERE id = ?`, [id]);
+    const existing = await get(`SELECT ${queryColumns.gallery} FROM gallery_images WHERE id = ?`, [id]);
     if (!existing) return res.status(404).json({ success: false, error: 'Gallery image not found.' });
 
     await run(`DELETE FROM gallery_images WHERE id = ?`, [id]);
@@ -270,6 +275,30 @@ async function handleReorder(req, res) {
 }
 
 // ─── ROUTE REGISTRATION ───────────────────────────────────────────────────────
+// Fetch only one image when it is actually displayed. Existing inline data stays intact.
+router.get('/image/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.sendStatus(400);
+    const meta = await get('SELECT id, is_published FROM gallery_images WHERE id = ?', [id]);
+    if (!meta) return res.sendStatus(404);
+    const send = async () => {
+      try {
+        const row = await get('SELECT image_url, is_published FROM gallery_images WHERE id = ?', [id]);
+        if (!row) return res.sendStatus(404);
+        // A concurrent unpublish must not expose a formerly public image.
+        if (!Number(row.is_published) && !req.session?.adminAuthenticated) return res.sendStatus(404);
+        const match = String(row.image_url || '').match(/^data:(image\/(?:jpeg|jpg|png|webp|gif));base64,([a-zA-Z0-9+/=\s]+)$/);
+        if (!match) return res.sendStatus(404);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Cache-Control', Number(row.is_published) ? 'public, max-age=60, s-maxage=300' : 'private, no-store');
+        return res.type(match[1]).send(Buffer.from(match[2], 'base64'));
+      } catch (_) { return res.sendStatus(503); }
+    };
+    if (!Number(meta.is_published)) return requireAdmin(req, res, send);
+    return send();
+  } catch (_) { return res.sendStatus(503); }
+});
 router.get('/', (req, res, next) => {
   const isAdminPath = req.baseUrl.includes('admin') || req.path.startsWith('/admin') || req.query.admin === '1';
   if (isAdminPath) {
@@ -298,3 +327,4 @@ router.delete(['/:id', '/admin/:id'], requireAdmin, handleDelete);
 router.post(['/reorder', '/admin/reorder'], requireAdmin, handleReorder);
 
 module.exports = router;
+module.exports.handlePublicList = handlePublicList;

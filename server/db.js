@@ -9,7 +9,19 @@ const path = require('path');
 require('dotenv').config();
 
 // Create connection pool only if a real connection string is configured
-const connectionString = (process.env.POSTGRES_URL || process.env.DATABASE_URL || '').trim();
+const isPreview = process.env.VERCEL_ENV === 'preview';
+// Never inherit a production connection in a preview.
+const connectionString = (isPreview ? (process.env.PREVIEW_DATABASE_URL || '') : (process.env.POSTGRES_URL || process.env.DATABASE_URL || '')).trim();
+const hosted = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+const metrics = require('./services/dbMetrics');
+const readCache = require('./services/readCache');
+function requireDatabase() {
+  if (hosted && !connectionString) {
+    const error = new Error('Database unavailable for this environment.');
+    error.status = 503;
+    throw error;
+  }
+}
 const pool = connectionString ? new Pool({
   connectionString,
   ssl: connectionString.includes('localhost') ? false : { rejectUnauthorized: false },
@@ -19,7 +31,7 @@ const pool = connectionString ? new Pool({
 
 if (pool) {
   pool.on('error', (err) => {
-    console.warn('[DB] Client connection notice:', err.message);
+    console.warn('[DB] Connection unavailable');
   });
 }
 
@@ -158,7 +170,7 @@ const DEFAULT_EVENTS = [
 ];
 
 // ─── Local Fallback Store for Offline / Dev ────────────────────────────────────
-const localStorePath = path.join(__dirname, '..', 'data', 'local_store.json');
+const localStorePath = process.env.LOCAL_STORE_PATH || path.join(__dirname, '..', 'data', 'local_store.json');
 
 function loadLocalStore() {
   const defaultStore = {
@@ -336,28 +348,37 @@ function saveLocalStore() {
   } catch (_) {}
 }
 
+function eventMediaLinks(row) {
+  const copy = { ...row };
+  for (const key of require('./services/queryColumns').eventMedia) {
+    if (String(copy[key] || '').startsWith('data:')) copy[key] = '/api/events/' + row.id + '/media/' + key;
+  }
+  return copy;
+}
+
 // ─── Promise Wrappers ──────────────────────────────────────────────────────────
 
 const rawRun = async (sql, params = []) => {
+  requireDatabase();
   if (!pool || !connectionString) {
     return handleLocalRun(sql, params);
   }
   try {
     const pgSql = convertSql(sql);
-    const result = await pool.query(pgSql, params);
+    const result = await metrics.query(pool, pgSql, params);
     return { 
       lastID: result.rows.length ? result.rows[0].id : null, 
       changes: result.rowCount 
     };
   } catch (err) {
-    console.warn('[DB Notice] Postgres query error, falling back to local store:', err.message);
-    return handleLocalRun(sql, params);
+    // Never acknowledge a production write/read using a local fallback.
+    throw new Error('Database temporarily unavailable.', { cause: undefined });
   }
 };
 
 let schemaInitPromise = null;
 function ensureSchema() {
-  if (!pool || !connectionString) return Promise.resolve();
+  if (!pool || !connectionString || hosted) return Promise.resolve();
   if (!schemaInitPromise) schemaInitPromise = initSchema().catch(err => {
     console.warn('[DB] Schema init fallback to local store:', err.message);
   });
@@ -366,36 +387,47 @@ function ensureSchema() {
 
 const run = async (sql, params = []) => {
   await ensureSchema();
-  return rawRun(sql, params);
+  try { return await rawRun(sql, params); } finally { readCache.clear(); }
 };
 
 const get = async (sql, params = []) => {
+  requireDatabase();
   await ensureSchema();
   if (!pool || !connectionString) {
-    return handleLocalGet(sql, params);
+    let row = handleLocalGet(sql, params);
+    if (row && sql.includes('AS poster_url')) row = eventMediaLinks(row);
+    if (row && sql.includes('AS payment_screenshot_url')) return { ...row, payment_screenshot_url: String(row.payment_screenshot_url || '').startsWith('data:') ? '/api/admin/registrations/' + row.registration_id + '/screenshot' : row.payment_screenshot_url };
+    return row;
   }
   try {
     const pgSql = convertSql(sql);
-    const result = await pool.query(pgSql, params);
+    const result = await metrics.query(pool, pgSql, params);
     return result.rows[0];
   } catch (err) {
-    console.warn('[DB Notice] Postgres get error, falling back to local store:', err.message);
-    return handleLocalGet(sql, params);
+    // Never acknowledge a production write/read using a local fallback.
+    throw new Error('Database temporarily unavailable.', { cause: undefined });
   }
 };
 
 const all = async (sql, params = []) => {
+  requireDatabase();
   await ensureSchema();
   if (!pool || !connectionString) {
-    return handleLocalAll(sql, params);
+    const rows = handleLocalAll(sql, params);
+    return rows.map(row => {
+      if (sql.includes('AS poster_url')) return eventMediaLinks(row);
+      if (sql.includes('AS image_url')) return { ...row, image_url: String(row.image_url || '').startsWith('data:') ? '/api/gallery/image/' + row.id : row.image_url };
+      if (sql.includes('AS payment_screenshot_url')) return { ...row, payment_screenshot_url: String(row.payment_screenshot_url || '').startsWith('data:') ? '/api/admin/registrations/' + row.registration_id + '/screenshot' : row.payment_screenshot_url };
+      return row;
+    });
   }
   try {
     const pgSql = convertSql(sql);
-    const result = await pool.query(pgSql, params);
+    const result = await metrics.query(pool, pgSql, params);
     return result.rows;
   } catch (err) {
-    console.warn('[DB Notice] Postgres all error, falling back to local store:', err.message);
-    return handleLocalAll(sql, params);
+    // Never acknowledge a production write/read using a local fallback.
+    throw new Error('Database temporarily unavailable.', { cause: undefined });
   }
 };
 
@@ -1432,6 +1464,12 @@ function handleLocalRun(sql, params = []) {
 }
 
 function handleLocalGet(sql, params = []) {
+  if (sql.includes(' AS media FROM events')) {
+    syncLocalStore();
+    const field = sql.match(/^SELECT ([a-z_]+) AS media/)[1];
+    const row = localStore.events.find(e => String(e.id) === String(params[0]) && Number(e.is_published) === 1);
+    return row ? { media: row[field] } : null;
+  }
   syncLocalStore();
   const sqlLower = sql.toLowerCase();
 
@@ -1609,7 +1647,7 @@ function handleLocalGet(sql, params = []) {
         String(r.registration_id).trim().toUpperCase() !== cleanRegId
       ) || null;
     }
-    if (sqlLower.includes('registration_id') && sqlLower.includes('=')) {
+    if (/(?:upper\()?registration_id\)?\s*=/.test(sqlLower)) {
       const targetId = String(params[0] || '').trim().toUpperCase();
       return localStore.registrations.find(r => String(r.registration_id).toUpperCase() === targetId) || null;
     }
@@ -1720,7 +1758,9 @@ function handleLocalAll(sql, params = []) {
         );
       }
     }
-    return list.sort((a, b) => b.id - a.id);
+    list.sort((a, b) => b.id - a.id);
+    if (sqlLower.includes('limit ? offset ?')) list = list.slice(params.at(-1), params.at(-1) + params.at(-2));
+    return list;
   }
 
   // Registrations list
@@ -1802,14 +1842,13 @@ function handleLocalAll(sql, params = []) {
   // Gallery images list
   if (sqlLower.includes('from gallery_images')) {
     let list = [...localStore.gallery];
-    if (sqlLower.includes('event_id = ?') || sqlLower.includes('event_id =')) {
-      const eventId = params[0];
-      list = list.filter(g => g.event_id === eventId);
+    if (sqlLower.includes('event_id = ?')) {
+      list = list.filter(g => g.event_id === params[0] || (sqlLower.includes('event_id is null') && !g.event_id && params[0] === 'online-open-mic-2026'));
     }
-    if (sqlLower.includes('is_published = 1')) {
-      list = list.filter(g => g.is_published === 1);
-    }
-    return list.sort((a, b) => (a.display_order - b.display_order) || (b.id - a.id));
+    if (sqlLower.includes('is_published = 1')) list = list.filter(g => Number(g.is_published) === 1);
+    list.sort((a,b) => (a.display_order - b.display_order) || (b.id - a.id));
+    if (sqlLower.includes('limit ? offset ?')) list = list.slice(params.at(-1), params.at(-1) + params.at(-2));
+    return list;
   }
 
   // Email logs
@@ -2257,17 +2296,20 @@ const initSchema = async () => {
   }
 };
 
-initSchema().catch(() => {});
+// Schema changes are deliberately excluded from hosted request startup.
+if (!hosted) ensureSchema().catch(() => {});
 
 // ─── High-Level Event Helpers ─────────────────────────────────────────────────
 
-async function getActiveEvent() {
+async function getActiveEvent(mediaLinks = false) {
+  const eventColumns = mediaLinks ? require('./services/queryColumns').event : '*';
   try {
-    const row = await get(`SELECT * FROM events WHERE is_active = 1 LIMIT 1`);
+    const row = await readCache.read('event:active:' + mediaLinks, () => get(`SELECT ${eventColumns} FROM events WHERE is_active = 1 LIMIT 1`));
     if (row) return row;
-    const fallback = await get(`SELECT * FROM events ORDER BY is_published DESC, id DESC LIMIT 1`);
+    const fallback = await get(`SELECT ${eventColumns} FROM events ORDER BY is_published DESC, id DESC LIMIT 1`);
     if (fallback) return fallback;
-  } catch (_) {}
+  } catch (err) { if (hosted) throw err; }
+  if (hosted) return null;
   if (localStore && localStore.events) {
     const active = localStore.events.find(e => e.is_active === 1);
     if (active) return active;
@@ -2276,13 +2318,15 @@ async function getActiveEvent() {
   return DEFAULT_EVENTS[0];
 }
 
-async function getEventBySlug(slugOrId) {
+async function getEventBySlug(slugOrId, mediaLinks = false) {
+  const eventColumns = mediaLinks ? require('./services/queryColumns').event : '*';
   if (!slugOrId) return null;
   const clean = String(slugOrId).trim().toLowerCase();
   try {
-    const row = await get(`SELECT * FROM events WHERE lower(slug) = ? OR id::text = ? LIMIT 1`, [clean, clean]);
+    const row = await readCache.read('event:' + clean + ':' + mediaLinks, () => get(`SELECT ${eventColumns} FROM events WHERE lower(slug) = ? OR id::text = ? LIMIT 1`, [clean, clean]));
     if (row) return row;
-  } catch (_) {}
+  } catch (err) { if (hosted) throw err; }
+  if (hosted) return null;
   if (localStore && localStore.events) {
     return localStore.events.find(e => e.slug.toLowerCase() === clean || String(e.id) === clean) || null;
   }
@@ -2290,7 +2334,7 @@ async function getEventBySlug(slugOrId) {
 }
 
 async function listEvents(filter = {}) {
-  let sql = `SELECT * FROM events WHERE 1=1`;
+  let sql = `SELECT ${require('./services/queryColumns').event} FROM events WHERE 1=1`;
   const params = [];
   if (filter.status) {
     sql += ` AND status = ?`;
@@ -2301,7 +2345,7 @@ async function listEvents(filter = {}) {
     params.push(filter.isPublished ? 1 : 0);
   }
   sql += ` ORDER BY is_active DESC, id DESC`;
-  return all(sql, params);
+  return readCache.read('events:' + JSON.stringify(params), () => all(sql, params));
 }
 
 async function getSetting(key, defaultValue = null) {

@@ -293,7 +293,6 @@
     }
 
     loadRegistrations();
-    loadOverview();
   };
 
   // ── Mobile Navigation Collapsible Menu ────────────────────────────────────────
@@ -511,7 +510,7 @@
     }
   }
 
-  async function fetchAndRenderTable({ search, status, category, checkedIn, containerId }) {
+  async function fetchAndRenderTable({ search, status, category, checkedIn, containerId, offset = 0 }) {
     const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '<div class="empty-state"><p>Loading…</p></div>';
@@ -525,7 +524,7 @@
     }
 
     try {
-      let url = '/api/admin/registrations?limit=500';
+      let url = '/api/admin/registrations?limit=50&offset=' + offset;
       const eventFilterVal = document.getElementById('regEventFilter')?.value || activeAdminEventId;
       if (eventFilterVal && eventFilterVal !== 'ALL') url += `&eventId=${encodeURIComponent(eventFilterVal)}`;
       if (status && status !== 'ALL') url += `&status=${encodeURIComponent(status)}`;
@@ -606,7 +605,7 @@
                   <td style="text-align:center;">${r.checkedIn ? '<span style="color:#6edb8c; font-weight:700;">✓ Yes</span>' : '<span style="color:#5a5248;">No</span>'}</td>
                   <td style="font-size:11px; color:#8e8477;">${formatDate(r.createdAt)}</td>
                   <td><span style="font-family:monospace; color:#e4ad57;">${escHtml(r.transactionId)}</span></td>
-                  <td>${r.paymentScreenshotUrl ? `<img src="${escHtml(r.paymentScreenshotUrl)}" alt="Screenshot" title="Click to enlarge" style="max-width:80px; border-radius:4px; cursor:zoom-in;" onclick="openLightbox('${escHtml(r.paymentScreenshotUrl)}')" />` : '—'}</td>
+                  <td>${r.paymentScreenshotUrl ? `<button class="action-btn btn-view" onclick="openLightbox('${escHtml(r.paymentScreenshotUrl)}')">View proof</button>` : '—'}</td>
                   <td>
                     <div style="display:flex; gap:6px; flex-wrap:wrap;">
                       <button class="action-btn btn-view" onclick="openDetail('${escHtml(r.registrationId)}')">View</button>
@@ -622,6 +621,15 @@
         </div>
       `;
 
+      const paging = document.createElement('div');
+      paging.style.cssText = 'display:flex;gap:12px;padding:12px';
+      for (const [label, nextOffset, disabled] of [['Previous', Math.max(0, offset - 50), offset === 0], ['Next', offset + 50, offset + data.registrations.length >= data.total]]) {
+        const button = document.createElement('button');
+        button.className = 'action-btn btn-view'; button.textContent = label; button.disabled = disabled;
+        button.onclick = () => fetchAndRenderTable({ search, status, category, checkedIn, containerId, offset: nextOffset });
+        paging.appendChild(button);
+      }
+      container.appendChild(paging);
     } catch (err) {
       console.error('[Admin] Load registrations error:', err);
       container.innerHTML = '<div class="empty-state"><p>Network error. Please retry.</p></div>';
@@ -767,9 +775,7 @@
           ${r.paymentScreenshotUrl ? `
             <div class="modal-row" style="flex-direction:column; align-items:flex-start; gap:8px;">
               <span class="modal-label">Payment Screenshot (Click to enlarge)</span>
-              <a href="${escHtml(r.paymentScreenshotUrl)}" target="_blank" rel="noopener" style="display:block; width:100%; text-align:center;">
-                <img src="${escHtml(r.paymentScreenshotUrl)}" alt="Payment Screenshot" style="max-width:100%; max-height:260px; border-radius:8px; border:1px solid #2a231c; object-fit:contain; background:#080706; padding:4px;" />
-              </a>
+              <button class="action-btn btn-view" onclick="openLightbox('${escHtml(r.paymentScreenshotUrl)}')">Open payment proof</button>
             </div>
           ` : '<div class="modal-row"><span class="modal-label">Payment Screenshot</span><span class="modal-value" style="color:#8e8477;">No screenshot uploaded</span></div>'}
           ${r.approvalEmailSentAt ? `<div class="modal-row"><span class="modal-label">Approval Email Sent</span><span class="modal-value" style="color:#6edb8c;">✓ ${formatDate(r.approvalEmailSentAt)}</span></div>` : ''}
@@ -953,11 +959,26 @@
   };
 
   // ── Lightbox ──────────────────────────────────────────────────────────────────
+  // Keep custom admin authentication on protected image requests across serverless instances.
+  window.loadAdminMedia = async function (img, url) {
+    img.onerror = null;
+    const parsed = new URL(url, location.origin);
+    if (parsed.origin !== location.origin || !/^\/api\/(?:gallery\/image\/\d+|admin\/registrations\/[^/]+\/screenshot)$/.test(parsed.pathname)) return;
+    try {
+      const res = await adminFetch(parsed.pathname, { redirect: 'error' });
+      if (!res.ok) throw new Error('Media unavailable');
+      const objectUrl = URL.createObjectURL(await res.blob());
+      img.onload = () => { URL.revokeObjectURL(objectUrl); img.onload = null; };
+      img.src = objectUrl;
+    } catch (_) { img.alt = 'Unable to load image. Please sign in and retry.'; }
+  };
   window.openLightbox = function (url) {
     const overlay = document.getElementById('lightboxOverlay');
     const img = document.getElementById('lightboxImg');
     if (!overlay || !img) return;
-    img.src = url;
+    if (/^\/api\/(admin\/registrations\/|gallery\/image\/)/.test(url)) {
+      img.removeAttribute('src'); loadAdminMedia(img, url);
+    } else { img.src = url; }
     overlay.classList.add('open');
     document.body.style.overflow = 'hidden';
   };
@@ -2637,19 +2658,14 @@
       imgWrap.style.cursor = 'pointer';
 
       const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.onerror = () => loadAdminMedia(img, item.imageUrl);
       img.src = item.imageUrl;
       img.alt = item.caption || 'Gallery photo';
       img.style.width = '100%';
       img.style.height = '100%';
       img.style.objectFit = 'cover';
-      img.onclick = () => {
-        const lb = document.getElementById('lightboxOverlay');
-        const lbImg = document.getElementById('lightboxImg');
-        if (lb && lbImg) {
-          lbImg.src = item.imageUrl;
-          lb.classList.add('open');
-        }
-      };
+      img.onclick = () => openLightbox(item.imageUrl);
 
       // Status pill badge on top right of thumbnail
       const statusBadge = document.createElement('div');
@@ -3470,7 +3486,7 @@
     tray.style.display = 'grid';
     tray.innerHTML = eventGalleryPhotos.map((photo, index) => `
       <div class="gallery-tray-item" title="${photo.caption || 'Event Photo'}">
-        <img src="${escHtml(photo.imageUrl)}" alt="${escHtml(photo.caption || 'Event Photo')}" onerror="this.src='/assets/event-poster.png';">
+        <img src="${escHtml(photo.imageUrl)}" alt="${escHtml(photo.caption || 'Event Photo')}" onerror="loadAdminMedia(this, this.src)">
         <button type="button" class="gallery-tray-delete-btn" onclick="removeEventGalleryPhoto(${index})" title="Delete photo">✕</button>
       </div>
     `).join('');
@@ -4528,7 +4544,7 @@
     }, 300);
   };
 
-  window.loadUsersTab = async function () {
+  window.loadUsersTab = async function (offset = 0) {
     const wrapper = document.getElementById('usersTableWrapper');
     if (!wrapper) return;
 
@@ -4540,7 +4556,7 @@
     wrapper.innerHTML = '<div class="empty-state"><p>Loading users…</p></div>';
 
     try {
-      let url = `/api/admin/users?status=${encodeURIComponent(status)}`;
+      let url = `/api/admin/users?status=${encodeURIComponent(status)}&offset=${offset}`;
       if (search) {
         url += `&search=${encodeURIComponent(search)}`;
       }
@@ -4646,6 +4662,13 @@
       `;
 
       wrapper.innerHTML = html;
+      const paging = document.createElement('div');
+      for (const [label, next, disabled] of [['Previous', Math.max(0, offset - 50), offset === 0], ['Next', data.nextOffset, !data.hasMore]]) {
+        const button = document.createElement('button'); button.className = 'action-btn btn-view';
+        button.textContent = label; button.disabled = disabled; button.onclick = () => loadUsersTab(next);
+        paging.appendChild(button);
+      }
+      wrapper.appendChild(paging);
 
     } catch (err) {
       console.error('[Admin] Error loading users:', err);

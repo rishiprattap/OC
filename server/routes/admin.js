@@ -1,3 +1,5 @@
+const { registrationStats } = require('../services/registrationStats');
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Admin Routes
  * Session-based authentication. Secret never sent from browser after login.
@@ -153,40 +155,13 @@ router.get('/overview', async (req, res) => {
       params.push(eventId);
     }
 
-    const rows = await all(`SELECT reg_status, payment_status, checked_in, certificate_eligible, final_fee, amount FROM registrations${whereClause}`, params);
-
-    let total = rows.length;
-    let pendingVerif = 0;
-    let verified = 0;
-    let approved = 0;
-    let rejected = 0;
-    let revoked = 0;
-    let checkedIn = 0;
-    let certEligible = 0;
-    let totalRevenue = 0;
-
-    for (const r of rows) {
-      const s = String(r.reg_status || 'PENDING_VERIFICATION').toUpperCase();
-      const p = String(r.payment_status || (s === 'APPROVED' ? 'PAID' : 'PENDING')).toUpperCase();
-      const isPaid = p === 'PAID' || s === 'APPROVED';
-      const fee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
-
-      if (s === 'PENDING_VERIFICATION') pendingVerif++;
-      else if (s === 'VERIFIED') verified++;
-      else if (s === 'APPROVED') approved++;
-      else if (s === 'REJECTED') rejected++;
-      else if (['REVOKED', 'CANCELLED'].includes(s)) revoked++;
-
-      if (Number(r.checked_in || 0) === 1 && s === 'APPROVED') checkedIn++;
-      if (Number(r.certificate_eligible || 0) === 1 && s === 'APPROVED') certEligible++;
-
-      if (isPaid) {
-        totalRevenue += fee;
-      }
-    }
-
+    const summary = await registrationStats(whereClause, params);
+    const { total, verified, approved, rejected, revoked } = summary;
+    const pendingVerif = summary.pending_verification;
     const pendingTotal = pendingVerif + verified;
-    totalRevenue = Math.round(totalRevenue);
+    const checkedIn = summary.checked_in;
+    const certEligible = summary.cert_eligible;
+    const totalRevenue = Math.round(summary.revenue);
 
     return res.json({
       success: true,
@@ -218,7 +193,7 @@ router.get('/registrations', async (req, res) => {
   try {
     const { status, search, eventId, category, checkedIn, limit = 100, offset = 0 } = req.query;
 
-    let sql = `SELECT * FROM registrations WHERE 1=1`;
+    let sql = `SELECT ${queryColumns.registration} FROM registrations WHERE 1=1`;
     const params = [];
 
     if (eventId && eventId !== 'ALL') {
@@ -254,47 +229,19 @@ router.get('/registrations', async (req, res) => {
       }
     }
 
-    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
-    params.push(parseInt(limit, 10) || 100, parseInt(offset, 10) || 0);
+    sql += ` ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`;
+    params.push(Math.min(100, Math.max(1, parseInt(limit, 10) || 50)), Math.max(0, parseInt(offset, 10) || 0));
 
     const rows = await all(sql, params);
 
-    // Fetch summary statistics for ALL matching database records (without pagination LIMIT & OFFSET)
-    const summarySql = `SELECT reg_status, payment_status, checked_in, final_fee, amount FROM registrations WHERE 1=1` + 
-      sql.replace(/^SELECT \* FROM registrations WHERE 1=1/, '').replace(/ ORDER BY.*/, '');
-    const filterParams = params.slice(0, -2);
-    const allMatching = await all(summarySql, filterParams);
-
-    let totalCount = allMatching.length;
-    let pendingCount = 0;
-    let approvedCount = 0;
-    let rejectedCount = 0;
-    let checkedInCount = 0;
-    let totalRevenue = 0;
-
-    for (const r of allMatching) {
-      const s = String(r.reg_status || 'PENDING_VERIFICATION').toUpperCase();
-      const p = String(r.payment_status || (s === 'APPROVED' ? 'PAID' : 'PENDING')).toUpperCase();
-      const isPaid = p === 'PAID' || s === 'APPROVED';
-      const fee = Number(r.final_fee !== null && r.final_fee !== undefined ? r.final_fee : (r.amount ?? 0));
-
-      if (s === 'APPROVED') {
-        approvedCount++;
-      } else if (s === 'REJECTED') {
-        rejectedCount++;
-      } else if (s === 'PENDING_VERIFICATION' || s === 'VERIFIED') {
-        pendingCount++;
-      }
-
-      if (Number(r.checked_in || 0) === 1 && s === 'APPROVED') {
-        checkedInCount++;
-      }
-
-      if (isPaid) {
-        totalRevenue += fee;
-      }
-    }
-    totalRevenue = Math.round(totalRevenue);
+    const where = sql.slice(sql.indexOf(' WHERE 1=1')).replace(/ ORDER BY.*/, '');
+    const summary = await registrationStats(where, params.slice(0, -2));
+    const totalCount = summary.total;
+    const pendingCount = summary.pending_verification + summary.verified;
+    const approvedCount = summary.approved;
+    const rejectedCount = summary.rejected;
+    const checkedInCount = summary.checked_in;
+    const totalRevenue = Math.round(summary.revenue);
 
     return res.json({
       success: true,
@@ -364,7 +311,7 @@ router.get(['/registrations/export', '/registrations/export.xlsx'], async (req, 
     const format = (req.query.format || (req.path.endsWith('.xlsx') ? 'xlsx' : 'csv')).toLowerCase();
     const isXlsx = format === 'xlsx';
 
-    let sql = `SELECT * FROM registrations WHERE 1=1`;
+    let sql = `SELECT ${queryColumns.registration} FROM registrations WHERE 1=1`;
     const params = [];
 
     if (eventId && eventId !== 'ALL') {
@@ -448,7 +395,7 @@ router.get(['/registrations/export', '/registrations/export.xlsx'], async (req, 
 router.get('/registrations/:id', async (req, res) => {
   try {
     const regId = req.params.id.trim().toUpperCase();
-    const record = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const record = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
 
     if (!record) {
       return res.status(404).json({ success: false, error: 'Registration not found.' });
@@ -519,7 +466,7 @@ router.get('/registrations/:id/screenshot', async (req, res) => {
         const mime = match[1];
         const buffer = Buffer.from(match[2], 'base64');
         res.setHeader('Content-Type', mime);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Cache-Control', 'private, no-store');
         return res.send(buffer);
       }
     } else if (url.startsWith('/uploads/') || url.startsWith('http')) {
@@ -538,7 +485,7 @@ router.get('/registrations/:id/screenshot', async (req, res) => {
 router.post('/approve/:id', async (req, res) => {
   try {
     const regId = req.params.id.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
 
     if (!reg) {
       return res.status(404).json({ success: false, error: 'Registration not found.' });
@@ -614,7 +561,7 @@ router.post('/reject/:id', async (req, res) => {
     const regId = req.params.id.trim().toUpperCase();
     const { reason } = req.body;
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
 
     if (!reg) {
       return res.status(404).json({ success: false, error: 'Registration not found.' });
@@ -671,7 +618,7 @@ router.post('/revoke/:id', async (req, res) => {
     const regId = req.params.id.trim().toUpperCase();
     const { reason, note } = req.body || {};
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
 
     if (!reg) {
       return res.status(404).json({ success: false, error: 'Registration not found.' });
@@ -714,7 +661,7 @@ router.post(['/registrations/:id/status', '/registrations/status/:id'], async (r
     const { status } = req.body;
     if (!status) return res.status(400).json({ success: false, error: 'Status is required.' });
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const now = new Date().toISOString();
@@ -741,7 +688,7 @@ router.post(['/registrations/:id/status', '/registrations/status/:id'], async (r
 router.post('/checkin/:id', async (req, res) => {
   try {
     const regId = req.params.id.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
 
     if (!reg) {
       return res.status(404).json({ success: false, error: 'Registration not found.' });
@@ -771,7 +718,7 @@ router.post('/certificate/winner', async (req, res) => {
     const { registrationId, position, achievement, badgeText, citation, certificateTitle, category } = req.body;
     if (!registrationId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
     const regId = registrationId.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const now = new Date().toISOString();
@@ -885,7 +832,7 @@ router.post('/events/:slug/certificate-settings', async (req, res) => {
 router.get('/certificate/preview/:regId', async (req, res) => {
   try {
     const regId = req.params.regId.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const host = req.get('host') || 'offstagecreators.in';
@@ -911,7 +858,7 @@ router.get('/certificate/preview/:regId', async (req, res) => {
 router.get('/certificate/download/:regId', async (req, res) => {
   try {
     const regId = req.params.regId.trim().toUpperCase();
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const host = req.get('host') || 'offstagecreators.in';
@@ -950,7 +897,7 @@ router.get('/certificate/bulk-download', async (req, res) => {
 
     // Load approved/eligible registrations for this event
     const registrations = await all(
-      `SELECT * FROM registrations WHERE lower(event_id) = ? AND (reg_status = 'APPROVED' OR checked_in = 1 OR certificate_eligible = 1) ORDER BY id ASC`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE lower(event_id) = ? AND (reg_status = 'APPROVED' OR checked_in = 1 OR certificate_eligible = 1) ORDER BY id ASC`,
       [eventId]
     );
 
@@ -991,7 +938,7 @@ router.post('/certificate/send-email', async (req, res) => {
     const { registrationId, testOnly = false } = req.body;
     if (!registrationId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId.trim().toUpperCase()]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [registrationId.trim().toUpperCase()]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const host = req.get('host') || 'offstagecreators.in';
@@ -1076,7 +1023,7 @@ router.post('/certificate/:id', async (req, res) => {
     const regId = req.params.id.trim().toUpperCase();
     const { eligible, position, achievement, badgeText, citation, certificateTitle } = req.body;
 
-    const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+    const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
     if (!reg) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const now = new Date().toISOString();
@@ -1470,13 +1417,13 @@ router.post('/email/preview', async (req, res) => {
     const { type, subject, bodyContent, meetData, registrationId, manualEmail, eventId } = req.body;
     let reg = null;
     if (registrationId) {
-      reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
+      reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [registrationId]);
     }
     const targetEventId = eventId || (reg ? reg.event_id : null);
     const eventObj = targetEventId ? await getEventBySlug(targetEventId) : await getActiveEvent();
 
     if (!reg) {
-      reg = await get(`SELECT * FROM registrations WHERE registration_id = 'OC-OM-436157FB'`);
+      reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = 'OC-OM-436157FB'`);
     }
 
     if (!reg) {
@@ -1559,7 +1506,7 @@ router.post('/email/custom-send', async (req, res) => {
     // Send to selected registrations
     for (const regId of registrationIds) {
       try {
-        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
         if (!reg) {
           results.push({ recipient: regId, status: 'FAILED', error: 'Registration not found' });
           failedCount++;
@@ -1675,7 +1622,7 @@ router.post('/email/meet-send', async (req, res) => {
 
     for (const regId of registrationIds) {
       try {
-        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
         if (!reg) {
           results.push({ recipient: regId, status: 'FAILED', error: 'Registration not found' });
           failedCount++;
@@ -1806,11 +1753,11 @@ router.get('/emails/certificate/recipients', async (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const baseUrl = `${protocol}://${host}`;
 
-    let sql = `SELECT * FROM registrations WHERE lower(event_id) = ? ORDER BY id ASC`;
+    let sql = `SELECT ${queryColumns.registration} FROM registrations WHERE lower(event_id) = ? ORDER BY id ASC`;
     let params = [event.slug.toLowerCase()];
 
     if (event.slug === 'online-open-mic-2026') {
-      sql = `SELECT * FROM registrations WHERE lower(event_id) = ? OR event_id IS NULL OR event_id = '' ORDER BY id ASC`;
+      sql = `SELECT ${queryColumns.registration} FROM registrations WHERE lower(event_id) = ? OR event_id IS NULL OR event_id = '' ORDER BY id ASC`;
     }
 
     const rows = await all(sql, params);
@@ -1894,10 +1841,10 @@ router.post('/emails/certificate/preview', async (req, res) => {
 
     let reg = null;
     if (registrationId) {
-      reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [registrationId]);
+      reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [registrationId]);
     }
     if (!reg) {
-      reg = await get(`SELECT * FROM registrations WHERE lower(event_id) = ? LIMIT 1`, [event.slug.toLowerCase()]);
+      reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE lower(event_id) = ? LIMIT 1`, [event.slug.toLowerCase()]);
     }
     if (!reg) {
       reg = {
@@ -1991,7 +1938,7 @@ router.post('/emails/certificate/send', async (req, res) => {
 
     for (const regId of registrationIds) {
       try {
-        const reg = await get(`SELECT * FROM registrations WHERE registration_id = ?`, [regId]);
+        const reg = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`, [regId]);
         if (!reg) {
           results.push({ recipient: regId, registrationId: regId, status: 'FAILED', error: 'Registration not found' });
           failedCount++;
@@ -2154,7 +2101,7 @@ router.post('/email/campaign', async (req, res) => {
     const event = eventId ? await getEventBySlug(eventId) : await getActiveEvent();
     const eventSlug = event?.slug || 'online-open-mic-2026';
 
-    let sql = `SELECT * FROM registrations WHERE event_id = ?`;
+    let sql = `SELECT ${queryColumns.registration} FROM registrations WHERE event_id = ?`;
     const params = [eventSlug];
     if (recipientGroup === 'APPROVED') {
       sql += ` AND reg_status = 'APPROVED'`;
@@ -2306,7 +2253,9 @@ router.get('/users', requireAdmin, async (req, res) => {
     const cleanSearch = String(search || '').trim();
     const cleanStatus = String(status || 'ALL').toUpperCase();
 
-    let query = `SELECT * FROM users`;
+    const usePg = Boolean(require('../db').pool);
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    let query = `SELECT id, name, email, phone, age, city, instagram, is_verified, is_blocked, block_reason, blocked_at, blocked_by, unblocked_at, unblocked_by, created_at, updated_at      ${usePg ? ', (SELECT COUNT(*) FROM registrations r WHERE r.user_id = users.id OR r.email = users.email) AS registration_count' : ''} FROM users`;
     let params = [];
     let whereClauses = [];
 
@@ -2328,10 +2277,14 @@ router.get('/users', requireAdmin, async (req, res) => {
 
     query += ` ORDER BY id DESC`;
 
-    const users = await all(query.replace(/ILIKE/g, 'LIKE'), params);
+    query += ' LIMIT ? OFFSET ?';
+    params.push(51, offset);
+    const page = await all(query.replace(/ILIKE/g, 'LIKE'), params);
+    const users = page.slice(0, 50);
 
     // Fetch registration counts for each user
     const usersWithCounts = await Promise.all(users.map(async (u) => {
+      if (usePg) return sanitizeAdminUser(u, u.registration_count);
       const regCountRow = await get(
         `SELECT COUNT(*) as count FROM registrations WHERE user_id = ? OR email = ?`,
         [u.id, u.email]
@@ -2343,7 +2296,9 @@ router.get('/users', requireAdmin, async (req, res) => {
     return res.json({
       success: true,
       users: usersWithCounts,
-      total: usersWithCounts.length
+      total: usersWithCounts.length,
+      hasMore: page.length > 50,
+      nextOffset: offset + users.length
     });
 
   } catch (err) {
@@ -2367,7 +2322,7 @@ router.get('/users/:id', requireAdmin, async (req, res) => {
 
     // Fetch all registrations associated with user
     const registrations = await all(
-      `SELECT * FROM registrations WHERE user_id = ? OR email = ? ORDER BY id DESC`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE user_id = ? OR email = ? ORDER BY id DESC`,
       [user.id, user.email]
     );
 
@@ -3072,7 +3027,7 @@ router.get('/promo-codes/:id/registrations', async (req, res) => {
     }
 
     const rows = await all(
-      `SELECT * FROM registrations WHERE promo_code_id = ? OR UPPER(promo_code) = UPPER(?) ORDER BY created_at DESC`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE promo_code_id = ? OR UPPER(promo_code) = UPPER(?) ORDER BY created_at DESC`,
       [promo.id, promo.code]
     );
 
