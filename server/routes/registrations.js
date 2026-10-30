@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Registrations Routes
  * POST /api/registrations         — Create a new registration (returns registration ID, triggers OTP send)
@@ -223,7 +224,7 @@ router.post('/', async (req, res) => {
     // ── Duplicate check ───────────────────────────────────────────────────────
     // Block if already APPROVED or VERIFIED for this email/user and this event
     const existing = await get(
-      `SELECT * FROM registrations WHERE event_id = ? AND (email = ? ${targetUserId ? 'OR user_id = ?' : ''}) AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE event_id = ? AND (email = ? ${targetUserId ? 'OR user_id = ?' : ''}) AND reg_status IN ('APPROVED', 'VERIFIED') ORDER BY id DESC LIMIT 1`,
       targetUserId ? [eventId, cleanEmail, targetUserId] : [eventId, cleanEmail]
     );
 
@@ -245,7 +246,7 @@ router.post('/', async (req, res) => {
       let pendingOrExisting = null;
       if (requestedRegId) {
         pendingOrExisting = await get(
-          `SELECT * FROM registrations WHERE registration_id = ? AND (user_id = ? OR email = ?)`,
+          `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ? AND (user_id = ? OR email = ?)`,
           [requestedRegId, targetUserId, cleanEmail]
         );
       }
@@ -363,7 +364,7 @@ router.post('/', async (req, res) => {
 
     // Guest / New unauthenticated user flow: requires Email OTP verification
     const pending = await get(
-      `SELECT * FROM registrations WHERE event_id = ? AND email = ? AND reg_status = 'PENDING_VERIFICATION' ORDER BY id DESC LIMIT 1`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE event_id = ? AND email = ? AND reg_status = 'PENDING_VERIFICATION' ORDER BY id DESC LIMIT 1`,
       [eventId, cleanEmail]
     );
 
@@ -580,7 +581,7 @@ router.get('/:id', async (req, res) => {
     }
 
     const record = await get(
-      `SELECT * FROM registrations WHERE registration_id = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`,
       [regId]
     );
 

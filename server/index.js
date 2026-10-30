@@ -33,6 +33,11 @@ try {
 }
 
 const app = express();
+app.use(require('./services/dbMetrics').middleware);
+// An unconfigured preview serves static UI, but never reads bundled customer data.
+if (process.env.VERCEL_ENV === 'preview' && !process.env.PREVIEW_DATABASE_URL) {
+  app.use('/api', (req, res) => res.status(503).json({ success: false, error: 'Preview database is isolated. Configure a separate test database to enable API functionality.' }));
+}
 
 // ─── Trust Proxy (required for Vercel / rate limiting to work correctly) ──────
 app.set('trust proxy', 1);
@@ -145,7 +150,7 @@ app.get('/api/config', async (req, res) => {
   let activeEvent = null;
   try {
     const { getSetting, getActiveEvent } = require('./db');
-    activeEvent = await getActiveEvent();
+    activeEvent = await getActiveEvent(true);
     const settingStatus = await getSetting('registration_status', null);
     if (settingStatus) {
       registrationStatus = settingStatus;
@@ -204,10 +209,10 @@ async function sendHydratedHtml(filePath, req, res, targetSlug = null) {
     let evt = null;
     const slug = targetSlug || req.query.event || null;
     if (slug) {
-      evt = await getEventBySlug(slug);
+      evt = await getEventBySlug(slug, true);
     }
     if (!evt) {
-      evt = await getActiveEvent();
+      evt = await getActiveEvent(true);
     }
     if (evt) {
       const publicEvt = formatEventPublic(evt);

@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — OTP Routes
  * POST /api/otp/send   — Generate and email an OTP for registration verification
@@ -28,7 +29,7 @@ router.post('/send', async (req, res) => {
 
     // Look up the registration
     const reg = await get(
-      `SELECT * FROM registrations WHERE registration_id = ? AND email = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ? AND email = ?`,
       [cleanRegId, cleanEmail]
     );
 
@@ -139,7 +140,7 @@ router.post('/verify', async (req, res) => {
 
     // Fetch registration before status update to check fee
     const preReg = await get(
-      `SELECT * FROM registrations WHERE registration_id = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`,
       [cleanRegId]
     );
 
@@ -174,7 +175,7 @@ router.post('/verify', async (req, res) => {
 
     // Fetch updated registration with actual event details for confirmation/approval email
     const reg = await get(
-      `SELECT * FROM registrations WHERE registration_id = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`,
       [cleanRegId]
     );
 

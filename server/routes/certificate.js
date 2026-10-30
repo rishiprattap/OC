@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
@@ -106,7 +107,7 @@ async function handleVerify(req, res) {
       }
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
-        `SELECT * FROM registrations WHERE upper(registration_id) = ?`,
+        `SELECT ${queryColumns.registration} FROM registrations WHERE upper(registration_id) = ?`,
         [cleanRegId]
       );
       if (!record) {
@@ -142,7 +143,7 @@ async function handleVerify(req, res) {
     if (registrationId && typeof registrationId === 'string' && registrationId.trim()) {
       const cleanRegId = registrationId.trim().toUpperCase();
       const record = await get(
-        `SELECT * FROM registrations WHERE upper(registration_id) = ?`,
+        `SELECT ${queryColumns.registration} FROM registrations WHERE upper(registration_id) = ?`,
         [cleanRegId]
       );
 
@@ -192,7 +193,7 @@ async function handleVerify(req, res) {
 
     // Check registrations database
     let matchingRecords = await all(
-      `SELECT * FROM registrations WHERE phone = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE phone = ?`,
       [cleanPhone]
     );
 
@@ -258,7 +259,7 @@ async function handleDownload(req, res) {
     const regId = (req.params.id || req.query.id || req.query.regId || '').trim().toUpperCase();
     if (!regId) return res.status(400).json({ success: false, error: 'Registration ID required.' });
 
-    const record = await get(`SELECT * FROM registrations WHERE upper(registration_id) = ?`, [regId]);
+    const record = await get(`SELECT ${queryColumns.registration} FROM registrations WHERE upper(registration_id) = ?`, [regId]);
     if (!record) return res.status(404).json({ success: false, error: 'Registration not found.' });
 
     const targetEventId = req.query.eventId || req.query.event;

@@ -1,6 +1,8 @@
+# Do not package repository snapshots or local test data into any new deployment.
 data/
 scratch/
 uploads/
 tests/
 .env*
 node_modules/
+docs/

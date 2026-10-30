@@ -1,3 +1,4 @@
+const queryColumns = require('../services/queryColumns');
 const express = require('express');
 const router = express.Router();
 const { run, get } = require('../db');
@@ -38,13 +39,13 @@ router.post('/lookup', async (req, res) => {
     // Lookup by registration_id or phone
     const cleanPhone = query.replace(/\D/g, '');
     let record = await get(
-      `SELECT * FROM registrations WHERE registration_id = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`,
       [query]
     );
 
     if (!record && cleanPhone.length >= 10) {
       record = await get(
-        `SELECT * FROM registrations WHERE phone = ? ORDER BY id DESC LIMIT 1`,
+        `SELECT ${queryColumns.registration} FROM registrations WHERE phone = ? ORDER BY id DESC LIMIT 1`,
         [cleanPhone]
       );
     }
@@ -129,7 +130,7 @@ router.post('/check-in', async (req, res) => {
     }
 
     const record = await get(
-      `SELECT * FROM registrations WHERE registration_id = ?`,
+      `SELECT ${queryColumns.registration} FROM registrations WHERE registration_id = ?`,
       [registrationId.trim().toUpperCase()]
     );
 

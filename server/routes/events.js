@@ -1,10 +1,11 @@
+const queryColumns = require('../services/queryColumns');
 /**
  * Offstage Creators — Events Public Routes
  * Provides dynamic event configuration to the website without code changes.
  */
 const express = require('express');
 const router = express.Router();
-const { getActiveEvent, getEventBySlug, listEvents, all } = require('../db');
+const { getActiveEvent, getEventBySlug, listEvents, all, get } = require('../db');
 
 // Ensure no-cache on all public dynamic events endpoints so updates reflect immediately
 router.use((req, res, next) => {
@@ -165,7 +166,7 @@ function formatEventPublic(evt) {
 // GET /api/events/active — Returns the currently active event
 router.get('/active', async (req, res) => {
   try {
-    const active = await getActiveEvent();
+    const active = await getActiveEvent(true);
     if (!active) {
       return res.status(404).json({ success: false, error: 'No active event configured.' });
     }
@@ -212,15 +213,30 @@ router.get('/all', async (req, res) => {
   }
 });
 
+// Serve published artwork individually; only allow fixed column names.
+router.get('/:slug/media/:field', async (req, res) => {
+  const field = req.params.field;
+  if (!queryColumns.eventMedia.includes(field)) return res.sendStatus(404);
+  try {
+    const row = await get(`SELECT ${field} AS media FROM events WHERE id::text = ? AND is_published = 1`, [req.params.slug]);
+    const match = String(row?.media || '').match(/^data:(image\/(?:jpeg|jpg|png|webp|gif)|application\/pdf);base64,([a-zA-Z0-9+/=\s]+)$/);
+    if (!match) return res.sendStatus(404);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+    res.removeHeader('Pragma'); res.removeHeader('Expires');
+    return res.type(match[1]).send(Buffer.from(match[2], 'base64'));
+  } catch (_) { return res.sendStatus(503); }
+});
+
 // GET /api/events/:slug — Get single event by slug or ID
 router.get('/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
     if (slug === 'active') {
-      const active = await getActiveEvent();
+      const active = await getActiveEvent(true);
       return res.json({ success: true, event: formatEventPublic(active) });
     }
-    const evt = await getEventBySlug(slug);
+    const evt = await getEventBySlug(slug, true);
     if (!evt) {
       return res.status(404).json({ success: false, error: 'Event not found.' });
     }
@@ -236,35 +252,8 @@ router.get('/:slug', async (req, res) => {
 
 // GET /api/events/:slug/gallery — Get gallery images for a specific event
 router.get('/:slug/gallery', async (req, res) => {
-  try {
-    const { slug } = req.params;
-    const evt = await getEventBySlug(slug);
-    const eventId = evt ? evt.slug : slug;
-
-    const rows = await all(
-      `SELECT * FROM gallery_images WHERE is_published = 1 AND (event_id = ? OR (event_id IS NULL AND ? = 'online-open-mic-2026')) ORDER BY display_order ASC, id DESC`,
-      [eventId, eventId]
-    );
-
-    const images = (rows || []).map(r => ({
-      id: r.id,
-      imageUrl: r.image_url,
-      caption: r.caption || '',
-      displayOrder: r.display_order,
-      eventId: r.event_id || eventId,
-      createdAt: r.created_at
-    }));
-
-    return res.json({
-      success: true,
-      eventId,
-      count: images.length,
-      images
-    });
-  } catch (err) {
-    console.error(`[Events] Error in GET /api/events/${req.params.slug}/gallery:`, err);
-    return res.status(500).json({ success: false, error: 'Server error while fetching event gallery.' });
-  }
+  req.params.eventId = req.params.slug;
+  return require('./gallery').handlePublicList(req, res);
 });
 
 module.exports = router;
